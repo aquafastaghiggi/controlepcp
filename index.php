@@ -74,7 +74,7 @@ $mockData = MockData::all();
                     <div class="panel-heading">
                         <div>
                             <h2>Simular programação</h2>
-                            <p>Informe o início base e monte a sequência da linha.</p>
+                            <p>Informe o início base, preencha os itens e deixe as próximas datas por conta do cálculo.</p>
                         </div>
                         <button type="button" id="add-row" class="ghost-button">Adicionar item</button>
                     </div>
@@ -92,14 +92,14 @@ $mockData = MockData::all();
                             </label>
                         </div>
 
-                        <div class="table-wrap">
+                        <div class="table-wrap entry-table-wrap">
                             <table class="entry-table">
                                 <thead>
                                     <tr>
                                         <th>Seq.</th>
                                         <th>SKU</th>
                                         <th>Quantidade (cx)</th>
-                                        <th>Inicio informado</th>
+                                        <th>Início informado (1º item)</th>
                                         <th></th>
                                     </tr>
                                 </thead>
@@ -108,6 +108,7 @@ $mockData = MockData::all();
                         </div>
 
                         <div class="form-actions">
+                            <button type="button" id="clear-simulation" class="ghost-button">Limpar programação</button>
                             <button type="submit" class="primary-button">Calcular programação</button>
                         </div>
                     </form>
@@ -134,17 +135,15 @@ $mockData = MockData::all();
                                     <th>Produção/h</th>
                                     <th>Programado</th>
                                     <th>Tempo</th>
-                                    <th>SKU anterior</th>
                                     <th>Data início</th>
                                     <th>Início</th>
+                                    <th>Memória do cálculo</th>
                                     <th>Fim</th>
-                                    <th>Produzido estimado</th>
-                                    <th>Status</th>
                                 </tr>
                             </thead>
                             <tbody id="result-body">
                                 <tr class="empty-state-row">
-                                    <td colspan="12">Nenhuma simulação calculada ainda.</td>
+                                    <td colspan="10">Nenhuma simulação calculada ainda.</td>
                                 </tr>
                             </tbody>
                         </table>

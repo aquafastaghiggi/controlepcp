@@ -11,10 +11,12 @@ final class MockData
         return [
             'calendar' => [
                 'line' => 'L2',
+                'working_days' => [1, 2, 3, 4, 5],
+                'holidays' => [],
                 'intervals' => [
-                    ['start' => '07:05', 'end' => '11:30'],
-                    ['start' => '13:27', 'end' => '17:45'],
-                    ['start' => '17:45', 'end' => '22:00'],
+                    ['start' => '07:10', 'end' => '11:28'],
+                    ['start' => '13:35', 'end' => '17:40'],
+                    ['start' => '17:40', 'end' => '22:00'],
                     ['start' => '23:00', 'end' => '03:00'],
                 ],
             ],

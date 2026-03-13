@@ -11,8 +11,11 @@ use RuntimeException;
 
 final class WorkCalendar
 {
-    public function __construct(private readonly array $intervals)
-    {
+    public function __construct(
+        private readonly array $intervals,
+        private readonly array $workingDays = [1, 2, 3, 4, 5],
+        private readonly array $holidays = []
+    ) {
         if ($intervals === []) {
             throw new RuntimeException('Nenhum intervalo de trabalho cadastrado.');
         }
@@ -20,20 +23,20 @@ final class WorkCalendar
 
     public function nextValidDateTime(DateTimeImmutable $dateTime): DateTimeImmutable
     {
-        for ($offset = -1; $offset <= 10; $offset++) {
-            $day = $dateTime->setTime(0, 0);
+        $currentInterval = $this->findCurrentInterval($dateTime);
 
-            if ($offset < 0) {
-                $day = $day->sub(new DateInterval('P' . abs($offset) . 'D'));
-            } elseif ($offset > 0) {
-                $day = $day->add(new DateInterval('P' . $offset . 'D'));
+        if ($currentInterval !== null) {
+            return $dateTime;
+        }
+
+        for ($offset = 0; $offset <= 30; $offset++) {
+            $day = $dateTime->setTime(0, 0)->add(new DateInterval('P' . $offset . 'D'));
+
+            if (!$this->isWorkingDay($day)) {
+                continue;
             }
 
             foreach ($this->intervalInstancesForDay($day) as $interval) {
-                if ($dateTime >= $interval['start'] && $dateTime < $interval['end']) {
-                    return $dateTime;
-                }
-
                 if ($dateTime < $interval['start']) {
                     return $interval['start'];
                 }
@@ -45,8 +48,14 @@ final class WorkCalendar
 
     public function addWorkingMinutes(DateTimeImmutable $start, int $minutes): DateTimeImmutable
     {
+        return $this->buildWorkingPlan($start, $minutes)['end'];
+    }
+
+    public function buildWorkingPlan(DateTimeImmutable $start, int $minutes): array
+    {
         $current = $this->nextValidDateTime($start);
         $remaining = $minutes;
+        $segments = [];
 
         while ($remaining > 0) {
             $interval = $this->findCurrentInterval($current);
@@ -63,15 +72,33 @@ final class WorkCalendar
                 continue;
             }
 
+            $consumed = min($remaining, $available);
+            $segmentEnd = DateTimeHelper::addMinutes($current, $consumed);
+
+            $segments[] = [
+                'start' => $current,
+                'end' => $segmentEnd,
+                'minutes' => $consumed,
+                'interval_start' => $interval['start'],
+                'interval_end' => $interval['end'],
+                'interval_minutes' => (int) floor(($interval['end']->getTimestamp() - $interval['start']->getTimestamp()) / 60),
+            ];
+
             if ($remaining <= $available) {
-                return DateTimeHelper::addMinutes($current, $remaining);
+                return [
+                    'end' => $segmentEnd,
+                    'segments' => $segments,
+                ];
             }
 
-            $remaining -= $available;
+            $remaining -= $consumed;
             $current = $this->nextValidDateTime($interval['end']);
         }
 
-        return $current;
+        return [
+            'end' => $current,
+            'segments' => $segments,
+        ];
     }
 
     public function workingMinutesBetween(DateTimeImmutable $start, DateTimeImmutable $end): int
@@ -104,15 +131,26 @@ final class WorkCalendar
         return $minutes;
     }
 
+    private function isWorkingDay(DateTimeImmutable $day): bool
+    {
+        $dayNumber = (int) $day->format('N');
+        $dayKey = $day->format('Y-m-d');
+
+        return in_array($dayNumber, $this->workingDays, true)
+            && !in_array($dayKey, $this->holidays, true);
+    }
+
     private function findCurrentInterval(DateTimeImmutable $dateTime): ?array
     {
-        foreach ($this->intervalInstancesForDay($dateTime->setTime(0, 0)->sub(new DateInterval('P1D'))) as $interval) {
+        $previousDay = $dateTime->setTime(0, 0)->sub(new DateInterval('P1D'));
+        foreach ($this->intervalInstancesForDay($previousDay) as $interval) {
             if ($dateTime >= $interval['start'] && $dateTime < $interval['end']) {
                 return $interval;
             }
         }
 
-        foreach ($this->intervalInstancesForDay($dateTime->setTime(0, 0)) as $interval) {
+        $currentDay = $dateTime->setTime(0, 0);
+        foreach ($this->intervalInstancesForDay($currentDay) as $interval) {
             if ($dateTime >= $interval['start'] && $dateTime < $interval['end']) {
                 return $interval;
             }
@@ -123,6 +161,10 @@ final class WorkCalendar
 
     private function intervalInstancesForDay(DateTimeImmutable $day): array
     {
+        if (!$this->isWorkingDay($day)) {
+            return [];
+        }
+
         $instances = [];
 
         foreach ($this->intervals as $interval) {
@@ -133,6 +175,12 @@ final class WorkCalendar
             $end = $day->setTime($endHour, $endMinute);
 
             if ($end <= $start) {
+                $nextDay = $day->add(new DateInterval('P1D'));
+
+                if (!$this->isWorkingDay($nextDay)) {
+                    continue;
+                }
+
                 $end = $end->add(new DateInterval('P1D'));
             }
 

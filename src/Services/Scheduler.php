@@ -19,7 +19,13 @@ final class Scheduler
 
     public function calculate(array $program, DateTimeImmutable $baseStart, ?DateTimeImmutable $queryDateTime = null): array
     {
-        $calendar = new WorkCalendar($this->data['calendar']['intervals']);
+        $calendarData = $this->data['calendar'];
+        $calendar = new WorkCalendar(
+            $calendarData['intervals'],
+            $calendarData['working_days'] ?? [1, 2, 3, 4, 5],
+            $calendarData['holidays'] ?? []
+        );
+
         $results = [];
         $errors = [];
 
@@ -58,19 +64,24 @@ final class Scheduler
             $setupMinutes = 0;
             $setupStart = null;
             $setupEnd = null;
-            $startReference = $plannedStart ?? $baseStart;
+            $setupPlan = ['segments' => []];
 
             if ($firstItem) {
+                $startReference = $plannedStart ?? $baseStart;
                 $productionStart = $calendar->nextValidDateTime($startReference);
                 $firstItem = false;
             } else {
+                $startReference = null;
                 $setupMinutes = $this->lookupSetupMinutes((string) $previousSku, $sku);
                 $setupStart = $previousProductionEnd;
-                $setupEnd = $calendar->addWorkingMinutes($setupStart, $setupMinutes);
+                $setupPlan = $calendar->buildWorkingPlan($setupStart, $setupMinutes);
+                $setupEnd = $setupPlan['end'];
                 $productionStart = $calendar->nextValidDateTime($setupEnd);
             }
 
-            $productionEnd = $calendar->addWorkingMinutes($productionStart, $productionMinutes);
+            $productionPlan = $calendar->buildWorkingPlan($productionStart, $productionMinutes);
+            $productionEnd = $productionPlan['end'];
+
             $estimatedProduced = $this->estimateProduced(
                 $calendar,
                 $productionStart,
@@ -90,10 +101,11 @@ final class Scheduler
                     'rate_per_hour' => null,
                     'duration_label' => DateTimeHelper::durationFromMinutes($setupMinutes),
                     'previous_sku' => $previousSku,
-                    'planned_start' => DateTimeHelper::formatDateTime($setupStart),
+                    'planned_start' => '',
                     'date_start' => DateTimeHelper::formatDate($setupStart),
                     'time_start' => DateTimeHelper::formatTime($setupStart),
                     'time_end' => DateTimeHelper::formatTime($setupEnd),
+                    'calculation_memory' => $this->formatSegments($setupPlan['segments']),
                     'production_start' => DateTimeHelper::formatDateTime($setupStart),
                     'production_end' => DateTimeHelper::formatDateTime($setupEnd),
                     'estimated_produced' => null,
@@ -114,6 +126,7 @@ final class Scheduler
                 'date_start' => DateTimeHelper::formatDate($productionStart),
                 'time_start' => DateTimeHelper::formatTime($productionStart),
                 'time_end' => DateTimeHelper::formatTime($productionEnd),
+                'calculation_memory' => $this->formatSegments($productionPlan['segments']),
                 'production_start' => DateTimeHelper::formatDateTime($productionStart),
                 'production_end' => DateTimeHelper::formatDateTime($productionEnd),
                 'estimated_produced' => round($estimatedProduced, 2),
@@ -168,6 +181,42 @@ final class Scheduler
         return DateTimeHelper::minutesFromDuration($duration);
     }
 
+    private function formatSegments(array $segments): string
+    {
+        if ($segments === []) {
+            return '';
+        }
+
+        $parts = [];
+        $totalUsedMinutes = 0;
+        $totalIntervalMinutes = 0;
+
+        foreach ($segments as $segment) {
+            $usedMinutes = (int) $segment['minutes'];
+            $intervalMinutes = (int) $segment['interval_minutes'];
+            $totalUsedMinutes += $usedMinutes;
+            $totalIntervalMinutes += $intervalMinutes;
+
+            $parts[] = sprintf(
+                '%s turno %s-%s | usado %s-%s = %s',
+                $segment['start']->format('d/m'),
+                $segment['interval_start']->format('H:i'),
+                $segment['interval_end']->format('H:i'),
+                $segment['start']->format('H:i'),
+                $segment['end']->format('H:i'),
+                DateTimeHelper::durationFromMinutes($usedMinutes)
+            );
+        }
+
+        $parts[] = sprintf(
+            'total usado = %s de %s',
+            DateTimeHelper::durationFromMinutes($totalUsedMinutes),
+            DateTimeHelper::durationFromMinutes($totalIntervalMinutes)
+        );
+
+        return implode(' | ', $parts);
+    }
+
     private function errorRow(int $sequence, string $sku, float $quantity, string $status): array
     {
         return [
@@ -183,6 +232,7 @@ final class Scheduler
             'date_start' => '',
             'time_start' => '',
             'time_end' => '',
+            'calculation_memory' => '',
             'production_start' => '',
             'production_end' => '',
             'estimated_produced' => 0,

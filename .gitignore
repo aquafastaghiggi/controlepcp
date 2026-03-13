@@ -1,0 +1,73 @@
+# Sistema / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+*.tmp
+*.temp
+*.bak
+*.orig
+*~
+
+# VS Code / JetBrains
+.vscode/
+.idea/
+*.iml
+
+# Logs
+*.log
+logs/
+tmp/logs/
+
+# PHP / XAMPP temporários
+*.cache
+*.pid
+*.seed
+*.out
+*.err
+tmp/
+cache/
+storage/
+
+# Dependências locais
+vendor/
+node_modules/
+
+# Build / coverage
+dist/
+build/
+coverage/
+.phpunit.result.cache
+
+# Ambiente / segredos
+.env
+.env.*
+!.env.example
+config/local.php
+config/*.local.php
+
+# Banco / dumps locais
+*.sql
+*.sqlite
+*.sqlite3
+*.db
+
+# Uploads e arquivos gerados em runtime
+public/uploads/
+uploads/
+media/
+
+# Configurações locais de servidor / VM / XAMPP
+apache/
+nginx/
+docker/
+docker-compose.override.yml
+hosts.local
+vhosts.local.conf
+httpd-vhosts.local.conf
+*.code-workspace
+
+# Arquivos de teste ad hoc
+scratch/
+notes/

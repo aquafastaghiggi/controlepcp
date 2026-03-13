@@ -1,38 +1,40 @@
 # ControlePCP
 
-MVP web para simulação de programação de produção com cálculo sequencial de setup e produção, respeitando calendário útil.
+Aplicação web em `PHP + JavaScript` para simulação e futura gestão de programação de produção (PCP), com foco em cálculo sequencial de ordens, setup entre SKU e respeito ao calendário produtivo.
 
-## Objetivo
+## Objetivo do projeto
 
-Este projeto nasceu para validar, sem banco de dados neste primeiro momento, a regra central de PCP definida para a linha de produção.
+Este projeto está sendo construído para evoluir de um protótipo funcional para um sistema interno de PCP com prioridade em:
 
-O foco atual é:
+- funcionalidade
+- usabilidade
+- clareza visual
+- facilidade de operação para usuários com baixo nível de familiaridade com TI
+- código limpo, enxuto e de fácil manutenção
 
-- simular a sequência de produção
-- calcular início e fim de cada ordem
-- aplicar setup entre SKU anterior e SKU atual
-- respeitar horários válidos de trabalho
-- exibir uma interface simples para usuários com baixo nível de familiaridade com TI
+Neste momento, o sistema ainda opera sem banco de dados. Os dados usados no MVP estão mockados apenas para permitir testes da lógica e da interface.
 
-## Estado atual
+## Diretriz importante
 
-Hoje o sistema funciona como um MVP local em `PHP + JavaScript`, com dados mockados em memória.
+O `README` deve documentar a estrutura, a arquitetura e o funcionamento técnico do projeto.
 
-Nesta fase:
+Ele não deve servir como cadastro operacional permanente de:
 
-- não há integração com MySQL
-- os cadastros são fixos em arquivo PHP
-- a lógica de cálculo já está separada da interface
-- a aplicação já pode simular uma programação simples e retornar a tabela de resultado
+- horários de trabalho
+- produtos
+- matriz de setup
+- dados de programação
 
-## Tecnologias
+Esses dados são temporários nesta fase e, futuramente, virão do banco de dados.
 
-- `PHP` no backend
-- `JavaScript` no frontend
-- `HTML/CSS` para a interface
-- `XAMPP` como ambiente local esperado
+## Stack atual
 
-## Estrutura do projeto
+- `PHP` para backend e renderização inicial
+- `JavaScript` para interação da interface
+- `HTML/CSS` para a camada visual
+- `XAMPP` como ambiente local atual
+
+## Estrutura de pastas
 
 ```text
 controlepcp/
@@ -57,132 +59,219 @@ controlepcp/
 └── README.md
 ```
 
-## Como o sistema funciona hoje
+## Papel de cada pasta e arquivo
 
-### 1. Entrada da simulação
+### Raiz do projeto
 
-Na tela principal, o usuário informa:
+#### [index.php](C:\xampp\htdocs\controlepcp\index.php)
 
-- `data/hora base`
-- `data/hora de consulta` para produzido estimado
-- sequência de itens da programação
-- SKU
-- quantidade programada
-- início informado, quando necessário
+Ponto de entrada da aplicação web.
 
-### 2. Dados mockados
+Responsabilidades:
 
-Os cadastros atuais estão em [src/Data/MockData.php](C:\xampp\htdocs\controlepcp\src\Data\MockData.php):
+- carregar o bootstrap
+- obter os dados iniciais do MVP
+- montar a tela principal
+- injetar dados iniciais para o frontend
 
-- horários de trabalho
-- produtos da linha 2
-- matriz de setup
-- exemplo inicial de programação
+#### [README.md](C:\xampp\htdocs\controlepcp\README.md)
 
-### 3. Cálculo
+Documentação principal do projeto.
 
-O cálculo principal está em [src/Services/Scheduler.php](C:\xampp\htdocs\controlepcp\src\Services\Scheduler.php).
+Responsabilidades:
 
-Ele faz:
+- explicar a arquitetura
+- registrar a organização da aplicação
+- orientar futuras manutenções
 
-- ordenação por sequência
-- busca da taxa do SKU
-- cálculo do tempo de produção
-- busca do setup entre itens consecutivos
-- aplicação do calendário útil
-- cálculo do início e fim das atividades
-- cálculo do produzido estimado
+#### [.gitignore](C:\xampp\htdocs\controlepcp\.gitignore)
 
-### 4. Calendário útil
+Define arquivos e pastas locais que não devem ser versionados.
 
-As regras de calendário ficam em [src/Services/WorkCalendar.php](C:\xampp\htdocs\controlepcp\src\Services\WorkCalendar.php).
+### Pasta `api/`
+
+#### [api/calculate.php](C:\xampp\htdocs\controlepcp\api\calculate.php)
+
+Endpoint HTTP responsável por receber os dados da programação e devolver o resultado calculado em JSON.
+
+Responsabilidades:
+
+- receber o payload enviado pelo frontend
+- validar os dados mínimos da requisição
+- instanciar o motor de cálculo
+- retornar a resposta em formato JSON
+
+### Pasta `assets/`
+
+Contém os arquivos estáticos da interface.
+
+#### [assets/css/app.css](C:\xampp\htdocs\controlepcp\assets\css\app.css)
+
+Arquivo principal de estilos da aplicação.
+
+Responsabilidades:
+
+- definir aparência visual
+- garantir legibilidade
+- manter uma interface simples e amigável
+- suportar responsividade básica
+
+#### [assets/js/app.js](C:\xampp\htdocs\controlepcp\assets\js\app.js)
+
+Script principal do frontend.
+
+Responsabilidades:
+
+- montar dinamicamente as linhas da programação
+- serializar o formulário
+- enviar os dados para a API
+- renderizar a tabela de resultado
+- atualizar resumos e status da simulação
+
+### Pasta `src/`
+
+Contém o código PHP da aplicação.
+
+#### [src/bootstrap.php](C:\xampp\htdocs\controlepcp\src\bootstrap.php)
+
+Responsável pelo carregamento automático das classes do projeto.
+
+Função:
+
+- registrar o autoload das classes no namespace `App\`
+
+### Pasta `src/Data/`
+
+Agrupa fontes de dados usadas pela aplicação.
+
+#### [src/Data/MockData.php](C:\xampp\htdocs\controlepcp\src\Data\MockData.php)
+
+Armazena os dados mockados usados no MVP.
+
+Importante:
+
+- este arquivo é provisório
+- ele existe apenas para viabilizar testes sem banco
+- no futuro, deverá ser substituído por acesso a banco de dados ou camada de repositório
+
+### Pasta `src/Services/`
+
+Contém as regras de negócio principais.
+
+#### [src/Services/Scheduler.php](C:\xampp\htdocs\controlepcp\src\Services\Scheduler.php)
+
+Motor principal do cálculo de PCP.
+
+Responsabilidades:
+
+- ordenar a programação
+- validar SKU e taxa produtiva
+- calcular tempo de produção
+- buscar setup entre itens consecutivos
+- calcular início e fim das atividades
+- calcular produzido estimado
+- montar a saída final da simulação
+
+#### [src/Services/WorkCalendar.php](C:\xampp\htdocs\controlepcp\src\Services\WorkCalendar.php)
+
+Serviço de calendário produtivo.
 
 Responsabilidades:
 
 - encontrar o próximo horário válido
-- somar minutos úteis sem contar períodos bloqueados
-- calcular minutos úteis transcorridos entre duas datas
+- somar minutos úteis
+- calcular tempo útil transcorrido entre duas datas
+- suportar intervalos que atravessam a meia-noite
 
-## Regra funcional consolidada
+### Pasta `src/Support/`
 
-O comportamento validado até aqui para o MVP é:
+Contém utilitários e funções de apoio.
+
+#### [src/Support/DateTimeHelper.php](C:\xampp\htdocs\controlepcp\src\Support\DateTimeHelper.php)
+
+Funções auxiliares para manipulação de datas, horas e durações.
+
+Responsabilidades:
+
+- converter entradas de data/hora
+- converter durações em minutos
+- formatar datas e horários para saída
+- somar minutos a uma data
+
+## Fluxo atual da aplicação
+
+1. O usuário acessa `index.php`.
+2. A tela principal é montada com base nos dados disponíveis no MVP.
+3. O frontend monta a sequência de produção e envia os dados para `api/calculate.php`.
+4. O endpoint chama o serviço [Scheduler.php](C:\xampp\htdocs\controlepcp\src\Services\Scheduler.php).
+5. O `Scheduler` usa [WorkCalendar.php](C:\xampp\htdocs\controlepcp\src\Services\WorkCalendar.php) para respeitar o calendário útil.
+6. O resultado volta em JSON.
+7. O frontend renderiza a tabela com produção e setup.
+
+## Regra funcional atual do motor
+
+O motor foi estruturado para seguir esta linha:
 
 1. A programação é processada por sequência.
-2. O primeiro item começa na data/hora base, ajustada para o próximo horário válido.
-3. Cada SKU usa sua taxa de produção em caixas por hora.
-4. O tempo de produção é calculado por `quantidade / taxa`.
-5. Para itens após o primeiro, o sistema identifica o SKU anterior.
-6. O setup é buscado na matriz `SKU anterior x SKU atual`.
-7. O setup começa no fim da produção anterior.
-8. O setup também respeita o calendário útil.
-9. Ao terminar o setup, o sistema recalcula o próximo horário válido para o início da produção.
-10. A produção do item seguinte pode começar depois do fim técnico do setup.
-11. Se a atividade ultrapassar o fim do intervalo, ela pausa e continua na próxima janela útil.
-12. O produzido estimado depende da data/hora de consulta.
+2. O primeiro item usa a data/hora base informada, ajustada para um horário válido.
+3. Cada item usa sua taxa de produção para calcular a duração.
+4. Itens seguintes dependem do fim da produção anterior.
+5. O setup entre SKU anterior e SKU atual é aplicado antes da próxima produção.
+6. Setup e produção consomem apenas tempo útil do calendário.
+7. Ao fim do setup, o sistema recalcula o próximo horário válido para iniciar a produção seguinte.
+8. O sistema calcula também o produzido estimado para uma data/hora de consulta.
 
-## Cadastro atual considerado no MVP
+## Observações para manutenção futura
 
-### Horários de trabalho
+### 1. Dados mockados
 
-- `07:05 - 11:30`
-- `13:27 - 17:45`
-- `17:45 - 22:00`
-- `23:00 - 03:00`
+O arquivo [src/Data/MockData.php](C:\xampp\htdocs\controlepcp\src\Data\MockData.php) deve ser entendido como temporário.
 
-No estado atual do MVP, esses horários estão sendo considerados para todos os dias.
+Quando houver integração com banco, o ideal é:
 
-### Produtos
+- criar uma camada de acesso a dados
+- evitar que regras de negócio dependam de arrays fixos
+- manter `Scheduler` desacoplado da origem dos dados
 
-Cadastros atuais da linha 2:
+### 2. Separação de responsabilidades
 
-- `AGUA SANITARIA 5L` = `200 cx/h`
-- `ALVEJANTE S/ CLORO 3L` = `180 cx/h`
-- `DESINFETANTE CAMPOS LAVANDA 5L` = `200 cx/h`
-- `DESINFETANTE ENERGIA 5L` = `200 cx/h`
-- `DESINFETANTE FL. DE EUCALIPTO 5L` = `200 cx/h`
-- `DESINFETANTE HARMONIA NATURAL 5L` = `200 cx/h`
-- `DESINFETANTE JARDIM FLORIDO 5L` = `200 cx/h`
-- `DESINFETANTE MARINE 5L` = `200 cx/h`
-- `DESINFETANTE PAIXAO 5L` = `200 cx/h`
+Para manter o projeto organizado:
 
-### Setup
+- regras de negócio ficam em `src/Services`
+- dados e fontes temporárias ficam em `src/Data`
+- helpers genéricos ficam em `src/Support`
+- interface fica em `assets`
+- endpoints ficam em `api`
 
-Regra atual mockada:
+### 3. Evolução esperada
 
-- `00:20` para produto igual
-- `00:20` para troca entre desinfetantes
-- `00:30` para trocas envolvendo `AGUA SANITARIA 5L`
-- `00:30` para trocas envolvendo `ALVEJANTE S/ CLORO 3L`
+A tendência natural do projeto é evoluir para:
+
+- cadastros reais em banco
+- telas de cadastro
+- autenticação e perfis, se necessário
+- separação maior entre backend web e regras de domínio
+- documentação complementar em `docs/`
 
 ## Como executar localmente
 
-1. Colocar o projeto dentro do `htdocs` do XAMPP.
-2. Garantir que o Apache esteja ativo.
-3. Abrir no navegador:
+1. Colocar o projeto em `C:\xampp\htdocs\controlepcp`.
+2. Iniciar o Apache no XAMPP.
+3. Acessar:
 
 ```text
 http://localhost/controlepcp/
 ```
 
-## Próximas evoluções esperadas
+## Regra de atualização da documentação
 
-- transformar os cadastros mockados em cadastros editáveis na interface
-- aproximar o layout do modelo real da operação
-- refinar a regra de calendário conforme os testes manuais
-- preparar a modelagem para MySQL
-- adicionar autenticação ou perfis, se necessário
-- separar melhor documentação técnica e documentação de uso
+Este arquivo deve ser revisado sempre que houver mudança relevante em:
 
-## Regra de documentação deste projeto
-
-Este arquivo deve ser atualizado conforme a evolução do sistema.
-
-Sempre que houver mudança relevante em:
-
-- regra do algoritmo
-- estrutura dos cadastros
-- fluxo da interface
+- estrutura de pastas
+- responsabilidades de arquivos
+- arquitetura da aplicação
+- regra do motor de cálculo
 - integração com banco
-- implantação no servidor
+- estratégia de deploy
 
-esta documentação deve ser revisada para continuar refletindo o estado real do projeto.
+Se a documentação ficar diferente do sistema real, ela perde valor para manutenção. Por isso, manter este arquivo atualizado faz parte do desenvolvimento do projeto.

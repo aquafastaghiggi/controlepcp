@@ -20,6 +20,7 @@ if (!is_array($payload)) {
 $baseStart = DateTimeHelper::fromLocalInput((string) ($payload['base_start'] ?? ''));
 $queryDateTime = DateTimeHelper::fromLocalInput((string) ($payload['query_datetime'] ?? ''));
 $program = $payload['items'] ?? [];
+$datasets = $payload['datasets'] ?? null;
 
 if (!$baseStart) {
     http_response_code(422);
@@ -33,7 +34,7 @@ if (!is_array($program) || $program === []) {
     exit;
 }
 
-$scheduler = new Scheduler();
+$scheduler = new Scheduler(is_array($datasets) ? $datasets : null);
 $result = $scheduler->calculate($program, $baseStart, $queryDateTime);
 
 echo json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);

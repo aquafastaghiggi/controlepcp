@@ -1,4 +1,4 @@
-# ControlePCP
+﻿# ControlePCP
 
 Aplicacao web em `PHP + JavaScript` para simulacao e futura gestao de programacao de producao (PCP), com foco em calculo sequencial de ordens, setup entre SKU e respeito ao calendario produtivo.
 
@@ -27,6 +27,17 @@ Ele nao deve servir como cadastro operacional permanente de:
 
 Esses dados sao temporarios nesta fase e, futuramente, virao do banco de dados.
 
+## Estrutura atual da interface
+
+A interface atual foi reorganizada para funcionar como base do sistema e nao apenas como simulador isolado.
+
+Componentes principais:
+
+- topo com logo reduzida e identidade visual da empresa
+- menu Cadastros com acesso a Horarios de Trabalho, SKU (Produtos), Matrizes e Programacao de PCP
+- secoes editaveis no proprio navegador, sem banco de dados nesta etapa
+- tela de programacao separada da manutencao dos cadastros
+- resultado operacional mais limpo, mantendo campos tecnicos apenas em segundo plano
 ## Stack atual
 
 - `PHP` para backend e renderizacao inicial
@@ -38,25 +49,26 @@ Esses dados sao temporarios nesta fase e, futuramente, virao do banco de dados.
 
 ```text
 controlepcp/
-├── api/
-│   └── calculate.php
-├── assets/
-│   ├── css/
-│   │   └── app.css
-│   └── js/
-│       └── app.js
-├── src/
-│   ├── Data/
-│   │   └── MockData.php
-│   ├── Services/
-│   │   ├── Scheduler.php
-│   │   └── WorkCalendar.php
-│   ├── Support/
-│   │   └── DateTimeHelper.php
-│   └── bootstrap.php
-├── .gitignore
-├── index.php
-└── README.md
+â”œâ”€â”€ api/
+â”‚   â””â”€â”€ calculate.php
+â”œâ”€â”€ assets/
+â”‚   â”œâ”€â”€ css/
+â”‚   â”‚   â””â”€â”€ app.css
+â”‚   â”‚   â””â”€â”€ theme.css
+â”‚   â””â”€â”€ js/
+â”‚       â””â”€â”€ app.js
+â”œâ”€â”€ src/
+â”‚   â”œâ”€â”€ Data/
+â”‚   â”‚   â””â”€â”€ MockData.php
+â”‚   â”œâ”€â”€ Services/
+â”‚   â”‚   â”œâ”€â”€ Scheduler.php
+â”‚   â”‚   â””â”€â”€ WorkCalendar.php
+â”‚   â”œâ”€â”€ Support/
+â”‚   â”‚   â””â”€â”€ DateTimeHelper.php
+â”‚   â””â”€â”€ bootstrap.php
+â”œâ”€â”€ .gitignore
+â”œâ”€â”€ index.php
+â””â”€â”€ README.md
 ```
 
 ## Papel de cada pasta e arquivo
@@ -117,17 +129,30 @@ Responsabilidades:
 - suportar responsividade basica
 - manter a grade de lancamento com rolagem propria para listas maiores
 
+#### [assets/css/theme.css](C:\xampp\htdocs\controlepcp\assets\css\theme.css)
+
+Camada complementar de identidade visual do projeto.
+
+Responsabilidades:
+
+- aplicar a paleta da marca com base na logo da empresa
+- ajustar o topo com a logo
+- simplificar a tela removendo cards auxiliares do MVP
+- refinar a responsividade da interface principal
+
 #### [assets/js/app.js](C:\xampp\htdocs\controlepcp\assets\js\app.js)
 
 Script principal do frontend.
 
 Responsabilidades:
 
+- controlar a navegacao entre as secoes de Cadastros e Programacao de PCP
+- manter os cadastros de horarios, SKU e matriz em armazenamento local para testes sem banco
 - montar dinamicamente as linhas da programacao
 - serializar o formulario
 - enviar os dados para a API
 - renderizar a tabela de resultado em formato simplificado para operacao
-- mostrar a memoria textual dos intervalos usados no calculo
+- manter a memoria textual do calculo disponivel no payload, ainda que oculta na tela operacional
 - persistir localmente os dados digitados e o ultimo resultado para sobreviver a atualizacao da pagina
 - rolar automaticamente para o ultimo item criado na grade de lancamento
 - atualizar resumos e status da simulacao
@@ -161,6 +186,7 @@ Importante:
 - o calendario produtivo atual do prototipo tambem esta definido neste arquivo
 - o calendario do MVP esta preparado para segunda a sexta, com lista de feriados ainda vazia
 - no futuro, devera ser substituido por acesso a banco de dados ou camada de repositorio
+- atualmente tambem serve como carga inicial para os cadastros locais no frontend
 
 ### Pasta `src/Services/`
 
@@ -212,9 +238,9 @@ Responsabilidades:
 ## Fluxo atual da aplicacao
 
 1. O usuario acessa `index.php`.
-2. A tela principal e montada com base nos dados disponiveis no MVP.
+2. A tela principal e montada com logo reduzida, menu superior e secoes de cadastro operando localmente.
 3. O frontend restaura automaticamente o ultimo lancamento salvo no navegador, quando existir.
-4. O frontend monta a sequencia de producao, usando inicio informado apenas no primeiro item, e envia os dados para `api/calculate.php`.
+4. O frontend permite editar Horarios de Trabalho, SKU e Matrizes em memoria local, monta a sequencia de producao usando inicio informado apenas no primeiro item e envia tudo para `api/calculate.php`.
 5. O endpoint chama o servico [Scheduler.php](C:\xampp\htdocs\controlepcp\src\Services\Scheduler.php).
 6. O `Scheduler` usa [WorkCalendar.php](C:\xampp\htdocs\controlepcp\src\Services\WorkCalendar.php) para respeitar o calendario util e gerar a memoria dos blocos consumidos.
 7. O resultado volta em JSON.
@@ -301,3 +327,5 @@ Este arquivo deve ser revisado sempre que houver mudanca relevante em:
 - estrategia de deploy
 
 Se a documentacao ficar diferente do sistema real, ela perde valor para manutencao. Por isso, manter este arquivo atualizado faz parte do desenvolvimento do projeto.
+
+

@@ -12,9 +12,9 @@ final class Scheduler
 {
     private array $data;
 
-    public function __construct()
+    public function __construct(?array $data = null)
     {
-        $this->data = MockData::all();
+        $this->data = $data ?? MockData::all();
     }
 
     public function calculate(array $program, DateTimeImmutable $baseStart, ?DateTimeImmutable $queryDateTime = null): array

@@ -255,22 +255,36 @@
         Object.entries(headerRow || {}).forEach(([index, label]) => {
             const normalized = normalizeHeader(label);
 
-            if (matchesAny(normalized, ['origem', 'produto origem', 'sku origem'])) {
+            if (matchesAny(normalized, ['origem', 'produto origem', 'sku origem', 'from'])) {
                 columns.from = Number(index);
                 return;
             }
 
-            if (matchesAny(normalized, ['destino', 'produto destino', 'sku destino'])) {
+            if (matchesAny(normalized, ['destino', 'produto destino', 'sku destino', 'to'])) {
                 columns.to = Number(index);
                 return;
             }
 
-            if (matchesAny(normalized, ['tempo', 'tempo setup', 'setup', 'tempo de setup'])) {
+            if (matchesAny(normalized, ['tempo', 'tempo setup', 'setup', 'tempo de setup', 'duracao', 'duration', 'minutos'])) {
                 columns.duration = Number(index);
             }
         });
 
         return columns;
+    }
+
+    function isMatrixHeaderRow(row) {
+        const cells = Object.values(row || {}).map((value) => normalizeHeader(String(value || ''))).filter(Boolean);
+        if (!cells.length) {
+            return false;
+        }
+
+        const hasOrigin = cells.some((cell) => matchesAny(cell, ['origem', 'produto origem', 'sku origem', 'from']));
+        const hasDestination = cells.some((cell) => matchesAny(cell, ['destino', 'produto destino', 'sku destino', 'to']));
+        const hasDuration = cells.some((cell) => matchesAny(cell, ['tempo', 'tempo setup', 'setup', 'tempo de setup', 'duracao', 'duration', 'minutos']));
+
+        // Consider it a header when it clearly contains column labels
+        return (hasOrigin && hasDestination) || (hasDuration && (hasOrigin || hasDestination));
     }
 
     function parseNumber(value) {
@@ -301,6 +315,25 @@
         }
 
         return `LINHA ${digits.padStart(2, '0')}`;
+    }
+
+    function normalizeSku(value) {
+        const text = String(value || '').trim();
+        if (!text) {
+            return '';
+        }
+
+        const normalizedWhitespace = text.replace(/\s+/g, ' ');
+
+        // If it looks like a number (possibly scientific notation), normalize to plain integer string.
+        if (/^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/.test(normalizedWhitespace)) {
+            const num = Number(normalizedWhitespace);
+            if (Number.isFinite(num)) {
+                return String(Math.trunc(num));
+            }
+        }
+
+        return normalizedWhitespace;
     }
 
     function getFilledIndexes(row) {
@@ -422,40 +455,50 @@
             const currentLine = normalizeMatrixLineLabel(sheetInfo.name || '');
             const headerRow = rows[0] || {};
             const columns = detectMatrixColumns(headerRow);
-            const hasExplicitColumns = Boolean(headerRow[columns.from] || headerRow[columns.to] || headerRow[columns.duration]);
+            const hasExplicitColumns = isMatrixHeaderRow(headerRow);
 
             const dataRows = hasExplicitColumns ? rows.slice(1) : rows;
 
             dataRows.forEach((row) => {
                 const originRaw = String(row[columns.from] ?? '').trim();
-                const destinationRaw = String(row[columns.to] ?? '').trim();
+                let destinationRaw = String(row[columns.to] ?? '').trim();
                 const durationRaw = String(row[columns.duration] ?? '').trim();
 
                 const concatenated = String(row[0] ?? '').trim();
                 const timeValue = durationRaw || String(row[2] || row[1] || '').trim();
 
+                // If the uploaded sheet uses the "concatenated SKU + duration" layout,
+                // the second column may contain the duration (not the destination SKU).
+                const destinationLooksLikeDuration = /^\d{1,2}:\d{2}(?::\d{2})?$/.test(destinationRaw) || parseNumber(destinationRaw) !== null;
+
+                const originLooksLikeConcatenatedSkus = /\s+/.test(originRaw);
+
+                if (originLooksLikeConcatenatedSkus && destinationLooksLikeDuration) {
+                    destinationRaw = '';
+                }
+
                 if ((!originRaw || !destinationRaw) && (!concatenated || !timeValue)) {
                     return;
                 }
 
-                let origin = originRaw;
-                let destination = destinationRaw;
+                let origin = normalizeSku(originRaw);
+                let destination = normalizeSku(destinationRaw);
 
                 if (!origin || !destination) {
                     // Fallback for legacy layout: "ORIGEM DESTINO" in first cell.
                     // Prefer splitting by common separators first to preserve names with spaces.
                     const separatorMatch = concatenated.split(/\s*(?:->|=>|;|\||\/)\s*/).filter(Boolean);
                     if (separatorMatch.length >= 2) {
-                        origin = separatorMatch[0].trim();
-                        destination = separatorMatch[1].trim();
+                        origin = normalizeSku(separatorMatch[0]);
+                        destination = normalizeSku(separatorMatch[1]);
                     } else {
                         // Last resort: two tokens (works only if SKUs have no spaces, e.g. numeric codes)
                         const skuParts = concatenated.split(/\s+/).filter(Boolean);
                         if (skuParts.length < 2) {
                             return;
                         }
-                        origin = skuParts[0];
-                        destination = skuParts[1];
+                        origin = normalizeSku(skuParts[0]);
+                        destination = normalizeSku(skuParts[1]);
                     }
                 }
 

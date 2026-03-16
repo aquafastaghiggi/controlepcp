@@ -19,6 +19,7 @@ if (!is_array($payload)) {
 
 $baseStart = DateTimeHelper::fromLocalInput((string) ($payload['base_start'] ?? ''));
 $queryDateTime = DateTimeHelper::fromLocalInput((string) ($payload['query_datetime'] ?? ''));
+$productionEfficiency = (float) ($payload['production_efficiency'] ?? 100);
 $program = $payload['items'] ?? [];
 $datasets = $payload['datasets'] ?? null;
 
@@ -34,7 +35,9 @@ if (!is_array($program) || $program === []) {
     exit;
 }
 
+$productionEfficiency = $productionEfficiency <= 0 ? 100.0 : $productionEfficiency;
+
 $scheduler = new Scheduler(is_array($datasets) ? $datasets : null);
-$result = $scheduler->calculate($program, $baseStart, $queryDateTime);
+$result = $scheduler->calculate($program, $baseStart, $queryDateTime, $productionEfficiency);
 
 echo json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);

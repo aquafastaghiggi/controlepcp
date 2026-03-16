@@ -30,6 +30,7 @@
 
     const baseStartInput = form.querySelector('[name="base_start"]');
     const queryDateTimeInput = form.querySelector('[name="query_datetime"]');
+    const productionEfficiencyInput = form.querySelector('[name="production_efficiency"]');
     const holidayDateInput = document.getElementById('holiday-date');
     const holidayNameInput = document.getElementById('holiday-name');
     const addHolidayButton = document.getElementById('add-holiday');
@@ -53,6 +54,7 @@
     const resultStatus = document.getElementById('result-status');
     const resultSummary = document.getElementById('result-summary');
     const entryTableWrap = document.querySelector('.entry-table-wrap');
+    const matrixTableWrap = document.querySelector('.matrix-wrap');
 
     const defaultDatasets = JSON.parse(JSON.stringify(bootstrap.datasets || {}));
     const defaultProgram = JSON.parse(JSON.stringify(bootstrap.sampleProgram || []));
@@ -62,6 +64,7 @@
         form: {
             base_start: baseStartInput.value,
             query_datetime: queryDateTimeInput.value,
+            production_efficiency: normalizeEfficiencyValue(productionEfficiencyInput?.value),
             items: defaultProgram.length ? defaultProgram : [{}],
         },
         result: null,
@@ -86,6 +89,19 @@
         toastTimer = window.setTimeout(() => {
             appToast.classList.remove('is-visible');
         }, 2400);
+    }
+
+    function escapeHtml(value) {
+        const text = String(value ?? '');
+        const map = {
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#39;',
+        };
+
+        return text.replace(/[&<>"']/g, (char) => map[char] || char);
     }
 
     function normalizeInterval(interval) {
@@ -160,6 +176,7 @@
             state.form = {
                 base_start: parsed.form?.base_start || state.form.base_start,
                 query_datetime: parsed.form?.query_datetime || state.form.query_datetime,
+                production_efficiency: normalizeEfficiencyValue(parsed.form?.production_efficiency ?? state.form.production_efficiency),
                 items: Array.isArray(parsed.form?.items) && parsed.form.items.length ? parsed.form.items : state.form.items,
             };
             state.result = hasCurrentResultFormat(parsed.result) ? parsed.result : null;
@@ -183,6 +200,7 @@
             form: {
                 base_start: baseStartInput.value,
                 query_datetime: queryDateTimeInput.value,
+                production_efficiency: normalizeEfficiencyValue(productionEfficiencyInput?.value),
                 items: readProgramRows(),
             },
             result: state.result,
@@ -513,8 +531,8 @@
                 + '<span class="matrix-issue-line">' + escapeHtml(row.line || '') + '</span>'
                 + '<div><strong>Origem:</strong> ' + escapeHtml(row.from || '') + '</div>'
                 + '<div><strong>Destino:</strong> ' + escapeHtml(row.to || '') + '</div>'
-                + '<div><strong>Tempo:</strong> ' + escapeHtml(row.minutes || '') + '</div>'
-                + '<div><strong>Motivo:</strong> ' + escapeHtml(row.reason || '') + '</div>'
+                + '<div><strong>Tempo:</strong> ' + escapeHtml(row.duration || '') + '</div>'
+                + '<div><strong>Motivo:</strong> ' + escapeHtml((row.issues || []).join(', ')) + '</div>'
             + '</div>'
         )).join('');
     }
@@ -697,6 +715,11 @@
             </tr>
         `).join('');
 
+        const productsCountLabel = document.getElementById('products-count');
+        if (productsCountLabel) {
+            productsCountLabel.textContent = String(rows.length);
+        }
+
         productsBody.querySelectorAll('input').forEach((input) => {
             input.addEventListener('change', () => {
                 const originalSku = input.dataset.productSku;
@@ -741,6 +764,27 @@
             });
         });
     }
+
+    function matrixProductCell(sku) {
+        const product = (state.datasets.products || {})[sku] || null;
+        const description = product?.description || '';
+
+        if (!sku && !description) {
+            return '';
+        }
+
+        if (!description) {
+            return `<span>${escapeHtml(sku || '')}</span>`;
+        }
+
+        return (
+            `<div class="matrix-product-cell">` +
+                `<div class="matrix-product-sku">${escapeHtml(sku || '')}</div>` +
+                `<div class="matrix-product-description">${escapeHtml(description)}</div>` +
+            `</div>`
+        );
+    }
+
     function renderMatrix() {
         const allRows = getMatrixRowsWithLine();
         const lines = getMatrixLines(allRows);
@@ -771,9 +815,9 @@
 
         matrixBody.innerHTML = pagedRows.map((row, index) => `
             <tr data-matrix-row="1" data-line="${row.line}">
-                <td><select data-matrix-index="${pageStart + index}" data-field="from">${productOptions(row.from)}</select></td>
-                <td><select data-matrix-index="${pageStart + index}" data-field="to">${productOptions(row.to)}</select></td>
-                <td><input type="text" data-matrix-index="${pageStart + index}" data-field="duration" value="${row.duration}"></td>
+                <td>${matrixProductCell(row.from || '')}</td>
+                <td>${matrixProductCell(row.to || '')}</td>
+                <td><input type="text" data-matrix-index="${pageStart + index}" data-field="duration" value="${row.duration || ''}"></td>
                 <td class="actions-cell"><button type="button" class="row-delete" data-remove-matrix="${pageStart + index}">Remover</button></td>
             </tr>`
         ).join('');
@@ -782,8 +826,8 @@
             const preservedRows = allRows.filter((row) => row.line !== activeLine);
             const currentLineRows = [...matrixBody.querySelectorAll('tr[data-matrix-row="1"]')].map((row) => ({
                 line: row.dataset.line || activeLine || 'SEM LINHA',
-                from: row.querySelector('[data-field="from"]').value,
-                to: row.querySelector('[data-field="to"]').value,
+                from: row.querySelector('td:nth-child(1)')?.textContent || '',
+                to: row.querySelector('td:nth-child(2)')?.textContent || '',
                 duration: row.querySelector('[data-field="duration"]').value,
             }));
 
@@ -795,7 +839,7 @@
             return mergedRows;
         };
 
-        matrixBody.querySelectorAll('select, input').forEach((field) => {
+        matrixBody.querySelectorAll('input').forEach((field) => {
             field.addEventListener('change', () => {
                 const rowsNow = readCurrentRows();
                 syncMatrixState(rowsNow);
@@ -1068,10 +1112,20 @@
         const targetLine = state.activeMatrixLine || defaultMatrixLineLabel();
         rows.push({ line: targetLine, from: firstSku, to: firstSku, duration: '00:20' });
         state.activeMatrixLine = targetLine;
+        const pageSize = getMatrixPageSize();
+        const rowsInLine = rows.filter((row) => row.line === targetLine).length;
+        state.matrixPageByLine[targetLine] = Math.max(1, Math.ceil(rowsInLine / pageSize));
         syncMatrixState(rows);
         renderMatrix();
         saveState();
         showToast('Registro salvo.');
+
+        window.requestAnimationFrame(() => {
+            matrixTableWrap?.scrollTo({ top: matrixTableWrap.scrollHeight, behavior: 'smooth' });
+            const lastRow = matrixBody?.querySelector('tr[data-matrix-row="1"]:last-child');
+            const focusTarget = lastRow?.querySelector('[data-field="duration"], [data-field="to"], [data-field="from"]');
+            focusTarget?.focus();
+        });
     });
 
     matrixValidToggle?.addEventListener('click', () => {
@@ -1113,6 +1167,40 @@
         saveState();
     });
 
+    function normalizeEfficiencyValue(rawValue) {
+        if (rawValue === null || rawValue === undefined) {
+            return 100;
+        }
+
+        const text = String(rawValue).replace(',', '.').trim();
+        if (!text) {
+            return 100;
+        }
+
+        const value = Number(text);
+        if (!Number.isFinite(value) || Number.isNaN(value)) {
+            return 100;
+        }
+
+        if (value <= 0) {
+            return 1;
+        }
+
+        if (value > 100) {
+            return 100;
+        }
+
+        return Math.round(value);
+    }
+
+    productionEfficiencyInput?.addEventListener('change', () => {
+        state.form.production_efficiency = normalizeEfficiencyValue(productionEfficiencyInput.value);
+        if (productionEfficiencyInput) {
+            productionEfficiencyInput.value = String(state.form.production_efficiency);
+        }
+        saveState();
+    });
+
     addRowButton.addEventListener('click', () => {
         state.form.items.push({
             sequence: state.form.items.length + 1,
@@ -1145,6 +1233,7 @@
         state.form.items = readProgramRows();
         state.form.base_start = baseStartInput.value;
         state.form.query_datetime = queryDateTimeInput.value;
+        state.form.production_efficiency = normalizeEfficiencyValue(productionEfficiencyInput?.value);
         toggleResultPanel(true);
         setStatus('Calculando...', 'loading');
         saveState();
@@ -1156,6 +1245,7 @@
                 body: JSON.stringify({
                     base_start: state.form.base_start,
                     query_datetime: state.form.query_datetime,
+                    production_efficiency: state.form.production_efficiency,
                     items: state.form.items.filter((item) => item.sku),
                     datasets: state.datasets,
                 }),
@@ -1183,6 +1273,9 @@
     renderProgram();
     baseStartInput.value = state.form.base_start || baseStartInput.value;
     queryDateTimeInput.value = state.form.query_datetime || queryDateTimeInput.value;
+    if (productionEfficiencyInput) {
+        productionEfficiencyInput.value = String(state.form.production_efficiency || 100);
+    }
     activateSection(DEFAULT_SECTION);
     resetResultArea(false);
 

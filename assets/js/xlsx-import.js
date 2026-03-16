@@ -193,7 +193,10 @@
 
     function normalizeProductName(value) {
         const text = String(value || '').replace(/\s+/g, ' ').trim();
-        const match = text.match(/^(.*?)(?:\s+cx\/[^\s]+\s+x\s+)(.+)$/i);
+
+        // Remove trecho de embalagem do tipo "Cx/ 04 X 3L", "cx 04 x 3l", etc.,
+        // preservando a parte da litragem (ex.: "3L").
+        const match = text.match(/^(.*?)(?:\s+cx\s*\/?\s*[^\s]+\s*x\s+)(.+)$/i);
 
         if (!match) {
             return text;
@@ -417,22 +420,44 @@
             }
 
             const currentLine = normalizeMatrixLineLabel(sheetInfo.name || '');
+            const headerRow = rows[0] || {};
+            const columns = detectMatrixColumns(headerRow);
+            const hasExplicitColumns = Boolean(headerRow[columns.from] || headerRow[columns.to] || headerRow[columns.duration]);
 
-            rows.forEach((row) => {
-                const skusConcatenated = String(row[0] || '').trim();
-                const timeValue = String(row[2] || row[1] || '').trim();
+            const dataRows = hasExplicitColumns ? rows.slice(1) : rows;
 
-                if (!skusConcatenated || !timeValue) {
+            dataRows.forEach((row) => {
+                const originRaw = String(row[columns.from] ?? '').trim();
+                const destinationRaw = String(row[columns.to] ?? '').trim();
+                const durationRaw = String(row[columns.duration] ?? '').trim();
+
+                const concatenated = String(row[0] ?? '').trim();
+                const timeValue = durationRaw || String(row[2] || row[1] || '').trim();
+
+                if ((!originRaw || !destinationRaw) && (!concatenated || !timeValue)) {
                     return;
                 }
 
-                const skuParts = skusConcatenated.split(/\s+/);
-                if (skuParts.length < 2) {
-                    return;
-                }
+                let origin = originRaw;
+                let destination = destinationRaw;
 
-                const origin = skuParts[0];
-                const destination = skuParts[1];
+                if (!origin || !destination) {
+                    // Fallback for legacy layout: "ORIGEM DESTINO" in first cell.
+                    // Prefer splitting by common separators first to preserve names with spaces.
+                    const separatorMatch = concatenated.split(/\s*(?:->|=>|;|\||\/)\s*/).filter(Boolean);
+                    if (separatorMatch.length >= 2) {
+                        origin = separatorMatch[0].trim();
+                        destination = separatorMatch[1].trim();
+                    } else {
+                        // Last resort: two tokens (works only if SKUs have no spaces, e.g. numeric codes)
+                        const skuParts = concatenated.split(/\s+/).filter(Boolean);
+                        if (skuParts.length < 2) {
+                            return;
+                        }
+                        origin = skuParts[0];
+                        destination = skuParts[1];
+                    }
+                }
 
                 let duration = timeValue;
                 if (/^\d{1,2}:\d{2}:\d{2}$/.test(duration)) {

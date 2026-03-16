@@ -17,8 +17,19 @@ final class Scheduler
         $this->data = $data ?? MockData::all();
     }
 
-    public function calculate(array $program, DateTimeImmutable $baseStart, ?DateTimeImmutable $queryDateTime = null): array
+    public function calculate(
+        array $program,
+        DateTimeImmutable $baseStart,
+        ?DateTimeImmutable $queryDateTime = null,
+        float $productionEfficiency = 100.0
+    ): array
     {
+        if ($productionEfficiency <= 0.0) {
+            $productionEfficiency = 100.0;
+        }
+
+        $productionFactor = $productionEfficiency / 100.0;
+
         $calendarData = $this->data['calendar'];
         $calendar = new WorkCalendar(
             $calendarData['intervals'],
@@ -53,14 +64,15 @@ final class Scheduler
             }
 
             $ratePerHour = (float) $product['rate_per_hour'];
+            $effectiveRatePerHour = $ratePerHour * $productionFactor;
 
-            if ($ratePerHour <= 0.0) {
+            if ($ratePerHour <= 0.0 || $effectiveRatePerHour <= 0.0) {
                 $results[] = $this->errorRow($sequence, $sku, $quantity, 'Taxa invalida');
                 $errors[] = "SKU {$sku} com taxa invalida.";
                 continue;
             }
 
-            $productionMinutes = (int) round(($quantity / $ratePerHour) * 60);
+            $productionMinutes = (int) round(($quantity / $effectiveRatePerHour) * 60);
             $setupMinutes = 0;
             $setupStart = null;
             $setupEnd = null;
@@ -86,7 +98,7 @@ final class Scheduler
                 $calendar,
                 $productionStart,
                 $productionEnd,
-                $ratePerHour,
+                $effectiveRatePerHour,
                 $quantity,
                 $queryDateTime
             );
@@ -119,7 +131,7 @@ final class Scheduler
                 'sku' => $sku,
                 'description' => $product['description'],
                 'quantity' => $quantity,
-                'rate_per_hour' => $ratePerHour,
+                'rate_per_hour' => round($effectiveRatePerHour, 2),
                 'duration_label' => DateTimeHelper::durationFromMinutes($productionMinutes),
                 'previous_sku' => $previousSku,
                 'planned_start' => DateTimeHelper::formatDateTime($startReference),
@@ -141,6 +153,7 @@ final class Scheduler
             'meta' => [
                 'base_start' => DateTimeHelper::formatDateTime($baseStart),
                 'query_datetime' => DateTimeHelper::formatDateTime($queryDateTime),
+                'production_efficiency' => $productionEfficiency,
                 'total_orders' => count(array_filter($results, static fn (array $row): bool => $row['type'] === 'production')),
                 'errors' => $errors,
             ],

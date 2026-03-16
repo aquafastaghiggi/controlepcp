@@ -118,7 +118,7 @@ $mockData = MockData::all();
                     <div class="panel-heading">
                         <div>
                             <h2>SKU (Produtos)</h2>
-                            <p>Use a base da L2 para manter descricao, linha, producao por hora e unidade.</p>
+                            <p>Quantidade de SKU importados: <strong id="products-count">0</strong></p>
                         </div>
                         <div class="panel-actions">
                             <input type="file" id="products-import-file" class="is-hidden" accept=".xlsx">
@@ -205,15 +205,13 @@ $mockData = MockData::all();
                     <form id="simulation-form">
                         <div class="field-grid">
                             <label class="field">
-                                <span>Data/hora base</span>
-                                <input type="datetime-local" name="base_start" value="2026-04-14T13:35" required>
-                            </label>
-
-                            <label class="field">
-                                <span>Consulta para produzido estimado</span>
-                                <input type="datetime-local" name="query_datetime" value="2026-04-15T00:00">
+                                <span>Eficiencia de producao (%)</span>
+                                <input type="text" name="production_efficiency" value="100" inputmode="decimal" placeholder="100">
                             </label>
                         </div>
+
+                        <input type="hidden" name="base_start" value="2026-04-14T13:35" required>
+                        <input type="hidden" name="query_datetime" value="2026-04-15T00:00">
 
                         <div class="table-wrap entry-table-wrap">
                             <table class="entry-table">
@@ -283,8 +281,8 @@ $mockData = MockData::all();
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
     </script>
     <div id="app-toast" class="app-toast" aria-live="polite" aria-atomic="true"></div>
-    <script src="/controlepcp/assets/js/xlsx-import.js"></script>
-    <script src="/controlepcp/assets/js/app.js"></script>
+    <script src="/controlepcp/assets/js/xlsx-import.js?v=3"></script>
+    <script src="/controlepcp/assets/js/app.js?v=8"></script>
 </body>
 </html>
 

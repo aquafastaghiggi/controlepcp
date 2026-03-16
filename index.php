@@ -1,5 +1,4 @@
 <?php
-
 declare(strict_types=1);
 
 require __DIR__ . '/src/bootstrap.php';
@@ -121,7 +120,12 @@ $mockData = MockData::all();
                             <h2>SKU (Produtos)</h2>
                             <p>Use a base da L2 para manter descricao, linha, producao por hora e unidade.</p>
                         </div>
-                        <button type="button" id="add-product" class="ghost-button">Adicionar SKU</button>
+                        <div class="panel-actions">
+                            <input type="file" id="products-import-file" class="is-hidden" accept=".xlsx">
+                            <button type="button" id="import-products" class="ghost-button">Importar Excel</button>
+                            <button type="button" id="clear-products" class="ghost-button">Limpar produtos</button>
+                            <button type="button" id="add-product" class="ghost-button">Adicionar SKU</button>
+                        </div>
                     </div>
 
                     <div class="table-wrap compact-wrap">
@@ -147,8 +151,15 @@ $mockData = MockData::all();
                             <h2>Matrizes</h2>
                             <p>Edite os tempos de setup entre produto de origem e produto de destino.</p>
                         </div>
-                        <button type="button" id="add-matrix-row" class="ghost-button">Adicionar setup</button>
+                        <div class="panel-actions">
+                            <input type="file" id="matrix-import-file" class="is-hidden" accept=".xlsx">
+                            <button type="button" id="import-matrix" class="ghost-button">Importar Excel</button>
+                            <button type="button" id="clear-matrix" class="ghost-button">Limpar matrizes</button>
+                            <button type="button" id="add-matrix-row" class="ghost-button">Adicionar setup</button>
+                        </div>
                     </div>
+
+                    <div id="matrix-line-nav" class="matrix-line-nav"></div>
 
                     <div class="table-wrap matrix-wrap">
                         <table class="entry-table">
@@ -255,6 +266,8 @@ $mockData = MockData::all();
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
     </script>
     <div id="app-toast" class="app-toast" aria-live="polite" aria-atomic="true"></div>
+    <script src="/controlepcp/assets/js/xlsx-import.js"></script>
     <script src="/controlepcp/assets/js/app.js"></script>
 </body>
 </html>
+

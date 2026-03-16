@@ -417,3 +417,62 @@ thead th {
     font-size: 0.78rem;
     text-transform: capitalize;
 }
+
+.panel-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    justify-content: flex-end;
+}
+
+@media (max-width: 760px) {
+    .panel-actions {
+        width: 100%;
+        justify-content: flex-start;
+    }
+}
+
+.matrix-section-row td {
+    padding: 12px 14px;
+    background: rgba(22, 42, 166, 0.12);
+    color: var(--primary-strong);
+    font-weight: 700;
+    letter-spacing: 0.03em;
+}
+
+.matrix-line-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: rgba(22, 42, 166, 0.08);
+    color: var(--primary-strong);
+    font-size: 0.82rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.matrix-line-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 0 0 14px;
+}
+
+.matrix-line-tab {
+    border: 0;
+    border-radius: 999px;
+    min-height: 40px;
+    padding: 0 16px;
+    background: rgba(22, 42, 166, 0.08);
+    color: var(--primary-strong);
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.matrix-line-tab.is-current {
+    background: linear-gradient(135deg, var(--primary), var(--primary-strong));
+    color: #fff;
+}

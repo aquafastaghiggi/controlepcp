@@ -332,3 +332,14 @@ Se a documentacao ficar diferente do sistema real, ela perde valor para manutenc
 
 
 
+
+## Atualizacao recente
+
+- o cadastro de produtos agora aceita importacao de base via arquivo Excel .xlsx
+- a leitura do arquivo e feita no frontend pelo script assets/js/xlsx-import.js, sem dependencia de banco nesta etapa
+- o frontend mantem os dados importados em armazenamento local no navegador
+- na importacao de produtos, o nome e normalizado para ignorar o trecho de embalagem a partir de Cx
+- a acao Limpar produtos pede confirmacao e remove tambem referencias invalidas em programacao e matrizes
+
+
+- o cadastro de matrizes agora aceita importacao de planilha .xlsx no formato por blocos LINHA XX, convertendo tempos do Excel para HH:MM

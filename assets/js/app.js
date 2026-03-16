@@ -18,7 +18,13 @@
     const addRowButton = document.getElementById('add-row');
     const clearButton = document.getElementById('clear-simulation');
     const addIntervalButton = document.getElementById('add-interval');
+    const importProductsButton = document.getElementById('import-products');
+    const productsImportFile = document.getElementById('products-import-file');
+    const clearProductsButton = document.getElementById('clear-products');
     const addProductButton = document.getElementById('add-product');
+    const importMatrixButton = document.getElementById('import-matrix');
+    const matrixImportFile = document.getElementById('matrix-import-file');
+    const clearMatrixButton = document.getElementById('clear-matrix');
     const addMatrixRowButton = document.getElementById('add-matrix-row');
     const navLinks = document.querySelectorAll('[data-target]');
 
@@ -34,6 +40,7 @@
     const calendarBody = document.getElementById('calendar-body');
     const productsBody = document.getElementById('products-body');
     const matrixBody = document.getElementById('matrix-body');
+    const matrixLineNav = document.getElementById('matrix-line-nav');
     const resultPanel = document.getElementById('result-panel');
     const resultBody = document.getElementById('result-body');
     const resultStatus = document.getElementById('result-status');
@@ -52,6 +59,7 @@
         },
         result: null,
         activeSection: DEFAULT_SECTION,
+        activeMatrixLine: '',
     };
     let toastTimer = null;
 
@@ -97,6 +105,7 @@
             },
             products: raw.products || {},
             setup_matrix: raw.setup_matrix || {},
+            setup_matrix_sections: Array.isArray(raw.setup_matrix_sections) ? raw.setup_matrix_sections : [],
         };
     }
 
@@ -195,9 +204,116 @@
         return matrix;
     }
 
+    function flattenMatrixSections(sections) {
+        const rows = [];
+
+        (sections || []).forEach((section) => {
+            const line = String(section?.line || 'SEM LINHA').trim() || 'SEM LINHA';
+            (section?.rows || []).forEach((row) => {
+                rows.push({
+                    line,
+                    from: row.from,
+                    to: row.to,
+                    duration: row.duration,
+                });
+            });
+        });
+
+        return rows;
+    }
+
+    function buildMatrixSections(rows) {
+        const sections = [];
+        const byLine = new Map();
+
+        (rows || []).forEach((row) => {
+            const from = String(row.from || '').trim();
+            const to = String(row.to || '').trim();
+            const duration = String(row.duration || '').trim();
+            const line = String(row.line || 'SEM LINHA').trim() || 'SEM LINHA';
+
+            if (!from || !to || !duration) {
+                return;
+            }
+
+            if (!byLine.has(line)) {
+                const section = { line, rows: [] };
+                byLine.set(line, section);
+                sections.push(section);
+            }
+
+            byLine.get(line).rows.push({ from, to, duration, line });
+        });
+
+        return sections;
+    }
+
+    function getMatrixRowsWithLine() {
+        const sectionRows = flattenMatrixSections(state.datasets.setup_matrix_sections || []);
+        if (sectionRows.length) {
+            return sectionRows;
+        }
+
+        return flattenMatrix(state.datasets.setup_matrix).map((row) => ({
+            ...row,
+            line: 'SEM LINHA',
+        }));
+    }
+
+    function syncMatrixState(rows) {
+        state.datasets.setup_matrix = buildMatrix(rows);
+        state.datasets.setup_matrix_sections = buildMatrixSections(rows);
+    }
+
+    function defaultMatrixLineLabel() {
+        const value = String(state.datasets.calendar.line || '').trim();
+        if (!value) {
+            return 'SEM LINHA';
+        }
+
+        const digits = value.replace(/\D+/g, '');
+        return digits ? `LINHA ${digits}` : value.toUpperCase();
+    }
+
+    function getMatrixLines(rows = getMatrixRowsWithLine()) {
+        return [...new Set(rows.map((row) => row.line || 'SEM LINHA'))]
+            .sort((left, right) => left.localeCompare(right, 'pt-BR', { numeric: true }));
+    }
+
+    function renderMatrixLineNav(lines) {
+        if (!matrixLineNav) {
+            return;
+        }
+
+        if (!lines.length) {
+            matrixLineNav.innerHTML = '';
+            return;
+        }
+
+        if (!lines.includes(state.activeMatrixLine)) {
+            state.activeMatrixLine = lines[0];
+        }
+
+        matrixLineNav.innerHTML = lines.map((line) => `
+            <button type="button" class="matrix-line-tab ${line === state.activeMatrixLine ? 'is-current' : ''}" data-matrix-line="${line}">${line}</button>
+        `).join('');
+
+        matrixLineNav.querySelectorAll('[data-matrix-line]').forEach((button) => {
+            button.addEventListener('click', () => {
+                state.activeMatrixLine = button.dataset.matrixLine || '';
+                renderMatrix();
+            });
+        });
+    }
+
     function productOptions(selectedValue) {
         const entries = Object.entries(state.datasets.products || {});
         const options = ['<option value="">Selecione</option>'];
+        const hasSelectedValue = entries.some(([sku]) => sku === selectedValue);
+
+        if (selectedValue && !hasSelectedValue) {
+            options.push(`<option value="${selectedValue}" selected>${selectedValue}</option>`);
+        }
 
         entries.forEach(([sku]) => {
             options.push(`<option value="${sku}" ${sku === selectedValue ? 'selected' : ''}>${sku}</option>`);
@@ -357,18 +473,32 @@
             sku: item.sku === fromSku ? toSku : item.sku,
         }));
 
-        const rows = flattenMatrix(state.datasets.setup_matrix).map((row) => ({
+        const rows = getMatrixRowsWithLine().map((row) => ({
+            ...row,
             from: row.from === fromSku ? toSku : row.from,
             to: row.to === fromSku ? toSku : row.to,
-            duration: row.duration,
         }));
 
-        state.datasets.setup_matrix = buildMatrix(rows);
+        syncMatrixState(rows);
     }
 
     function removeMatrixReferences(sku) {
-        const rows = flattenMatrix(state.datasets.setup_matrix).filter((row) => row.from !== sku && row.to !== sku);
-        state.datasets.setup_matrix = buildMatrix(rows);
+        const rows = getMatrixRowsWithLine().filter((row) => row.from !== sku && row.to !== sku);
+        syncMatrixState(rows);
+    }
+
+    function pruneCatalogReferences(availableSkus = Object.keys(state.datasets.products || {})) {
+        const allowed = new Set(availableSkus);
+
+        state.form.items = state.form.items.map((item) => ({
+            ...item,
+            sku: allowed.has(item.sku) ? item.sku : '',
+        }));
+
+        const rows = getMatrixRowsWithLine()
+            .filter((row) => allowed.has(row.from) && allowed.has(row.to));
+
+        syncMatrixState(rows);
     }
 
     function renderProducts() {
@@ -424,48 +554,60 @@
                 renderAllDatasetTables();
                 renderProgram();
                 saveState();
+                showToast('Registro removido.');
             });
         });
     }
 
     function renderMatrix() {
-        const rows = flattenMatrix(state.datasets.setup_matrix);
+        const allRows = getMatrixRowsWithLine();
+        const lines = getMatrixLines(allRows);
+        renderMatrixLineNav(lines);
+
+        if (!lines.length) {
+            matrixBody.innerHTML = '<tr class="empty-state-row"><td colspan="4">Nenhuma matriz cadastrada ainda.</td></tr>';
+            return;
+        }
+
+        const activeLine = state.activeMatrixLine || lines[0];
+        const rows = allRows.filter((row) => row.line === activeLine);
+
         matrixBody.innerHTML = rows.map((row, index) => `
-            <tr>
+            <tr data-matrix-row="1" data-line="${row.line}">
                 <td><select data-matrix-index="${index}" data-field="from">${productOptions(row.from)}</select></td>
                 <td><select data-matrix-index="${index}" data-field="to">${productOptions(row.to)}</select></td>
                 <td><input type="text" data-matrix-index="${index}" data-field="duration" value="${row.duration}"></td>
                 <td class="actions-cell"><button type="button" class="row-delete" data-remove-matrix="${index}">Remover</button></td>
-            </tr>
-        `).join('');
+            </tr>`
+        ).join('');
 
-        const bindMatrixState = () => {
-            const currentRows = [...matrixBody.querySelectorAll('tr')].map((row) => ({
+        const readCurrentRows = () => {
+            const preservedRows = allRows.filter((row) => row.line !== activeLine);
+            const currentLineRows = [...matrixBody.querySelectorAll('tr[data-matrix-row="1"]')].map((row) => ({
+                line: row.dataset.line || activeLine || 'SEM LINHA',
                 from: row.querySelector('[data-field="from"]').value,
                 to: row.querySelector('[data-field="to"]').value,
                 duration: row.querySelector('[data-field="duration"]').value,
             }));
-            state.datasets.setup_matrix = buildMatrix(currentRows);
+
+            return [...preservedRows, ...currentLineRows];
         };
 
         matrixBody.querySelectorAll('select, input').forEach((field) => {
             field.addEventListener('change', () => {
-                bindMatrixState();
+                syncMatrixState(readCurrentRows());
                 saveState();
             });
         });
 
         matrixBody.querySelectorAll('[data-remove-matrix]').forEach((button) => {
             button.addEventListener('click', () => {
-                const rowsNow = [...matrixBody.querySelectorAll('tr')].map((row) => ({
-                    from: row.querySelector('[data-field="from"]').value,
-                    to: row.querySelector('[data-field="to"]').value,
-                    duration: row.querySelector('[data-field="duration"]').value,
-                }));
+                const rowsNow = readCurrentRows();
                 rowsNow.splice(Number(button.dataset.removeMatrix), 1);
-                state.datasets.setup_matrix = buildMatrix(rowsNow);
+                syncMatrixState(rowsNow);
                 renderMatrix();
                 saveState();
+                showToast('Registro removido.');
             });
         });
     }
@@ -606,8 +748,56 @@
         showToast('Registro salvo.');
     });
 
+    importProductsButton.addEventListener('click', () => {
+        productsImportFile?.click();
+    });
+
+    productsImportFile.addEventListener('change', async () => {
+        const [file] = productsImportFile.files || [];
+        if (!file) {
+            return;
+        }
+
+        if (!file.name.toLowerCase().endsWith('.xlsx')) {
+            showToast('Use um arquivo Excel no formato .xlsx.', 'danger');
+            productsImportFile.value = '';
+            return;
+        }
+
+        try {
+            if (!window.PCPXlsxImport?.parseProducts) {
+                throw new Error('Importacao de Excel indisponivel neste navegador.');
+            }
+
+            const imported = await window.PCPXlsxImport.parseProducts(file, state.datasets.calendar.line || 'L2');
+            state.datasets.products = imported.products || {};
+            pruneCatalogReferences(Object.keys(state.datasets.products));
+            renderAllDatasetTables();
+            renderProgram();
+            saveState();
+            showToast(Number(imported.count || 0) + ' produtos importados.');
+        } catch (error) {
+            showToast(error.message || 'Falha ao importar o arquivo.', 'danger');
+        } finally {
+            productsImportFile.value = '';
+        }
+    });
+
+    clearProductsButton.addEventListener('click', () => {
+        if (!window.confirm('Deseja realmente limpar a base de produtos?')) {
+            return;
+        }
+
+        state.datasets.products = {};
+        pruneCatalogReferences([]);
+        renderAllDatasetTables();
+        renderProgram();
+        saveState();
+        showToast('Base de produtos limpa.');
+    });
+
     addProductButton.addEventListener('click', () => {
-        const nextSku = `NOVO SKU ${Object.keys(state.datasets.products).length + 1}`;
+        const nextSku = 'NOVO SKU ' + (Object.keys(state.datasets.products).length + 1);
         state.datasets.products[nextSku] = {
             description: 'Novo produto',
             line: state.datasets.calendar.line || 'L2',
@@ -618,15 +808,65 @@
         renderMatrix();
         renderProgram();
         saveState();
+        showToast('Registro salvo.');
     });
 
-    addMatrixRowButton.addEventListener('click', () => {
-        const firstSku = Object.keys(state.datasets.products)[0] || '';
-        const rows = flattenMatrix(state.datasets.setup_matrix);
-        rows.push({ from: firstSku, to: firstSku, duration: '00:20' });
-        state.datasets.setup_matrix = buildMatrix(rows);
+    importMatrixButton.addEventListener('click', () => {
+        matrixImportFile?.click();
+    });
+
+    matrixImportFile.addEventListener('change', async () => {
+        const [file] = matrixImportFile.files || [];
+        if (!file) {
+            return;
+        }
+
+        if (!file.name.toLowerCase().endsWith('.xlsx')) {
+            showToast('Use um arquivo Excel no formato .xlsx.', 'danger');
+            matrixImportFile.value = '';
+            return;
+        }
+
+        try {
+            if (!window.PCPXlsxImport?.parseMatrix) {
+                throw new Error('Importacao de matriz indisponivel neste navegador.');
+            }
+
+            const imported = await window.PCPXlsxImport.parseMatrix(file);
+            syncMatrixState(imported.rows || []);
+            state.activeMatrixLine = getMatrixLines(imported.rows || [])[0] || '';
+            renderMatrix();
+            saveState();
+            showToast(Number(imported.count || 0) + ' setups importados.');
+        } catch (error) {
+            showToast(error.message || 'Falha ao importar a matriz.', 'danger');
+        } finally {
+            matrixImportFile.value = '';
+        }
+    });
+
+    clearMatrixButton.addEventListener('click', () => {
+        if (!window.confirm('Deseja realmente limpar a base de matrizes?')) {
+            return;
+        }
+
+        state.datasets.setup_matrix = {};
+        state.datasets.setup_matrix_sections = [];
+        state.activeMatrixLine = '';
         renderMatrix();
         saveState();
+        showToast('Base de matrizes limpa.');
+    });
+    addMatrixRowButton.addEventListener('click', () => {
+        const firstSku = Object.keys(state.datasets.products)[0] || '';
+        const rows = getMatrixRowsWithLine();
+        const targetLine = state.activeMatrixLine || defaultMatrixLineLabel();
+        rows.push({ line: targetLine, from: firstSku, to: firstSku, duration: '00:20' });
+        state.activeMatrixLine = targetLine;
+        syncMatrixState(rows);
+        renderMatrix();
+        saveState();
+        showToast('Registro salvo.');
     });
 
     addHolidayButton.addEventListener('click', () => {
@@ -733,4 +973,19 @@
 
     window.addEventListener('beforeunload', saveState);
 })();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 

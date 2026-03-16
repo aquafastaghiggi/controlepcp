@@ -1,7 +1,8 @@
 (function () {
     const bootstrap = window.PCP_BOOTSTRAP || { datasets: {}, sampleProgram: [] };
-    const STORAGE_KEY = 'controlepcp.system.v2';
+    const STORAGE_KEY = 'controlepcp.system.v3';
     const DEFAULT_SECTION = 'section-home';
+    const DEFAULT_INTERVAL_DAYS = [1, 2, 3, 4, 5];
 
     const weekdays = [
         { value: 1, label: 'Seg' },
@@ -23,8 +24,10 @@
 
     const baseStartInput = form.querySelector('[name="base_start"]');
     const queryDateTimeInput = form.querySelector('[name="query_datetime"]');
-    const holidayInput = document.getElementById('holiday-input');
-    const weekdayGroup = document.getElementById('weekday-group');
+    const holidayDateInput = document.getElementById('holiday-date');
+    const holidayNameInput = document.getElementById('holiday-name');
+    const addHolidayButton = document.getElementById('add-holiday');
+    const holidayPreview = document.getElementById('holiday-preview');
 
     const programBody = document.getElementById('program-body');
     const calendarBody = document.getElementById('calendar-body');
@@ -50,6 +53,18 @@
         activeSection: DEFAULT_SECTION,
     };
 
+    function normalizeInterval(interval) {
+        const days = Array.isArray(interval?.days) && interval.days.length
+            ? interval.days.map(Number).filter((value) => value >= 1 && value <= 7)
+            : DEFAULT_INTERVAL_DAYS.slice();
+
+        return {
+            start: interval?.start || '07:10',
+            end: interval?.end || '11:28',
+            days,
+        };
+    }
+
     function normalizeDatasets(raw) {
         const calendar = raw.calendar || {};
         const intervals = Array.isArray(calendar.intervals) ? calendar.intervals : [];
@@ -57,9 +72,11 @@
         return {
             calendar: {
                 line: calendar.line || 'L2',
-                working_days: Array.isArray(calendar.working_days) && calendar.working_days.length ? calendar.working_days : [1, 2, 3, 4, 5],
+                working_days: Array.isArray(calendar.working_days) && calendar.working_days.length
+                    ? calendar.working_days.map(Number)
+                    : DEFAULT_INTERVAL_DAYS.slice(),
                 holidays: Array.isArray(calendar.holidays) ? calendar.holidays : [],
-                intervals: intervals.length ? intervals : [{ start: '07:10', end: '11:28' }],
+                intervals: intervals.length ? intervals.map(normalizeInterval) : [normalizeInterval({})],
             },
             products: raw.products || {},
             setup_matrix: raw.setup_matrix || {},
@@ -189,39 +206,101 @@
             section.classList.toggle('is-active', section.id === targetId);
         });
 
-        document.querySelectorAll('.nav-link, .nav-shortcut, .home-card').forEach((button) => {
+        document.querySelectorAll('.nav-shortcut, .home-card').forEach((button) => {
             button.classList.toggle('is-current', button.dataset.target === targetId);
         });
     }
 
-    function renderWeekdays() {
-        weekdayGroup.innerHTML = weekdays.map((day) => `
-            <label class="weekday-pill">
-                <input type="checkbox" value="${day.value}" ${state.datasets.calendar.working_days.includes(day.value) ? 'checked' : ''}>
-                <span>${day.label}</span>
-            </label>
+    function intervalDaySelector(index, selectedDays) {
+        return `
+            <div class="weekday-inline-list">
+                ${weekdays.map((day) => `
+                    <label class="weekday-inline-item ${selectedDays.includes(day.value) ? 'is-selected' : ''}">
+                        <input type="checkbox" data-calendar-index="${index}" data-day-value="${day.value}" ${selectedDays.includes(day.value) ? 'checked' : ''}>
+                        <span>${day.label}</span>
+                    </label>
+                `).join('')}
+            </div>
+        `;
+    }
+
+    function normalizeHolidayList(values) {
+        return values
+            .map((value) => {
+                if (typeof value === 'string') {
+                    return { date: value.trim(), name: '' };
+                }
+
+                return {
+                    date: String(value?.date || '').trim(),
+                    name: String(value?.name || '').trim(),
+                };
+            })
+            .filter((value) => value.date)
+            .sort((left, right) => left.date.localeCompare(right.date))
+            .filter((value, index, list) => index === list.findIndex((item) => item.date === value.date));
+    }
+
+    function syncHolidayState(values) {
+        state.datasets.calendar.holidays = normalizeHolidayList(values);
+        renderHolidayPreview();
+        saveState();
+    }
+
+    function formatHolidayLabel(value) {
+        const parts = String(value || '').split('-').map(Number);
+        if (parts.length !== 3 || parts.some((part) => Number.isNaN(part))) {
+            return value;
+        }
+
+        const [year, month, day] = parts;
+        const date = new Date(year, month - 1, day);
+        return new Intl.DateTimeFormat('pt-BR', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            weekday: 'long',
+        }).format(date);
+    }
+
+    function renderHolidayPreview() {
+        const holidays = state.datasets.calendar.holidays || [];
+
+        if (!holidays.length) {
+            holidayPreview.innerHTML = '<div class="holiday-empty">Nenhum feriado lancado.</div>';
+            return;
+        }
+
+        holidayPreview.innerHTML = holidays.map((holiday) => `
+            <div class="holiday-card">
+                <div class="holiday-card-head">
+                    <strong>${holiday.name || 'Feriado sem nome'}</strong>
+                    <button type="button" class="holiday-remove" data-holiday-remove="${holiday.date}">Excluir</button>
+                </div>
+                <span>${formatHolidayLabel(holiday.date)}</span>
+            </div>
         `).join('');
 
-        weekdayGroup.querySelectorAll('input').forEach((input) => {
-            input.addEventListener('change', () => {
-                state.datasets.calendar.working_days = [...weekdayGroup.querySelectorAll('input:checked')].map((element) => Number(element.value));
-                saveState();
+        holidayPreview.querySelectorAll('[data-holiday-remove]').forEach((button) => {
+            button.addEventListener('click', () => {
+                const holidayDate = button.dataset.holidayRemove;
+                syncHolidayState((state.datasets.calendar.holidays || []).filter((item) => item.date !== holidayDate));
             });
         });
     }
-
     function renderCalendar() {
-        holidayInput.value = state.datasets.calendar.holidays.join('\n');
+        renderHolidayPreview();
         calendarBody.innerHTML = state.datasets.calendar.intervals.map((interval, index) => `
             <tr>
                 <td>${index + 1}</td>
+                <td>${intervalDaySelector(index, interval.days)}</td>
                 <td><input type="time" data-calendar-index="${index}" data-field="start" value="${interval.start}" required></td>
                 <td><input type="time" data-calendar-index="${index}" data-field="end" value="${interval.end}" required></td>
                 <td class="actions-cell"><button type="button" class="row-delete" data-remove-interval="${index}">Remover</button></td>
             </tr>
         `).join('');
 
-        calendarBody.querySelectorAll('input').forEach((input) => {
+        calendarBody.querySelectorAll('[data-field]').forEach((input) => {
             input.addEventListener('change', () => {
                 const index = Number(input.dataset.calendarIndex);
                 const field = input.dataset.field;
@@ -230,11 +309,22 @@
             });
         });
 
+        calendarBody.querySelectorAll('[data-day-value]').forEach((input) => {
+            input.addEventListener('change', () => {
+                const index = Number(input.dataset.calendarIndex);
+                const selected = [...calendarBody.querySelectorAll(`[data-calendar-index="${index}"][data-day-value]:checked`)]
+                    .map((element) => Number(element.dataset.dayValue));
+
+                state.datasets.calendar.intervals[index].days = selected.length ? selected : DEFAULT_INTERVAL_DAYS.slice();
+                saveState();
+            });
+        });
+
         calendarBody.querySelectorAll('[data-remove-interval]').forEach((button) => {
             button.addEventListener('click', () => {
                 state.datasets.calendar.intervals.splice(Number(button.dataset.removeInterval), 1);
                 if (!state.datasets.calendar.intervals.length) {
-                    state.datasets.calendar.intervals.push({ start: '07:10', end: '11:28' });
+                    state.datasets.calendar.intervals.push(normalizeInterval({}));
                 }
                 renderCalendar();
                 saveState();
@@ -475,8 +565,8 @@
     function resetResultArea(persist = true) {
         state.result = null;
         resultSummary.innerHTML = '';
-        resultBody.innerHTML = '<tr class="empty-state-row"><td colspan="10">Nenhuma simulação calculada ainda.</td></tr>';
-        setStatus('Aguardando cálculo', 'idle');
+        resultBody.innerHTML = '<tr class="empty-state-row"><td colspan="10">Nenhuma simulacao calculada ainda.</td></tr>';
+        setStatus('Aguardando calculo', 'idle');
         toggleResultPanel(false);
 
         if (persist) {
@@ -485,14 +575,13 @@
     }
 
     function renderAllDatasetTables() {
-        renderWeekdays();
         renderCalendar();
         renderProducts();
         renderMatrix();
     }
 
     addIntervalButton.addEventListener('click', () => {
-        state.datasets.calendar.intervals.push({ start: '07:10', end: '11:28' });
+        state.datasets.calendar.intervals.push(normalizeInterval({}));
         renderCalendar();
         saveState();
     });
@@ -520,14 +609,24 @@
         saveState();
     });
 
-    holidayInput.addEventListener('change', () => {
-        state.datasets.calendar.holidays = holidayInput.value
-            .split(/\r?\n/)
-            .map((value) => value.trim())
-            .filter(Boolean);
-        saveState();
-    });
+    addHolidayButton.addEventListener('click', () => {
+        const holidayDate = holidayDateInput.value;
+        const holidayName = holidayNameInput.value.trim();
 
+        if (!holidayDate) {
+            holidayDateInput.focus();
+            return;
+        }
+
+        if (!holidayName) {
+            holidayNameInput.focus();
+            return;
+        }
+
+        syncHolidayState([...(state.datasets.calendar.holidays || []), { date: holidayDate, name: holidayName }]);
+        holidayDateInput.value = '';
+        holidayNameInput.value = '';
+    });
     baseStartInput.addEventListener('change', () => {
         state.form.base_start = baseStartInput.value;
         saveState();
@@ -562,10 +661,6 @@
     navLinks.forEach((button) => {
         button.addEventListener('click', () => {
             activateSection(button.dataset.target);
-            const parentDetails = button.closest('details');
-            if (parentDetails) {
-                parentDetails.open = false;
-            }
         });
     });
 
@@ -600,7 +695,7 @@
         } catch (error) {
             resultSummary.innerHTML = '';
             resultBody.innerHTML = `<tr class="empty-state-row"><td colspan="10">${error.message}</td></tr>`;
-            setStatus('Erro no cálculo', 'danger');
+            setStatus('Erro no calculo', 'danger');
             toggleResultPanel(true);
             state.result = null;
             saveState();

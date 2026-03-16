@@ -84,23 +84,12 @@ $mockData = MockData::all();
                         <button type="button" id="add-interval" class="ghost-button">Adicionar intervalo</button>
                     </div>
 
-                    <div class="field-grid calendar-grid">
-                        <label class="field">
-                            <span>Dias uteis</span>
-                            <div class="weekday-group" id="weekday-group"></div>
-                        </label>
-
-                        <label class="field">
-                            <span>Feriados</span>
-                            <textarea id="holiday-input" rows="4" placeholder="Um por linha, no formato AAAA-MM-DD"></textarea>
-                        </label>
-                    </div>
-
                     <div class="table-wrap compact-wrap">
                         <table class="entry-table">
                             <thead>
                                 <tr>
                                     <th>Ordem</th>
+                                    <th>Dias</th>
                                     <th>Inicio</th>
                                     <th>Fim</th>
                                     <th></th>
@@ -108,6 +97,21 @@ $mockData = MockData::all();
                             </thead>
                             <tbody id="calendar-body"></tbody>
                         </table>
+                    </div>
+
+                    <div class="holiday-panel holiday-panel-bottom">
+                        <div class="holiday-panel-heading">
+                            <h3>Feriados</h3>
+                            <p>Cadastre a data e o nome do feriado para bloquear o dia no calendario produtivo.</p>
+                        </div>
+                        <div class="holiday-form-row">
+                            <input type="date" id="holiday-date" class="holiday-date-input">
+                            <input type="text" id="holiday-name" class="holiday-name-input" placeholder="Nome do feriado">
+                            <button type="button" id="add-holiday" class="ghost-button">Adicionar feriado</button>
+                        </div>
+                        <div id="holiday-preview" class="holiday-grid">
+                            <div class="holiday-empty">Nenhum feriado lancado.</div>
+                        </div>
                     </div>
                 </section>
 

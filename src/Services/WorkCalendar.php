@@ -32,7 +32,7 @@ final class WorkCalendar
         for ($offset = 0; $offset <= 30; $offset++) {
             $day = $dateTime->setTime(0, 0)->add(new DateInterval('P' . $offset . 'D'));
 
-            if (!$this->isWorkingDay($day)) {
+            if (!$this->hasIntervalsForDay($day)) {
                 continue;
             }
 
@@ -131,13 +131,49 @@ final class WorkCalendar
         return $minutes;
     }
 
-    private function isWorkingDay(DateTimeImmutable $day): bool
+    private function hasIntervalsForDay(DateTimeImmutable $day): bool
     {
-        $dayNumber = (int) $day->format('N');
-        $dayKey = $day->format('Y-m-d');
+        return $this->intervalInstancesForDay($day) !== [];
+    }
 
-        return in_array($dayNumber, $this->workingDays, true)
-            && !in_array($dayKey, $this->holidays, true);
+    private function holidayDateKeys(): array
+    {
+        $keys = [];
+
+        foreach ($this->holidays as $holiday) {
+            if (is_array($holiday)) {
+                $date = (string) ($holiday['date'] ?? '');
+            } else {
+                $date = (string) $holiday;
+            }
+
+            $date = trim($date);
+            if ($date !== '') {
+                $keys[] = $date;
+            }
+        }
+
+        return array_values(array_unique($keys));
+    }
+
+    private function isCalendarOpenForDay(DateTimeImmutable $day): bool
+    {
+        return !in_array($day->format('Y-m-d'), $this->holidayDateKeys(), true);
+    }
+
+    private function isIntervalAllowedForDay(array $interval, DateTimeImmutable $day): bool
+    {
+        if (!$this->isCalendarOpenForDay($day)) {
+            return false;
+        }
+
+        $dayNumber = (int) $day->format('N');
+        $intervalDays = array_values(array_filter(
+            array_map('intval', $interval['days'] ?? $this->workingDays),
+            static fn (int $value): bool => $value >= 1 && $value <= 7
+        ));
+
+        return in_array($dayNumber, $intervalDays, true);
     }
 
     private function findCurrentInterval(DateTimeImmutable $dateTime): ?array
@@ -161,13 +197,17 @@ final class WorkCalendar
 
     private function intervalInstancesForDay(DateTimeImmutable $day): array
     {
-        if (!$this->isWorkingDay($day)) {
+        if (!$this->isCalendarOpenForDay($day)) {
             return [];
         }
 
         $instances = [];
 
         foreach ($this->intervals as $interval) {
+            if (!$this->isIntervalAllowedForDay($interval, $day)) {
+                continue;
+            }
+
             [$startHour, $startMinute] = array_map('intval', explode(':', $interval['start']));
             [$endHour, $endMinute] = array_map('intval', explode(':', $interval['end']));
 
@@ -175,12 +215,6 @@ final class WorkCalendar
             $end = $day->setTime($endHour, $endMinute);
 
             if ($end <= $start) {
-                $nextDay = $day->add(new DateInterval('P1D'));
-
-                if (!$this->isWorkingDay($nextDay)) {
-                    continue;
-                }
-
                 $end = $end->add(new DateInterval('P1D'));
             }
 

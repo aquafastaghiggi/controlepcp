@@ -1,6 +1,7 @@
-﻿(function () {
+(function () {
     const bootstrap = window.PCP_BOOTSTRAP || { datasets: {}, sampleProgram: [] };
-    const STORAGE_KEY = 'controlepcp.system.v1';
+    const STORAGE_KEY = 'controlepcp.system.v2';
+    const DEFAULT_SECTION = 'section-home';
 
     const weekdays = [
         { value: 1, label: 'Seg' },
@@ -29,6 +30,7 @@
     const calendarBody = document.getElementById('calendar-body');
     const productsBody = document.getElementById('products-body');
     const matrixBody = document.getElementById('matrix-body');
+    const resultPanel = document.getElementById('result-panel');
     const resultBody = document.getElementById('result-body');
     const resultStatus = document.getElementById('result-status');
     const resultSummary = document.getElementById('result-summary');
@@ -45,14 +47,12 @@
             items: defaultProgram.length ? defaultProgram : [{}],
         },
         result: null,
-        activeSection: 'section-program',
+        activeSection: DEFAULT_SECTION,
     };
 
     function normalizeDatasets(raw) {
         const calendar = raw.calendar || {};
         const intervals = Array.isArray(calendar.intervals) ? calendar.intervals : [];
-        const products = raw.products || {};
-        const setupMatrix = raw.setup_matrix || {};
 
         return {
             calendar: {
@@ -61,9 +61,17 @@
                 holidays: Array.isArray(calendar.holidays) ? calendar.holidays : [],
                 intervals: intervals.length ? intervals : [{ start: '07:10', end: '11:28' }],
             },
-            products,
-            setup_matrix: setupMatrix,
+            products: raw.products || {},
+            setup_matrix: raw.setup_matrix || {},
         };
+    }
+
+    function hasCurrentResultFormat(result) {
+        if (!result || !Array.isArray(result.rows) || !result.meta) {
+            return false;
+        }
+
+        return result.rows.every((row) => typeof row === 'object' && row !== null && 'production_end' in row);
     }
 
     function loadState() {
@@ -84,22 +92,23 @@
                 query_datetime: parsed.form?.query_datetime || state.form.query_datetime,
                 items: Array.isArray(parsed.form?.items) && parsed.form.items.length ? parsed.form.items : state.form.items,
             };
-            state.result = parsed.result || null;
-            state.activeSection = parsed.activeSection || state.activeSection;
+            state.result = hasCurrentResultFormat(parsed.result) ? parsed.result : null;
         } catch (error) {
-            // keep defaults
+            state.result = null;
         }
     }
 
-    function hasCurrentMemoryFormat(result) {
-        if (!result || !Array.isArray(result.rows)) {
-            return false;
-        }
-
-        return result.rows.every((row) => typeof row === 'object' && row !== null && 'production_end' in row);
+    function readProgramRows() {
+        return [...programBody.querySelectorAll('tr')].map((row, index) => ({
+            sequence: Number(row.querySelector('[name="sequence"]').value) || index + 1,
+            sku: row.querySelector('[name="sku"]').value,
+            quantity: Number(row.querySelector('[name="quantity"]').value) || 0,
+            planned_start: index === 0 ? row.querySelector('[name="planned_start"]').value : '',
+        }));
     }
+
     function saveState() {
-        const payload = {
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify({
             datasets: state.datasets,
             form: {
                 base_start: baseStartInput.value,
@@ -107,14 +116,15 @@
                 items: readProgramRows(),
             },
             result: state.result,
-            activeSection: state.activeSection,
-        };
-
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+        }));
     }
 
-    function clearState() {
-        window.localStorage.removeItem(STORAGE_KEY);
+    function formatNumber(value) {
+        if (value === null || value === undefined || value === '') {
+            return '';
+        }
+
+        return new Intl.NumberFormat('pt-BR').format(Number(value));
     }
 
     function flattenMatrix(matrix) {
@@ -167,26 +177,30 @@
         resultStatus.dataset.variant = variant;
     }
 
+    function toggleResultPanel(visible) {
+        resultPanel.classList.toggle('is-hidden', !visible);
+    }
+
     function activateSection(sectionId) {
-        state.activeSection = sectionId;
+        const targetId = document.getElementById(sectionId) ? sectionId : DEFAULT_SECTION;
+        state.activeSection = targetId;
+
         document.querySelectorAll('.app-section').forEach((section) => {
-            section.classList.toggle('is-active', section.id === sectionId);
+            section.classList.toggle('is-active', section.id === targetId);
         });
-        document.querySelectorAll('.nav-link, .nav-shortcut').forEach((button) => {
-            button.classList.toggle('is-current', button.dataset.target === sectionId);
+
+        document.querySelectorAll('.nav-link, .nav-shortcut, .home-card').forEach((button) => {
+            button.classList.toggle('is-current', button.dataset.target === targetId);
         });
-        saveState();
     }
 
     function renderWeekdays() {
-        weekdayGroup.innerHTML = weekdays
-            .map((day) => `
-                <label class="weekday-pill">
-                    <input type="checkbox" value="${day.value}" ${state.datasets.calendar.working_days.includes(day.value) ? 'checked' : ''}>
-                    <span>${day.label}</span>
-                </label>
-            `)
-            .join('');
+        weekdayGroup.innerHTML = weekdays.map((day) => `
+            <label class="weekday-pill">
+                <input type="checkbox" value="${day.value}" ${state.datasets.calendar.working_days.includes(day.value) ? 'checked' : ''}>
+                <span>${day.label}</span>
+            </label>
+        `).join('');
 
         weekdayGroup.querySelectorAll('input').forEach((input) => {
             input.addEventListener('change', () => {
@@ -198,16 +212,14 @@
 
     function renderCalendar() {
         holidayInput.value = state.datasets.calendar.holidays.join('\n');
-        calendarBody.innerHTML = state.datasets.calendar.intervals
-            .map((interval, index) => `
-                <tr>
-                    <td>${index + 1}</td>
-                    <td><input type="time" data-calendar-index="${index}" data-field="start" value="${interval.start}" required></td>
-                    <td><input type="time" data-calendar-index="${index}" data-field="end" value="${interval.end}" required></td>
-                    <td class="actions-cell"><button type="button" class="row-delete" data-remove-interval="${index}">Remover</button></td>
-                </tr>
-            `)
-            .join('');
+        calendarBody.innerHTML = state.datasets.calendar.intervals.map((interval, index) => `
+            <tr>
+                <td>${index + 1}</td>
+                <td><input type="time" data-calendar-index="${index}" data-field="start" value="${interval.start}" required></td>
+                <td><input type="time" data-calendar-index="${index}" data-field="end" value="${interval.end}" required></td>
+                <td class="actions-cell"><button type="button" class="row-delete" data-remove-interval="${index}">Remover</button></td>
+            </tr>
+        `).join('');
 
         calendarBody.querySelectorAll('input').forEach((input) => {
             input.addEventListener('change', () => {
@@ -230,20 +242,38 @@
         });
     }
 
+    function remapSkuReferences(fromSku, toSku) {
+        state.form.items = state.form.items.map((item) => ({
+            ...item,
+            sku: item.sku === fromSku ? toSku : item.sku,
+        }));
+
+        const rows = flattenMatrix(state.datasets.setup_matrix).map((row) => ({
+            from: row.from === fromSku ? toSku : row.from,
+            to: row.to === fromSku ? toSku : row.to,
+            duration: row.duration,
+        }));
+
+        state.datasets.setup_matrix = buildMatrix(rows);
+    }
+
+    function removeMatrixReferences(sku) {
+        const rows = flattenMatrix(state.datasets.setup_matrix).filter((row) => row.from !== sku && row.to !== sku);
+        state.datasets.setup_matrix = buildMatrix(rows);
+    }
+
     function renderProducts() {
         const rows = Object.entries(state.datasets.products || {});
-        productsBody.innerHTML = rows
-            .map(([sku, product]) => `
-                <tr>
-                    <td><input type="text" data-product-sku="${sku}" data-field="sku" value="${sku}"></td>
-                    <td><input type="text" data-product-sku="${sku}" data-field="description" value="${product.description || ''}"></td>
-                    <td><input type="text" data-product-sku="${sku}" data-field="line" value="${product.line || 'L2'}"></td>
-                    <td><input type="number" data-product-sku="${sku}" data-field="rate_per_hour" min="0" step="0.01" value="${product.rate_per_hour ?? ''}"></td>
-                    <td><input type="text" data-product-sku="${sku}" data-field="unit" value="${product.unit || 'cx'}"></td>
-                    <td class="actions-cell"><button type="button" class="row-delete" data-remove-product="${sku}">Remover</button></td>
-                </tr>
-            `)
-            .join('');
+        productsBody.innerHTML = rows.map(([sku, product]) => `
+            <tr>
+                <td><input type="text" data-product-sku="${sku}" data-field="sku" value="${sku}"></td>
+                <td><input type="text" data-product-sku="${sku}" data-field="description" value="${product.description || ''}"></td>
+                <td><input type="text" data-product-sku="${sku}" data-field="line" value="${product.line || 'L2'}"></td>
+                <td><input type="number" data-product-sku="${sku}" data-field="rate_per_hour" min="0" step="0.01" value="${product.rate_per_hour ?? ''}"></td>
+                <td><input type="text" data-product-sku="${sku}" data-field="unit" value="${product.unit || 'cx'}"></td>
+                <td class="actions-cell"><button type="button" class="row-delete" data-remove-product="${sku}">Remover</button></td>
+            </tr>
+        `).join('');
 
         productsBody.querySelectorAll('input').forEach((input) => {
             input.addEventListener('change', () => {
@@ -291,16 +321,14 @@
 
     function renderMatrix() {
         const rows = flattenMatrix(state.datasets.setup_matrix);
-        matrixBody.innerHTML = rows
-            .map((row, index) => `
-                <tr>
-                    <td><select data-matrix-index="${index}" data-field="from">${productOptions(row.from)}</select></td>
-                    <td><select data-matrix-index="${index}" data-field="to">${productOptions(row.to)}</select></td>
-                    <td><input type="text" data-matrix-index="${index}" data-field="duration" value="${row.duration}"></td>
-                    <td class="actions-cell"><button type="button" class="row-delete" data-remove-matrix="${index}">Remover</button></td>
-                </tr>
-            `)
-            .join('');
+        matrixBody.innerHTML = rows.map((row, index) => `
+            <tr>
+                <td><select data-matrix-index="${index}" data-field="from">${productOptions(row.from)}</select></td>
+                <td><select data-matrix-index="${index}" data-field="to">${productOptions(row.to)}</select></td>
+                <td><input type="text" data-matrix-index="${index}" data-field="duration" value="${row.duration}"></td>
+                <td class="actions-cell"><button type="button" class="row-delete" data-remove-matrix="${index}">Remover</button></td>
+            </tr>
+        `).join('');
 
         const bindMatrixState = () => {
             const currentRows = [...matrixBody.querySelectorAll('tr')].map((row) => ({
@@ -333,46 +361,28 @@
         });
     }
 
-    function remapSkuReferences(fromSku, toSku) {
-        state.form.items = state.form.items.map((item) => ({
-            ...item,
-            sku: item.sku === fromSku ? toSku : item.sku,
-        }));
-
-        const rows = flattenMatrix(state.datasets.setup_matrix).map((row) => ({
-            from: row.from === fromSku ? toSku : row.from,
-            to: row.to === fromSku ? toSku : row.to,
-            duration: row.duration,
-        }));
-        state.datasets.setup_matrix = buildMatrix(rows);
-    }
-
-    function removeMatrixReferences(sku) {
-        const rows = flattenMatrix(state.datasets.setup_matrix).filter((row) => row.from !== sku && row.to !== sku);
-        state.datasets.setup_matrix = buildMatrix(rows);
-    }
-
     function renderProgram() {
         programBody.innerHTML = '';
         const items = state.form.items.length ? state.form.items : [{}];
+
         items.forEach((item, index) => {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
+            const row = document.createElement('tr');
+            row.innerHTML = `
                 <td><input type="number" class="mini-input" name="sequence" value="${item.sequence || index + 1}" min="1" required></td>
                 <td><select name="sku" required>${productOptions(item.sku || '')}</select></td>
                 <td><input type="number" name="quantity" min="1" step="1" value="${item.quantity || ''}" required></td>
                 <td><input type="datetime-local" name="planned_start" value="${item.planned_start || ''}"></td>
                 <td class="actions-cell"><button type="button" class="row-delete">Remover</button></td>
             `;
-            programBody.appendChild(tr);
+            programBody.appendChild(row);
 
-            const plannedStart = tr.querySelector('[name="planned_start"]');
+            const plannedStart = row.querySelector('[name="planned_start"]');
             plannedStart.disabled = index !== 0;
             if (index !== 0) {
                 plannedStart.value = '';
             }
 
-            tr.querySelector('.row-delete').addEventListener('click', () => {
+            row.querySelector('.row-delete').addEventListener('click', () => {
                 state.form.items.splice(index, 1);
                 if (!state.form.items.length) {
                     state.form.items = [{}];
@@ -381,7 +391,7 @@
                 saveState();
             });
 
-            tr.querySelectorAll('input, select').forEach((field) => {
+            row.querySelectorAll('input, select').forEach((field) => {
                 field.addEventListener('change', syncProgramState);
                 field.addEventListener('input', syncProgramState);
             });
@@ -391,15 +401,6 @@
     function syncProgramState() {
         state.form.items = readProgramRows();
         saveState();
-    }
-
-    function readProgramRows() {
-        return [...programBody.querySelectorAll('tr')].map((row, index) => ({
-            sequence: Number(row.querySelector('[name="sequence"]').value),
-            sku: row.querySelector('[name="sku"]').value,
-            quantity: Number(row.querySelector('[name="quantity"]').value),
-            planned_start: index === 0 ? row.querySelector('[name="planned_start"]').value : '',
-        }));
     }
 
     function renderSummary(result) {
@@ -427,7 +428,6 @@
 
     function formatEndMeta(row) {
         const endDate = parsePtBrDateTime(row.production_end);
-
         if (!endDate) {
             return '';
         }
@@ -465,6 +465,8 @@
         renderSummary(result);
         renderRows(result.rows || []);
         setStatus(result.meta.errors.length ? 'Calculado com alertas' : 'Calculado', result.meta.errors.length ? 'warning' : 'success');
+        toggleResultPanel(true);
+
         if (persist) {
             saveState();
         }
@@ -473,8 +475,10 @@
     function resetResultArea(persist = true) {
         state.result = null;
         resultSummary.innerHTML = '';
-        resultBody.innerHTML = '<tr class="empty-state-row"><td colspan="10">Nenhuma simulaÃ§Ã£o calculada ainda.</td></tr>';
-        setStatus('Aguardando cÃ¡lculo', 'idle');
+        resultBody.innerHTML = '<tr class="empty-state-row"><td colspan="10">Nenhuma simulação calculada ainda.</td></tr>';
+        setStatus('Aguardando cálculo', 'idle');
+        toggleResultPanel(false);
+
         if (persist) {
             saveState();
         }
@@ -550,7 +554,6 @@
 
     clearButton.addEventListener('click', () => {
         state.form.items = [{}];
-        state.result = null;
         renderProgram();
         resetResultArea(false);
         saveState();
@@ -571,6 +574,7 @@
         state.form.items = readProgramRows();
         state.form.base_start = baseStartInput.value;
         state.form.query_datetime = queryDateTimeInput.value;
+        toggleResultPanel(true);
         setStatus('Calculando...', 'loading');
         saveState();
 
@@ -596,7 +600,8 @@
         } catch (error) {
             resultSummary.innerHTML = '';
             resultBody.innerHTML = `<tr class="empty-state-row"><td colspan="10">${error.message}</td></tr>`;
-            setStatus('Erro no cÃ¡lculo', 'danger');
+            setStatus('Erro no cálculo', 'danger');
+            toggleResultPanel(true);
             state.result = null;
             saveState();
         }
@@ -607,14 +612,8 @@
     renderProgram();
     baseStartInput.value = state.form.base_start || baseStartInput.value;
     queryDateTimeInput.value = state.form.query_datetime || queryDateTimeInput.value;
-    activateSection(state.activeSection);
-
-    if (hasCurrentMemoryFormat(state.result)) {
-        renderResult(state.result, false);
-    } else {
-        resetResultArea(false);
-    }
+    activateSection(DEFAULT_SECTION);
+    resetResultArea(false);
 
     window.addEventListener('beforeunload', saveState);
 })();
-

@@ -29,15 +29,15 @@ Esses dados sao temporarios nesta fase e, futuramente, virao do banco de dados.
 
 ## Estrutura atual da interface
 
-A interface atual foi reorganizada para funcionar como base do sistema e nao apenas como simulador isolado.
+A interface atual foi reorganizada para funcionar como base do sistema e nao apenas como simulador isolado. Ao abrir o projeto, a home mostra apenas o painel inicial e os modulos sao abertos sob demanda.
 
 Componentes principais:
 
-- topo com logo reduzida e identidade visual da empresa
-- menu Cadastros com acesso a Horarios de Trabalho, SKU (Produtos), Matrizes e Programacao de PCP
+- topo com logo reduzida e atalho unico para o Painel Inicial
+- painel inicial como ponto central de navegacao para Horarios de Trabalho, SKU (Produtos), Matrizes e Programacao de PCP
 - secoes editaveis no proprio navegador, sem banco de dados nesta etapa
 - tela de programacao separada da manutencao dos cadastros
-- resultado operacional mais limpo, mantendo campos tecnicos apenas em segundo plano
+- resultado operacional exibido apenas apos a acao de calcular programacao, mantendo campos tecnicos em segundo plano
 ## Stack atual
 
 - `PHP` para backend e renderizacao inicial
@@ -327,5 +327,7 @@ Este arquivo deve ser revisado sempre que houver mudanca relevante em:
 - estrategia de deploy
 
 Se a documentacao ficar diferente do sistema real, ela perde valor para manutencao. Por isso, manter este arquivo atualizado faz parte do desenvolvimento do projeto.
+
+
 
 

@@ -22,17 +22,8 @@ $mockData = MockData::all();
         <header class="hero">
             <div class="hero-copy">
                 <img src="/controlepcp/logo.jpg" alt="Aqua Fast" class="hero-logo">
-                <nav class="top-nav" aria-label="Navegação principal">
-                    <details class="nav-group">
-                        <summary>Cadastros</summary>
-                        <div class="nav-menu">
-                            <button type="button" class="nav-link" data-target="section-calendar">Horários de Trabalho</button>
-                            <button type="button" class="nav-link" data-target="section-products">SKU (Produtos)</button>
-                            <button type="button" class="nav-link" data-target="section-matrix">Matrizes</button>
-                            <button type="button" class="nav-link" data-target="section-program">Programação de PCP</button>
-                        </div>
-                    </details>
-                    <button type="button" class="nav-shortcut" data-target="section-program">Programação de PCP</button>
+                <nav class="top-nav" aria-label="Navegacao principal">
+                    <button type="button" class="nav-shortcut" data-target="section-home">Painel Inicial</button>
                 </nav>
             </div>
             <div class="hero-note is-hidden">
@@ -42,7 +33,7 @@ $mockData = MockData::all();
             </div>
         </header>
 
-        <main class="layout">
+        <main class="layout layout-single">
             <aside class="sidebar is-hidden">
                 <section class="panel">
                     <h2>Calendario produtivo</h2>
@@ -53,43 +44,49 @@ $mockData = MockData::all();
                     </ul>
                     <p class="muted">Aplicado em todos os dias para este MVP.</p>
                 </section>
-
-                <section class="panel">
-                    <h2>Produtos da linha 2</h2>
-                    <div class="product-list">
-                        <?php foreach ($mockData['products'] as $sku => $product): ?>
-                            <div class="product-pill">
-                                <span><?= htmlspecialchars($sku) ?></span>
-                                <strong><?= (int) $product['rate_per_hour'] ?> cx/h</strong>
-                            </div>
-                        <?php endforeach; ?>
-                    </div>
-                </section>
-
-                <section class="panel">
-                    <h2>Regras deste MVP</h2>
-                    <ul class="info-list">
-                        <li>Setup e producao usam o mesmo calendario util.</li>
-                        <li>O primeiro item parte da data/hora base informada.</li>
-                        <li>Os proximos itens dependem do fim anterior + setup.</li>
-                        <li>Se o setup terminar fora da janela, a producao inicia no proximo horario valido.</li>
-                    </ul>
-                </section>
             </aside>
 
             <section class="workspace">
+                <section class="panel app-section is-active" id="section-home">
+                    <div class="panel-heading panel-heading-stack">
+                        <div>
+                            <h1>Painel inicial</h1>
+                            <p>Escolha um modulo para comecar. O sistema abre apenas a area selecionada.</p>
+                        </div>
+                    </div>
+
+                    <div class="home-grid">
+                        <button type="button" class="home-card" data-target="section-calendar">
+                            <strong>Hor&aacute;rios de Trabalho</strong>
+                            <span>Configure dias uteis, turnos e feriados.</span>
+                        </button>
+                        <button type="button" class="home-card" data-target="section-products">
+                            <strong>SKU (Produtos)</strong>
+                            <span>Cadastre descricao, linha, taxa e unidade.</span>
+                        </button>
+                        <button type="button" class="home-card" data-target="section-matrix">
+                            <strong>Matrizes</strong>
+                            <span>Defina o setup entre origem e destino.</span>
+                        </button>
+                        <button type="button" class="home-card" data-target="section-program">
+                            <strong>Programa&ccedil;&atilde;o de PCP</strong>
+                            <span>Monte a sequencia e calcule a producao.</span>
+                        </button>
+                    </div>
+                </section>
+
                 <section class="panel app-section" id="section-calendar">
                     <div class="panel-heading">
                         <div>
-                            <h2>Horários de Trabalho</h2>
-                            <p>Cadastre os intervalos válidos, os dias úteis e os feriados usados no cálculo.</p>
+                            <h2>Hor&aacute;rios de Trabalho</h2>
+                            <p>Cadastre os intervalos validos, os dias uteis e os feriados usados no calculo.</p>
                         </div>
                         <button type="button" id="add-interval" class="ghost-button">Adicionar intervalo</button>
                     </div>
 
                     <div class="field-grid calendar-grid">
                         <label class="field">
-                            <span>Dias úteis</span>
+                            <span>Dias uteis</span>
                             <div class="weekday-group" id="weekday-group"></div>
                         </label>
 
@@ -104,7 +101,7 @@ $mockData = MockData::all();
                             <thead>
                                 <tr>
                                     <th>Ordem</th>
-                                    <th>Início</th>
+                                    <th>Inicio</th>
                                     <th>Fim</th>
                                     <th></th>
                                 </tr>
@@ -118,7 +115,7 @@ $mockData = MockData::all();
                     <div class="panel-heading">
                         <div>
                             <h2>SKU (Produtos)</h2>
-                            <p>Use a base da L2 para manter descrição, linha, produção por hora e unidade.</p>
+                            <p>Use a base da L2 para manter descricao, linha, producao por hora e unidade.</p>
                         </div>
                         <button type="button" id="add-product" class="ghost-button">Adicionar SKU</button>
                     </div>
@@ -128,9 +125,9 @@ $mockData = MockData::all();
                             <thead>
                                 <tr>
                                     <th>SKU</th>
-                                    <th>Descrição</th>
+                                    <th>Descricao</th>
                                     <th>Linha</th>
-                                    <th>Produção/h</th>
+                                    <th>Producao/h</th>
                                     <th>Unidade</th>
                                     <th></th>
                                 </tr>
@@ -164,11 +161,11 @@ $mockData = MockData::all();
                     </div>
                 </section>
 
-                <section class="panel app-section is-active" id="section-program">
+                <section class="panel app-section" id="section-program">
                     <div class="panel-heading">
                         <div>
-                            <h2>Programação de PCP</h2>
-                            <p>Informe o início base, preencha os itens e deixe as próximas datas por conta do cálculo.</p>
+                            <h2>Programa&ccedil;&atilde;o de PCP</h2>
+                            <p>Informe o inicio base, preencha os itens e deixe as proximas datas por conta do calculo.</p>
                         </div>
                         <button type="button" id="add-row" class="ghost-button">Adicionar item</button>
                     </div>
@@ -193,7 +190,7 @@ $mockData = MockData::all();
                                         <th>Seq.</th>
                                         <th>SKU</th>
                                         <th>Quantidade (cx)</th>
-                                        <th>Início informado (1º item)</th>
+                                        <th>Inicio informado (1&ordm; item)</th>
                                         <th></th>
                                     </tr>
                                 </thead>
@@ -202,46 +199,46 @@ $mockData = MockData::all();
                         </div>
 
                         <div class="form-actions">
-                            <button type="button" id="clear-simulation" class="ghost-button">Limpar programação</button>
-                            <button type="submit" class="primary-button">Calcular programação</button>
+                            <button type="button" id="clear-simulation" class="ghost-button">Limpar programacao</button>
+                            <button type="submit" class="primary-button">Calcular programacao</button>
                         </div>
                     </form>
-                </section>
 
-                <section class="panel result-panel">
-                    <div class="panel-heading">
-                        <div>
-                            <h2>Resultado</h2>
-                            <p>A tabela abaixo mostra produção e setup na ordem real de execução.</p>
+                    <section class="panel result-panel is-hidden" id="result-panel">
+                        <div class="panel-heading">
+                            <div>
+                                <h2>Resultado</h2>
+                                <p>A tabela abaixo mostra producao e setup na ordem real de execucao.</p>
+                            </div>
+                            <span class="status-badge" id="result-status">Aguardando calculo</span>
                         </div>
-                        <span class="status-badge" id="result-status">Aguardando cálculo</span>
-                    </div>
 
-                    <div id="result-summary" class="summary-grid"></div>
+                        <div id="result-summary" class="summary-grid"></div>
 
-                    <div class="table-wrap">
-                        <table class="result-table">
-                            <thead>
-                                <tr>
-                                    <th>Tipo</th>
-                                    <th>Seq.</th>
-                                    <th>Produto</th>
-                                    <th>Produção/h</th>
-                                    <th>Programado</th>
-                                    <th>Tempo</th>
-                                    <th>Data início</th>
-                                    <th>Início</th>
-                                    <th class="is-hidden-column">Memória do cálculo</th>
-                                    <th>Fim</th>
-                                </tr>
-                            </thead>
-                            <tbody id="result-body">
-                                <tr class="empty-state-row">
-                                    <td colspan="10">Nenhuma simulação calculada ainda.</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
+                        <div class="table-wrap">
+                            <table class="result-table">
+                                <thead>
+                                    <tr>
+                                        <th>Tipo</th>
+                                        <th>Seq.</th>
+                                        <th>Produto</th>
+                                        <th>Producao/h</th>
+                                        <th>Programado</th>
+                                        <th>Tempo</th>
+                                        <th>Data inicio</th>
+                                        <th>Inicio</th>
+                                        <th class="is-hidden-column">Memoria do calculo</th>
+                                        <th>Fim</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="result-body">
+                                    <tr class="empty-state-row">
+                                        <td colspan="10">Nenhuma simulacao calculada ainda.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
                 </section>
             </section>
         </main>

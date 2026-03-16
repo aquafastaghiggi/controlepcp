@@ -24,17 +24,23 @@ body {
 .hero {
     grid-template-columns: 1fr;
     margin-bottom: 18px;
+    overflow: visible;
+    position: relative;
+    z-index: 50;
 }
 
 .hero-copy {
     display: flex;
     flex-direction: column;
-    gap: 14px;
-    padding: 22px 28px;
+    gap: 16px;
+    padding: 20px 24px;
+    overflow: visible;
+    position: relative;
+    z-index: 60;
 }
 
 .hero-logo {
-    width: min(220px, 42vw);
+    width: min(180px, 34vw);
     max-width: 100%;
     height: auto;
     display: block;
@@ -45,19 +51,25 @@ body {
     flex-wrap: wrap;
     gap: 10px;
     align-items: center;
+    position: relative;
+    z-index: 80;
 }
 
 .nav-group {
     position: relative;
+    z-index: 90;
+    display: grid;
+    align-items: start;
 }
 
 .nav-group summary,
 .nav-shortcut,
-.nav-link {
+.nav-link,
+.home-card {
     list-style: none;
     border: 0;
-    border-radius: 999px;
-    min-height: 42px;
+    border-radius: 18px;
+    min-height: 44px;
     padding: 0 18px;
     font: inherit;
     cursor: pointer;
@@ -66,16 +78,24 @@ body {
     font-weight: 700;
 }
 
+.nav-group summary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    line-height: 1;
+}
+
 .nav-group summary::-webkit-details-marker {
     display: none;
 }
 
 .nav-menu {
-    position: absolute;
-    top: calc(100% + 8px);
-    left: 0;
-    z-index: 6;
-    min-width: 240px;
+    position: static;
+    margin-top: 8px;
+    z-index: 200;
+    min-width: 260px;
+    min-width: 260px;
     display: grid;
     gap: 8px;
     padding: 12px;
@@ -87,18 +107,19 @@ body {
 
 .nav-link,
 .nav-shortcut {
-    text-align: left;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    line-height: 1;
 }
 
 .nav-link.is-current,
 .nav-shortcut.is-current,
+.home-card.is-current,
 .nav-group[open] summary {
     background: linear-gradient(135deg, var(--primary), var(--primary-strong));
     color: #fff;
-}
-
-.eyebrow {
-    color: var(--secondary);
 }
 
 .hero-text {
@@ -107,11 +128,22 @@ body {
 
 .layout {
     grid-template-columns: 1fr;
+    position: relative;
+    z-index: 1;
+}
+
+.layout-single {
+    grid-template-columns: 1fr;
 }
 
 .is-hidden,
 .is-hidden-column {
-    display: none;
+    display: none !important;
+}
+
+.is-hidden,
+.is-hidden-column {
+    display: none !important;
 }
 
 .workspace {
@@ -134,8 +166,16 @@ body {
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(245, 248, 255, 0.9));
 }
 
+.panel-heading-stack {
+    align-items: flex-start;
+}
+
 .table-wrap {
     border-color: rgba(20, 39, 140, 0.1);
+}
+
+.result-panel {
+    margin-top: 20px;
 }
 
 thead th {
@@ -161,6 +201,34 @@ thead th {
 .summary-card {
     background: linear-gradient(180deg, rgba(22, 42, 166, 0.08), rgba(77, 113, 255, 0.02));
     border-color: rgba(22, 42, 166, 0.12);
+}
+
+.home-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+}
+
+.home-card {
+    min-height: 148px;
+    padding: 22px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: space-between;
+    text-align: left;
+    border: 1px solid rgba(20, 39, 140, 0.08);
+    box-shadow: 0 12px 24px rgba(19, 39, 159, 0.08);
+}
+
+.home-card strong {
+    font-size: 1.05rem;
+}
+
+.home-card span {
+    color: var(--muted);
+    font-weight: 500;
+    line-height: 1.5;
 }
 
 .entry-table-wrap,
@@ -232,12 +300,17 @@ textarea {
 
 @media (max-width: 900px) {
     .hero-copy {
-        padding: 20px;
+        padding: 18px;
+    }
+
+    .top-nav {
+        align-items: stretch;
     }
 
     .field-grid,
     .summary-grid,
-    .calendar-grid {
+    .calendar-grid,
+    .home-grid {
         grid-template-columns: 1fr;
     }
 
@@ -254,15 +327,24 @@ textarea {
     }
 
     .hero-logo {
-        width: min(180px, 52vw);
+        width: min(150px, 48vw);
     }
 
     .top-nav {
         display: grid;
+        grid-template-columns: 1fr;
+    }
+
+    .nav-group,
+    .nav-shortcut,
+    .nav-group summary,
+    .home-card {
+        width: 100%;
     }
 
     .nav-menu {
         position: static;
+        min-width: 0;
     }
 
     .entry-table-wrap,

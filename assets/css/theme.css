@@ -476,3 +476,66 @@ thead th {
     background: linear-gradient(135deg, var(--primary), var(--primary-strong));
     color: #fff;
 }
+
+.matrix-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+    justify-content: space-between;
+    margin: 0 0 14px;
+}
+
+.matrix-issues-button {
+    border: 0;
+    border-radius: 999px;
+    min-height: 40px;
+    padding: 0 18px;
+    background: linear-gradient(135deg, #d45b5b, #b64040);
+    color: #fff;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 10px 22px rgba(180, 64, 64, 0.2);
+}
+
+.matrix-issues-panel {
+    margin: 0 0 16px;
+    padding: 14px;
+    border-radius: 18px;
+    background: rgba(212, 91, 91, 0.08);
+    border: 1px solid rgba(180, 64, 64, 0.16);
+}
+
+.matrix-issues-body {
+    display: grid;
+    gap: 10px;
+}
+
+.matrix-issue-card {
+    display: grid;
+    gap: 4px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    background: #fff;
+    border: 1px solid rgba(180, 64, 64, 0.14);
+}
+
+.matrix-issue-card strong {
+    color: #9f2f2f;
+}
+
+.matrix-issues-empty {
+    color: #9f2f2f;
+    font-weight: 700;
+}
+
+@media (max-width: 760px) {
+    .matrix-toolbar {
+        align-items: stretch;
+    }
+
+    .matrix-issues-button {
+        width: 100%;
+    }
+}

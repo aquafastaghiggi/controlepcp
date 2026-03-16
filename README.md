@@ -343,3 +343,5 @@ Se a documentacao ficar diferente do sistema real, ela perde valor para manutenc
 
 
 - o cadastro de matrizes agora aceita importacao de planilha .xlsx no formato por blocos LINHA XX, convertendo tempos do Excel para HH:MM
+- o cadastro de matrizes agora mostra um botao vermelho de inconsistencias, comparando origem e destino da matriz com a base atual de produtos
+- ao clicar no alerta, o sistema lista os registros com origem e/ou destino sem produto correspondente, permitindo revisar impactos no calculo de setup

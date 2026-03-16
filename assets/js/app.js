@@ -41,6 +41,9 @@
     const productsBody = document.getElementById('products-body');
     const matrixBody = document.getElementById('matrix-body');
     const matrixLineNav = document.getElementById('matrix-line-nav');
+    const matrixIssuesToggle = document.getElementById('matrix-issues-toggle');
+    const matrixIssuesPanel = document.getElementById('matrix-issues-panel');
+    const matrixIssuesBody = document.getElementById('matrix-issues-body');
     const resultPanel = document.getElementById('result-panel');
     const resultBody = document.getElementById('result-body');
     const resultStatus = document.getElementById('result-status');
@@ -60,6 +63,7 @@
         result: null,
         activeSection: DEFAULT_SECTION,
         activeMatrixLine: '',
+        showMatrixIssues: false,
     };
     let toastTimer = null;
 
@@ -322,6 +326,62 @@
         return options.join('');
     }
 
+
+    function getMatrixInconsistencies(rows = getMatrixRowsWithLine()) {
+        const products = state.datasets.products || {};
+
+        return rows.reduce((list, row) => {
+            const issues = [];
+            if (!products[row.from]) {
+                issues.push('origem sem produto cadastrado');
+            }
+            if (!products[row.to]) {
+                issues.push('destino sem produto cadastrado');
+            }
+
+            if (issues.length) {
+                list.push({
+                    line: row.line || 'SEM LINHA',
+                    from: row.from || '-',
+                    to: row.to || '-',
+                    duration: row.duration || '-',
+                    issues,
+                });
+            }
+
+            return list;
+        }, []);
+    }
+
+    function renderMatrixIssues(rows = getMatrixRowsWithLine()) {
+        if (!matrixIssuesToggle || !matrixIssuesPanel || !matrixIssuesBody) {
+            return;
+        }
+
+        const inconsistencies = getMatrixInconsistencies(rows);
+        matrixIssuesToggle.textContent = 'Inconsistencias (' + inconsistencies.length + ')';
+        matrixIssuesPanel.classList.toggle('is-hidden', !state.showMatrixIssues);
+
+        if (!state.showMatrixIssues) {
+            return;
+        }
+
+        if (!inconsistencies.length) {
+            matrixIssuesBody.innerHTML = '<div class="matrix-issues-empty">Nenhuma inconsistência encontrada entre matrizes e produtos.</div>';
+            return;
+        }
+
+        matrixIssuesBody.innerHTML = inconsistencies.map((item) => (
+            '<div class="matrix-issue-card">'
+                + '<strong>' + item.line + '</strong>'
+                + '<span><b>Origem:</b> ' + item.from + '</span>'
+                + '<span><b>Destino:</b> ' + item.to + '</span>'
+                + '<span><b>Tempo:</b> ' + item.duration + '</span>'
+                + '<span><b>Alerta:</b> ' + item.issues.join(' | ') + '</span>'
+            + '</div>'
+        )).join('');
+    }
+
     function setStatus(label, variant) {
         resultStatus.textContent = label;
         resultStatus.dataset.variant = variant;
@@ -565,12 +625,15 @@
         renderMatrixLineNav(lines);
 
         if (!lines.length) {
+            renderMatrixIssues([]);
             matrixBody.innerHTML = '<tr class="empty-state-row"><td colspan="4">Nenhuma matriz cadastrada ainda.</td></tr>';
             return;
         }
 
         const activeLine = state.activeMatrixLine || lines[0];
         const rows = allRows.filter((row) => row.line === activeLine);
+
+        renderMatrixIssues(allRows);
 
         matrixBody.innerHTML = rows.map((row, index) => `
             <tr data-matrix-row="1" data-line="${row.line}">
@@ -595,7 +658,9 @@
 
         matrixBody.querySelectorAll('select, input').forEach((field) => {
             field.addEventListener('change', () => {
-                syncMatrixState(readCurrentRows());
+                const rowsNow = readCurrentRows();
+                syncMatrixState(rowsNow);
+                renderMatrixIssues(rowsNow);
                 saveState();
             });
         });
@@ -869,6 +934,11 @@
         showToast('Registro salvo.');
     });
 
+    matrixIssuesToggle?.addEventListener('click', () => {
+        state.showMatrixIssues = !state.showMatrixIssues;
+        renderMatrix();
+    });
+
     addHolidayButton.addEventListener('click', () => {
         const holidayDate = holidayDateInput.value;
         const holidayName = holidayNameInput.value.trim();
@@ -973,6 +1043,13 @@
 
     window.addEventListener('beforeunload', saveState);
 })();
+
+
+
+
+
+
+
 
 
 

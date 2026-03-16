@@ -1,4 +1,4 @@
-(function () {
+﻿(function () {
     const bootstrap = window.PCP_BOOTSTRAP || { datasets: {}, sampleProgram: [] };
     const STORAGE_KEY = 'controlepcp.system.v3';
     const DEFAULT_SECTION = 'section-home';
@@ -28,6 +28,7 @@
     const holidayNameInput = document.getElementById('holiday-name');
     const addHolidayButton = document.getElementById('add-holiday');
     const holidayPreview = document.getElementById('holiday-preview');
+    const appToast = document.getElementById('app-toast');
 
     const programBody = document.getElementById('program-body');
     const calendarBody = document.getElementById('calendar-body');
@@ -52,6 +53,22 @@
         result: null,
         activeSection: DEFAULT_SECTION,
     };
+    let toastTimer = null;
+
+    function showToast(message, variant = 'success') {
+        if (!appToast) {
+            return;
+        }
+
+        window.clearTimeout(toastTimer);
+        appToast.textContent = message;
+        appToast.dataset.variant = variant;
+        appToast.classList.add('is-visible');
+
+        toastTimer = window.setTimeout(() => {
+            appToast.classList.remove('is-visible');
+        }, 2400);
+    }
 
     function normalizeInterval(interval) {
         const days = Array.isArray(interval?.days) && interval.days.length
@@ -285,6 +302,7 @@
             button.addEventListener('click', () => {
                 const holidayDate = button.dataset.holidayRemove;
                 syncHolidayState((state.datasets.calendar.holidays || []).filter((item) => item.date !== holidayDate));
+                showToast('Registro removido.');
             });
         });
     }
@@ -328,6 +346,7 @@
                 }
                 renderCalendar();
                 saveState();
+                showToast('Registro removido.');
             });
         });
     }
@@ -584,6 +603,7 @@
         state.datasets.calendar.intervals.push(normalizeInterval({}));
         renderCalendar();
         saveState();
+        showToast('Registro salvo.');
     });
 
     addProductButton.addEventListener('click', () => {
@@ -626,6 +646,7 @@
         syncHolidayState([...(state.datasets.calendar.holidays || []), { date: holidayDate, name: holidayName }]);
         holidayDateInput.value = '';
         holidayNameInput.value = '';
+        showToast('Registro salvo.');
     });
     baseStartInput.addEventListener('change', () => {
         state.form.base_start = baseStartInput.value;
@@ -712,3 +733,4 @@
 
     window.addEventListener('beforeunload', saveState);
 })();
+

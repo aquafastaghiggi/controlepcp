@@ -101,13 +101,13 @@ $mockData = MockData::all();
 
                     <div class="holiday-panel holiday-panel-bottom">
                         <div class="holiday-panel-heading">
-                            <h3>Feriados</h3>
-                            <p>Cadastre a data e o nome do feriado para bloquear o dia no calendario produtivo.</p>
+                            <h3>Feriados / Pausas</h3>
+                            <p>Cadastre a data e o nome do feriado ou da pausa para bloquear o dia no calendario produtivo e controlar paradas gerais.</p>
                         </div>
                         <div class="holiday-form-row">
                             <input type="date" id="holiday-date" class="holiday-date-input">
-                            <input type="text" id="holiday-name" class="holiday-name-input" placeholder="Nome do feriado">
-                            <button type="button" id="add-holiday" class="ghost-button">Adicionar feriado</button>
+                            <input type="text" id="holiday-name" class="holiday-name-input" placeholder="Nome do feriado ou pausa">
+                            <button type="button" id="add-holiday" class="ghost-button">Adicionar feriado / pausa</button>
                         </div>
                         <div id="holiday-preview" class="holiday-grid">
                             <div class="holiday-empty">Nenhum feriado lancado.</div>
@@ -254,6 +254,7 @@ $mockData = MockData::all();
             'sampleProgram' => $mockData['sample_program'],
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
     </script>
+    <div id="app-toast" class="app-toast" aria-live="polite" aria-atomic="true"></div>
     <script src="/controlepcp/assets/js/app.js"></script>
 </body>
 </html>

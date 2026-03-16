@@ -134,6 +134,7 @@ $mockData = MockData::all();
                                 <tr>
                                     <th>SKU</th>
                                     <th>Descricao</th>
+                                    <th>Ref. setup</th>
                                     <th>Linha</th>
                                     <th>Producao/h</th>
                                     <th>Unidade</th>
@@ -161,12 +162,21 @@ $mockData = MockData::all();
 
                     <div class="matrix-toolbar">
                         <div id="matrix-line-nav" class="matrix-line-nav"></div>
-                        <button type="button" id="matrix-issues-toggle" class="matrix-issues-button">Inconsistencias (0)</button>
+                        <div class="matrix-toolbar-actions">
+                            <button type="button" id="matrix-valid-toggle" class="matrix-valid-button">Registros validados (0)</button>
+                            <button type="button" id="matrix-issues-toggle" class="matrix-issues-button">Inconsistencias (0)</button>
+                        </div>
+                    </div>
+
+                    <div id="matrix-valid-panel" class="matrix-valid-panel is-hidden">
+                        <div id="matrix-valid-body" class="matrix-valid-body"></div>
                     </div>
 
                     <div id="matrix-issues-panel" class="matrix-issues-panel is-hidden">
                         <div id="matrix-issues-body" class="matrix-issues-body"></div>
                     </div>
+
+                    <div id="matrix-pagination" class="matrix-pagination"></div>
 
                     <div class="table-wrap matrix-wrap">
                         <table class="entry-table">
@@ -277,5 +287,6 @@ $mockData = MockData::all();
     <script src="/controlepcp/assets/js/app.js"></script>
 </body>
 </html>
+
 
 

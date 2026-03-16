@@ -1,4 +1,4 @@
-﻿(function () {
+(function () {
     const REL_NS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
     const textDecoder = new TextDecoder('utf-8');
 
@@ -192,8 +192,14 @@
     }
 
     function normalizeProductName(value) {
-        return String(value || '')
-            .replace(/\s+cx\b.*$/i, '')
+        const text = String(value || '').replace(/\s+/g, ' ').trim();
+        const match = text.match(/^(.*?)(?:\s+cx\/[^\s]+\s+x\s+)(.+)$/i);
+
+        if (!match) {
+            return text;
+        }
+
+        return (match[1].trim() + ' ' + match[2].trim())
             .replace(/\s+/g, ' ')
             .trim();
     }
@@ -204,6 +210,7 @@
 
     function detectColumns(headerRow) {
         const columns = {
+            code: null,
             description: null,
             line: null,
             ratePerHour: null,
@@ -211,6 +218,11 @@
 
         Object.entries(headerRow).forEach(([index, label]) => {
             const normalized = normalizeHeader(label);
+
+            if (columns.code === null && matchesAny(normalized, ['cod', 'codigo', 'cod produto', 'codigo produto'])) {
+                columns.code = Number(index);
+                return;
+            }
 
             if (columns.description === null && matchesAny(normalized, ['descricao', 'descricao produto', 'produto', 'nome produto', 'sku'])) {
                 columns.description = Number(index);
@@ -224,6 +236,34 @@
 
             if (columns.ratePerHour === null && matchesAny(normalized, ['rendimento', 'producao', 'producao hora', 'producao h', 'producao por hora', 'taxa', 'rendim'])) {
                 columns.ratePerHour = Number(index);
+            }
+        });
+
+        return columns;
+    }
+
+    function detectMatrixColumns(headerRow) {
+        const columns = {
+            from: 0,
+            to: 1,
+            duration: 2,
+        };
+
+        Object.entries(headerRow || {}).forEach(([index, label]) => {
+            const normalized = normalizeHeader(label);
+
+            if (matchesAny(normalized, ['origem', 'produto origem', 'sku origem'])) {
+                columns.from = Number(index);
+                return;
+            }
+
+            if (matchesAny(normalized, ['destino', 'produto destino', 'sku destino'])) {
+                columns.to = Number(index);
+                return;
+            }
+
+            if (matchesAny(normalized, ['tempo', 'tempo setup', 'setup', 'tempo de setup'])) {
+                columns.duration = Number(index);
             }
         });
 
@@ -259,7 +299,6 @@
 
         return `LINHA ${digits.padStart(2, '0')}`;
     }
-
 
     function getFilledIndexes(row) {
         return Object.keys(row || {})
@@ -298,7 +337,15 @@
             })
             .filter((block) => block.headers.some(Boolean));
     }
+
     function formatDurationFromExcel(value) {
+        const text = String(value || '').trim();
+        
+        // Check if already in HH:MM format
+        if (/^\d{1,2}:\d{2}$/.test(text)) {
+            return text;
+        }
+
         const numeric = parseNumber(value);
         if (numeric === null) {
             return '';
@@ -323,22 +370,24 @@
         const headerRow = rows.shift();
         const columns = detectColumns(headerRow);
 
-        if (columns.description === null || columns.ratePerHour === null) {
-            throw new Error('Nao foi possivel localizar as colunas de descricao e rendimento.');
+        if (columns.code === null || columns.description === null || columns.ratePerHour === null) {
+            throw new Error('Nao foi possivel localizar as colunas de codigo, descricao e rendimento.');
         }
 
         const products = {};
         rows.forEach((row) => {
+            const sku = String(row[columns.code] || '').trim();
             const description = normalizeProductName(row[columns.description]);
             const ratePerHour = parseNumber(row[columns.ratePerHour]);
             const line = columns.line !== null ? String(row[columns.line] || '').trim() : '';
 
-            if (!description || ratePerHour === null) {
+            if (!sku || !description || ratePerHour === null) {
                 return;
             }
 
-            products[description] = {
+            products[sku] = {
                 description,
+                reference_setup: description,
                 line: line || defaultLine,
                 rate_per_hour: ratePerHour,
                 unit: 'cx',
@@ -367,65 +416,40 @@
                 return;
             }
 
-            const flatRows = rows.map((row) => {
-                const mapped = [];
-                Object.entries(row).forEach(([key, value]) => {
-                    mapped[Number(key)] = String(value || '').trim();
-                });
-                return mapped;
-            });
+            const currentLine = normalizeMatrixLineLabel(sheetInfo.name || '');
 
-            let currentBlocks = [];
-            let currentLine = normalizeMatrixLineLabel(sheetInfo.name || '');
+            rows.forEach((row) => {
+                const skusConcatenated = String(row[0] || '').trim();
+                const timeValue = String(row[2] || row[1] || '').trim();
 
-            flatRows.forEach((row) => {
-                const filledIndexes = getFilledIndexes(row);
-                if (!filledIndexes.length) {
+                if (!skusConcatenated || !timeValue) {
                     return;
                 }
 
-                const lineIndex = filledIndexes.find((index) => /^linha\s+\d+/i.test(String(row[index] || '').trim()));
-                if (lineIndex !== undefined) {
-                    currentLine = normalizeMatrixLineLabel(row[lineIndex]);
-                    currentBlocks = buildMatrixBlocks(row, lineIndex);
+                const skuParts = skusConcatenated.split(/\s+/);
+                if (skuParts.length < 2) {
                     return;
                 }
 
-                if (!currentBlocks.length) {
-                    const looksLikeHeaderRow = filledIndexes.length > 1
-                        && filledIndexes.every((index) => !formatDurationFromExcel(row[index]));
+                const origin = skuParts[0];
+                const destination = skuParts[1];
 
-                    if (looksLikeHeaderRow) {
-                        currentBlocks = buildMatrixBlocks(row);
-                    }
+                let duration = timeValue;
+                if (/^\d{1,2}:\d{2}:\d{2}$/.test(duration)) {
+                    duration = duration.substring(0, 5);
+                } else {
+                    duration = formatDurationFromExcel(timeValue);
+                }
+
+                if (!duration) {
                     return;
                 }
 
-                currentBlocks.forEach((block) => {
-                    const from = String(row[block.originIndex] || '').trim();
-                    if (!from) {
-                        return;
-                    }
-
-                    const values = block.headers.map((_, offset) => String(row[block.headerStart + offset] || '').trim());
-                    const hasOnlyDurations = values.every((value) => !value || Boolean(formatDurationFromExcel(value)));
-                    if (!hasOnlyDurations) {
-                        return;
-                    }
-
-                    block.headers.forEach((to, offset) => {
-                        const duration = formatDurationFromExcel(values[offset]);
-                        if (!to || !duration) {
-                            return;
-                        }
-
-                        matrixRows.push({
-                            line: currentLine || 'SEM LINHA',
-                            from,
-                            to,
-                            duration,
-                        });
-                    });
+                matrixRows.push({
+                    line: currentLine || 'SEM LINHA',
+                    from: origin,
+                    to: destination,
+                    duration,
                 });
             });
         });
@@ -445,6 +469,8 @@
         parseMatrix,
     };
 }());
+
+
 
 
 

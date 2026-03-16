@@ -539,3 +539,93 @@ thead th {
         width: 100%;
     }
 }
+
+.matrix-toolbar-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+}
+
+.matrix-valid-button {
+    border: 0;
+    border-radius: 999px;
+    min-height: 40px;
+    padding: 0 18px;
+    background: linear-gradient(135deg, #2b72d6, #1638a6);
+    color: #fff;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 10px 22px rgba(22, 56, 166, 0.2);
+}
+
+.matrix-valid-panel {
+    margin: 0 0 16px;
+    padding: 14px;
+    border-radius: 18px;
+    background: rgba(43, 114, 214, 0.08);
+    border: 1px solid rgba(22, 56, 166, 0.14);
+}
+
+.matrix-valid-body {
+    display: grid;
+    gap: 10px;
+}
+
+.matrix-valid-card {
+    display: grid;
+    gap: 4px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    background: #fff;
+    border: 1px solid rgba(22, 56, 166, 0.12);
+}
+
+.matrix-valid-card strong,
+.matrix-valid-empty {
+    color: var(--primary-strong);
+    font-weight: 700;
+}
+
+@media (max-width: 760px) {
+    .matrix-toolbar-actions {
+        width: 100%;
+    }
+
+    .matrix-valid-button,
+    .matrix-issues-button {
+        width: 100%;
+    }
+}
+
+.matrix-pagination {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    justify-content: flex-end;
+    margin: 0 0 12px;
+}
+
+.matrix-page-button {
+    border: 0;
+    border-radius: 999px;
+    min-height: 36px;
+    padding: 0 14px;
+    background: rgba(22, 42, 166, 0.1);
+    color: var(--primary-strong);
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.matrix-page-button:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+
+.matrix-page-label {
+    color: var(--muted);
+    font-weight: 700;
+}

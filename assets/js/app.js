@@ -1,4 +1,4 @@
-﻿(function () {
+(function () {
     const bootstrap = window.PCP_BOOTSTRAP || { datasets: {}, sampleProgram: [] };
     const STORAGE_KEY = 'controlepcp.system.v3';
     const DEFAULT_SECTION = 'section-home';
@@ -41,6 +41,10 @@
     const productsBody = document.getElementById('products-body');
     const matrixBody = document.getElementById('matrix-body');
     const matrixLineNav = document.getElementById('matrix-line-nav');
+    const matrixPagination = document.getElementById('matrix-pagination');
+    const matrixValidToggle = document.getElementById('matrix-valid-toggle');
+    const matrixValidPanel = document.getElementById('matrix-valid-panel');
+    const matrixValidBody = document.getElementById('matrix-valid-body');
     const matrixIssuesToggle = document.getElementById('matrix-issues-toggle');
     const matrixIssuesPanel = document.getElementById('matrix-issues-panel');
     const matrixIssuesBody = document.getElementById('matrix-issues-body');
@@ -63,6 +67,8 @@
         result: null,
         activeSection: DEFAULT_SECTION,
         activeMatrixLine: '',
+        matrixPageByLine: {},
+        showMatrixValid: false,
         showMatrixIssues: false,
     };
     let toastTimer = null;
@@ -107,10 +113,27 @@
                 holidays: Array.isArray(calendar.holidays) ? calendar.holidays : [],
                 intervals: intervals.length ? intervals.map(normalizeInterval) : [normalizeInterval({})],
             },
-            products: raw.products || {},
+            products: normalizeProducts(raw.products || {}),
             setup_matrix: raw.setup_matrix || {},
             setup_matrix_sections: Array.isArray(raw.setup_matrix_sections) ? raw.setup_matrix_sections : [],
         };
+    }
+
+    function normalizeProducts(rawProducts) {
+        const products = rawProducts || {};
+        const normalized = {};
+
+        Object.entries(products).forEach(([sku, product]) => {
+            normalized[sku] = {
+                description: product?.description || '',
+                reference_setup: product?.reference_setup || product?.description || '',
+                line: product?.line || 'L2',
+                rate_per_hour: product?.rate_per_hour ?? 0,
+                unit: product?.unit || 'cx',
+            };
+        });
+
+        return normalized;
     }
 
     function hasCurrentResultFormat(result) {
@@ -284,6 +307,40 @@
             .sort((left, right) => left.localeCompare(right, 'pt-BR', { numeric: true }));
     }
 
+    function getMatrixPageSize() {
+        return 40;
+    }
+    function renderMatrixPagination(activeLine, totalRows) {
+        if (!matrixPagination) {
+            return;
+        }
+
+        const pageSize = getMatrixPageSize();
+        const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
+        const currentPage = Math.min(state.matrixPageByLine[activeLine] || 1, totalPages);
+        state.matrixPageByLine[activeLine] = currentPage;
+
+        if (totalRows <= pageSize) {
+            matrixPagination.innerHTML = '';
+            return;
+        }
+
+        matrixPagination.innerHTML = `
+            <button type="button" class="matrix-page-button" data-page-action="prev" ${currentPage <= 1 ? 'disabled' : ''}>Anterior</button>
+            <span class="matrix-page-label">Pagina ${currentPage} de ${totalPages} | ${totalRows} registros</span>
+            <button type="button" class="matrix-page-button" data-page-action="next" ${currentPage >= totalPages ? 'disabled' : ''}>Proxima</button>
+        `;
+
+        matrixPagination.querySelectorAll('[data-page-action]').forEach((button) => {
+            button.addEventListener('click', () => {
+                const direction = button.dataset.pageAction;
+                const nextPage = direction === 'prev' ? currentPage - 1 : currentPage + 1;
+                state.matrixPageByLine[activeLine] = Math.min(totalPages, Math.max(1, nextPage));
+                renderMatrix();
+            });
+        });
+    }
+
     function renderMatrixLineNav(lines) {
         if (!matrixLineNav) {
             return;
@@ -314,28 +371,80 @@
         const entries = Object.entries(state.datasets.products || {});
         const options = ['<option value="">Selecione</option>'];
         const hasSelectedValue = entries.some(([sku]) => sku === selectedValue);
+        const optionLabel = (sku, product) => {
+            const description = String(product?.description || '').trim();
+            return description ? sku + ' - ' + description : sku;
+        };
 
         if (selectedValue && !hasSelectedValue) {
             options.push(`<option value="${selectedValue}" selected>${selectedValue}</option>`);
         }
 
-        entries.forEach(([sku]) => {
-            options.push(`<option value="${sku}" ${sku === selectedValue ? 'selected' : ''}>${sku}</option>`);
+        entries.forEach(([sku, product]) => {
+            options.push(`<option value="${sku}" ${sku === selectedValue ? 'selected' : ''}>${optionLabel(sku, product)}</option>`);
         });
 
         return options.join('');
     }
 
 
+    function normalizeCatalogValue(value) {
+        return String(value || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toUpperCase()
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    function buildProductLookup() {
+        const lookup = new Map();
+
+        Object.entries(state.datasets.products || {}).forEach(([sku, product]) => {
+            const skuKey = normalizeCatalogValue(sku);
+            const descriptionKey = normalizeCatalogValue(product?.description || '');
+
+            if (skuKey) {
+                lookup.set(skuKey, product);
+            }
+
+            if (descriptionKey) {
+                lookup.set(descriptionKey, product);
+            }
+        });
+
+        return lookup;
+    }
+
+    function getMatrixValidatedRows(rows = getMatrixRowsWithLine()) {
+        const productLookup = buildProductLookup();
+
+        return rows.reduce((list, row) => {
+            const hasFrom = productLookup.has(normalizeCatalogValue(row.from));
+            const hasTo = productLookup.has(normalizeCatalogValue(row.to));
+
+            if (hasFrom && hasTo) {
+                list.push({
+                    line: row.line || 'SEM LINHA',
+                    from: row.from || '-',
+                    to: row.to || '-',
+                    duration: row.duration || '-',
+                });
+            }
+
+            return list;
+        }, []);
+    }
+
     function getMatrixInconsistencies(rows = getMatrixRowsWithLine()) {
-        const products = state.datasets.products || {};
+        const productLookup = buildProductLookup();
 
         return rows.reduce((list, row) => {
             const issues = [];
-            if (!products[row.from]) {
+            if (!productLookup.has(normalizeCatalogValue(row.from))) {
                 issues.push('origem sem produto cadastrado');
             }
-            if (!products[row.to]) {
+            if (!productLookup.has(normalizeCatalogValue(row.to))) {
                 issues.push('destino sem produto cadastrado');
             }
 
@@ -353,6 +462,34 @@
         }, []);
     }
 
+    function renderMatrixValidated(rows = getMatrixRowsWithLine()) {
+        if (!matrixValidToggle || !matrixValidPanel || !matrixValidBody) {
+            return;
+        }
+
+        const validatedRows = getMatrixValidatedRows(rows);
+        matrixValidToggle.textContent = 'Registros validados (' + validatedRows.length + ')';
+        matrixValidPanel.classList.toggle('is-hidden', !state.showMatrixValid);
+
+        if (!state.showMatrixValid) {
+            return;
+        }
+
+        if (!validatedRows.length) {
+            matrixValidBody.innerHTML = '<div class="matrix-valid-empty">Nenhum registro validado entre matrizes e produtos.</div>';
+            return;
+        }
+
+        matrixValidBody.innerHTML = validatedRows.map((item) => (
+            '<div class="matrix-valid-card">'
+                + '<strong>' + item.line + '</strong>'
+                + '<span><b>Origem:</b> ' + item.from + '</span>'
+                + '<span><b>Destino:</b> ' + item.to + '</span>'
+                + '<span><b>Tempo:</b> ' + item.duration + '</span>'
+            + '</div>'
+        )).join('');
+    }
+
     function renderMatrixIssues(rows = getMatrixRowsWithLine()) {
         if (!matrixIssuesToggle || !matrixIssuesPanel || !matrixIssuesBody) {
             return;
@@ -367,21 +504,20 @@
         }
 
         if (!inconsistencies.length) {
-            matrixIssuesBody.innerHTML = '<div class="matrix-issues-empty">Nenhuma inconsistência encontrada entre matrizes e produtos.</div>';
+            matrixIssuesBody.innerHTML = '<div class="matrix-issues-empty">Nenhuma inconsistencia encontrada entre matrizes e produtos.</div>';
             return;
         }
 
-        matrixIssuesBody.innerHTML = inconsistencies.map((item) => (
+        matrixIssuesBody.innerHTML = inconsistencies.map((row) => (
             '<div class="matrix-issue-card">'
-                + '<strong>' + item.line + '</strong>'
-                + '<span><b>Origem:</b> ' + item.from + '</span>'
-                + '<span><b>Destino:</b> ' + item.to + '</span>'
-                + '<span><b>Tempo:</b> ' + item.duration + '</span>'
-                + '<span><b>Alerta:</b> ' + item.issues.join(' | ') + '</span>'
+                + '<span class="matrix-issue-line">' + escapeHtml(row.line || '') + '</span>'
+                + '<div><strong>Origem:</strong> ' + escapeHtml(row.from || '') + '</div>'
+                + '<div><strong>Destino:</strong> ' + escapeHtml(row.to || '') + '</div>'
+                + '<div><strong>Tempo:</strong> ' + escapeHtml(row.minutes || '') + '</div>'
+                + '<div><strong>Motivo:</strong> ' + escapeHtml(row.reason || '') + '</div>'
             + '</div>'
         )).join('');
     }
-
     function setStatus(label, variant) {
         resultStatus.textContent = label;
         resultStatus.dataset.variant = variant;
@@ -532,19 +668,10 @@
             ...item,
             sku: item.sku === fromSku ? toSku : item.sku,
         }));
-
-        const rows = getMatrixRowsWithLine().map((row) => ({
-            ...row,
-            from: row.from === fromSku ? toSku : row.from,
-            to: row.to === fromSku ? toSku : row.to,
-        }));
-
-        syncMatrixState(rows);
     }
 
-    function removeMatrixReferences(sku) {
-        const rows = getMatrixRowsWithLine().filter((row) => row.from !== sku && row.to !== sku);
-        syncMatrixState(rows);
+    function removeMatrixReferences() {
+        return;
     }
 
     function pruneCatalogReferences(availableSkus = Object.keys(state.datasets.products || {})) {
@@ -554,11 +681,6 @@
             ...item,
             sku: allowed.has(item.sku) ? item.sku : '',
         }));
-
-        const rows = getMatrixRowsWithLine()
-            .filter((row) => allowed.has(row.from) && allowed.has(row.to));
-
-        syncMatrixState(rows);
     }
 
     function renderProducts() {
@@ -567,6 +689,7 @@
             <tr>
                 <td><input type="text" data-product-sku="${sku}" data-field="sku" value="${sku}"></td>
                 <td><input type="text" data-product-sku="${sku}" data-field="description" value="${product.description || ''}"></td>
+                <td><input type="text" data-product-sku="${sku}" data-field="reference_setup" value="${product.reference_setup || ''}"></td>
                 <td><input type="text" data-product-sku="${sku}" data-field="line" value="${product.line || 'L2'}"></td>
                 <td><input type="number" data-product-sku="${sku}" data-field="rate_per_hour" min="0" step="0.01" value="${product.rate_per_hour ?? ''}"></td>
                 <td><input type="text" data-product-sku="${sku}" data-field="unit" value="${product.unit || 'cx'}"></td>
@@ -610,7 +733,7 @@
                 const sku = button.dataset.removeProduct;
                 delete state.datasets.products[sku];
                 remapSkuReferences(sku, '');
-                removeMatrixReferences(sku);
+                removeMatrixReferences();
                 renderAllDatasetTables();
                 renderProgram();
                 saveState();
@@ -618,29 +741,40 @@
             });
         });
     }
-
     function renderMatrix() {
         const allRows = getMatrixRowsWithLine();
         const lines = getMatrixLines(allRows);
         renderMatrixLineNav(lines);
 
         if (!lines.length) {
+            renderMatrixValidated([]);
             renderMatrixIssues([]);
+            if (matrixPagination) {
+                matrixPagination.innerHTML = '';
+            }
             matrixBody.innerHTML = '<tr class="empty-state-row"><td colspan="4">Nenhuma matriz cadastrada ainda.</td></tr>';
             return;
         }
 
         const activeLine = state.activeMatrixLine || lines[0];
         const rows = allRows.filter((row) => row.line === activeLine);
+        const pageSize = getMatrixPageSize();
+        const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+        const currentPage = Math.min(state.matrixPageByLine[activeLine] || 1, totalPages);
+        const pageStart = (currentPage - 1) * pageSize;
+        const pagedRows = rows.slice(pageStart, pageStart + pageSize);
+        state.matrixPageByLine[activeLine] = currentPage;
 
+        renderMatrixValidated(allRows);
         renderMatrixIssues(allRows);
+        renderMatrixPagination(activeLine, rows.length);
 
-        matrixBody.innerHTML = rows.map((row, index) => `
+        matrixBody.innerHTML = pagedRows.map((row, index) => `
             <tr data-matrix-row="1" data-line="${row.line}">
-                <td><select data-matrix-index="${index}" data-field="from">${productOptions(row.from)}</select></td>
-                <td><select data-matrix-index="${index}" data-field="to">${productOptions(row.to)}</select></td>
-                <td><input type="text" data-matrix-index="${index}" data-field="duration" value="${row.duration}"></td>
-                <td class="actions-cell"><button type="button" class="row-delete" data-remove-matrix="${index}">Remover</button></td>
+                <td><select data-matrix-index="${pageStart + index}" data-field="from">${productOptions(row.from)}</select></td>
+                <td><select data-matrix-index="${pageStart + index}" data-field="to">${productOptions(row.to)}</select></td>
+                <td><input type="text" data-matrix-index="${pageStart + index}" data-field="duration" value="${row.duration}"></td>
+                <td class="actions-cell"><button type="button" class="row-delete" data-remove-matrix="${pageStart + index}">Remover</button></td>
             </tr>`
         ).join('');
 
@@ -653,13 +787,19 @@
                 duration: row.querySelector('[data-field="duration"]').value,
             }));
 
-            return [...preservedRows, ...currentLineRows];
+            const mergedRows = [...preservedRows, ...rows];
+            currentLineRows.forEach((updatedRow, index) => {
+                mergedRows[pageStart + index] = updatedRow;
+            });
+
+            return mergedRows;
         };
 
         matrixBody.querySelectorAll('select, input').forEach((field) => {
             field.addEventListener('change', () => {
                 const rowsNow = readCurrentRows();
                 syncMatrixState(rowsNow);
+                renderMatrixValidated(rowsNow);
                 renderMatrixIssues(rowsNow);
                 saveState();
             });
@@ -676,7 +816,6 @@
             });
         });
     }
-
     function renderProgram() {
         programBody.innerHTML = '';
         const items = state.form.items.length ? state.form.items : [{}];
@@ -865,6 +1004,7 @@
         const nextSku = 'NOVO SKU ' + (Object.keys(state.datasets.products).length + 1);
         state.datasets.products[nextSku] = {
             description: 'Novo produto',
+            reference_setup: '',
             line: state.datasets.calendar.line || 'L2',
             rate_per_hour: 0,
             unit: 'cx',
@@ -932,6 +1072,11 @@
         renderMatrix();
         saveState();
         showToast('Registro salvo.');
+    });
+
+    matrixValidToggle?.addEventListener('click', () => {
+        state.showMatrixValid = !state.showMatrixValid;
+        renderMatrix();
     });
 
     matrixIssuesToggle?.addEventListener('click', () => {
@@ -1043,6 +1188,18 @@
 
     window.addEventListener('beforeunload', saveState);
 })();
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

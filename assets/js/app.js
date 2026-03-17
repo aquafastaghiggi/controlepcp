@@ -1354,24 +1354,36 @@
             document.getElementById('modal-prog-eficiencia').textContent = programacao.prg_eficiencia + '%';
             document.getElementById('modal-prog-status').textContent = programacao.prg_status;
             
-            // Renderizar itens
+            // Renderizar itens (se houver resultado atual, usa os itens do formulário)
             const itensBody = document.getElementById('details-itens-body');
-            if (programacao.itens && programacao.itens.length > 0) {
-                itensBody.innerHTML = programacao.itens.map(item => `
-                    <tr>
-                        <td>${escapeHtml(item.prg_sku)}</td>
-                        <td>${escapeHtml(item.prg_descricao || '—')}</td>
-                        <td>${item.prg_quantidade}</td>
-                        <td>${escapeHtml(item.prg_unidade)}</td>
-                    </tr>
-                `).join('');
+            const programItems = state.result && Array.isArray(state.form.items) ? state.form.items.filter((i) => i.sku) : (programacao.itens || []);
+
+            if (programItems.length > 0) {
+                itensBody.innerHTML = programItems.map(item => {
+                    const sku = item.sku || item.prg_sku || '';
+                    const product = (state.datasets.products || {})[sku] || {};
+                    const description = item.description || item.prg_descricao || product.description || '—';
+                    const unit = product.unit || (item.prg_unidade || '—');
+                    const quantity = item.quantity ?? item.prg_quantidade ?? '';
+
+                    return `
+                        <tr>
+                            <td>${escapeHtml(sku)}</td>
+                            <td>${escapeHtml(description)}</td>
+                            <td>${quantity}</td>
+                            <td>${escapeHtml(unit)}</td>
+                        </tr>
+                    `;
+                }).join('');
             } else {
                 itensBody.innerHTML = '<tr><td colspan="4" style="text-align: center;">Nenhum item encontrado</td></tr>';
             }
             
-            // Renderizar schedule (mesma estrutura da tabela de resultado)
+            // Renderizar schedule (como aparece no resultado de cálculo)
             const scheduleBody = document.getElementById('details-schedule-body');
-            if (programacao.schedule && programacao.schedule.length > 0) {
+            if (state.result && Array.isArray(state.result.rows) && state.result.rows.length > 0) {
+                renderRowsInto(state.result.rows, scheduleBody);
+            } else if (programacao.schedule && programacao.schedule.length > 0) {
                 const mapped = programacao.schedule.map((row) => {
                     const durationMinutes = row.sch_duracao_minutos;
                     const durationLabel = durationMinutes !== null && durationMinutes !== undefined

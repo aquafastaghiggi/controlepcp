@@ -1393,6 +1393,13 @@
         state.form.numero_op = '';
         numeroOpInput.value = '';
         state.form.items = [{}];
+
+        // Garantir que a data base seja sempre o momento de criação da OP
+        const now = new Date();
+        const formatted = now.toISOString().slice(0, 16);
+        baseStartInput.value = formatted;
+        state.form.base_start = formatted;
+
         renderProgram();
 
         // Resetar resultado e manter foco na seção de programação

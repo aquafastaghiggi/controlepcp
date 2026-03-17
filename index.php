@@ -223,8 +223,8 @@ $datasets = $databaseData->all();
                             </label>
                         </div>
 
-                        <input type="hidden" name="base_start" value="2026-04-14T13:35" required>
-                        <input type="hidden" name="query_datetime" value="2026-04-15T00:00">
+                        <input type="hidden" name="base_start" value="<?= date('Y-m-d\TH:i') ?>" required>
+                        <input type="hidden" name="query_datetime" value="<?= date('Y-m-d\TH:i') ?>">
 
                         <div class="table-wrap entry-table-wrap">
                             <table class="entry-table">
@@ -306,7 +306,7 @@ $datasets = $databaseData->all();
                                     <th>ID</th>
                                     <th>Número da OP</th>
                                     <th>Linha</th>
-                                    <th>Data Base</th>
+                                    <th>Data de lançamento</th>
                                     <th>Eficiência</th>
                                     <th>Status</th>
                                     <th>Itens</th>

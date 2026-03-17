@@ -372,60 +372,34 @@ $datasets = $databaseData->all();
                     <div class="modal-overlay is-hidden" id="programacao-details-modal">
                         <div class="modal-dialog modal-dialog-large">
                             <div class="modal-header">
-                                <h3>Detalhes da Programação - OP: <span id="details-op-number">—</span></h3>
+                                <h3>Resultado da Programação - OP: <span id="details-op-number">—</span></h3>
                                 <button type="button" class="close-button" data-action="close-details-modal">&times;</button>
                             </div>
                             <div class="modal-content">
-                                <div class="details-section">
-                                    <h4>Informações da Programação</h4>
-                                    <div class="info-grid">
-                                        <div><strong>ID:</strong> <span id="modal-prog-id">—</span></div>
-                                        <div><strong>Número da OP:</strong> <span id="modal-prog-op">—</span></div>
-                                        <div><strong>Linha:</strong> <span id="modal-prog-linha">—</span></div>
-                                        <div><strong>Base Início:</strong> <span id="modal-prog-base-inicio">—</span></div>
-                                        <div><strong>Eficiência:</strong> <span id="modal-prog-eficiencia">—</span></div>
-                                        <div><strong>Status:</strong> <span id="modal-prog-status">—</span></div>
-                                    </div>
-                                </div>
+                                <div id="modal-result-summary" class="summary-grid"></div>
 
-                                <div class="details-section">
-                                    <h4>Itens Programados</h4>
-                                    <div class="table-wrap">
-                                        <table class="result-table">
-                                            <thead>
-                                                <tr>
-                                                    <th>SKU</th>
-                                                    <th>Descrição</th>
-                                                    <th>Quantidade</th>
-                                                    <th>Unidade</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody id="details-itens-body"></tbody>
-                                        </table>
-                                    </div>
-                                </div>
-
-                                <div class="details-section">
-                                    <h4>Resultado do Cálculo</h4>
-                                    <div class="table-wrap">
-                                        <table class="result-table">
-                                            <thead>
-                                                <tr>
-                                                    <th>Tipo</th>
-                                                    <th>Seq.</th>
-                                                    <th>Produto</th>
-                                                    <th>Producao/h</th>
-                                                    <th>Programado</th>
-                                                    <th>Tempo</th>
-                                                    <th>Data inicio</th>
-                                                    <th>Inicio</th>
-                                                    <th class="is-hidden-column">Memoria do calculo</th>
-                                                    <th>Fim</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody id="details-schedule-body"></tbody>
-                                        </table>
-                                    </div>
+                                <div class="table-wrap">
+                                    <table class="result-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Tipo</th>
+                                                <th>Seq.</th>
+                                                <th>Produto</th>
+                                                <th>Producao/h</th>
+                                                <th>Programado</th>
+                                                <th>Tempo</th>
+                                                <th>Data inicio</th>
+                                                <th>Inicio</th>
+                                                <th class="is-hidden-column">Memoria do calculo</th>
+                                                <th>Fim</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="modal-result-body">
+                                            <tr class="empty-state-row">
+                                                <td colspan="10">Nenhuma simulação disponível para esta OP.</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
                                 </div>
 
                                 <div class="form-actions" style="justify-content: flex-end; padding-top: 20px; border-top: 1px solid var(--line);">

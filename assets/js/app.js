@@ -1342,49 +1342,12 @@
         try {
             const response = await fetch(`/controlepcp/api/programacoes.php?id=${progId}`);
             if (!response.ok) throw new Error('Erro ao carregar detalhes da programação');
-            
+
             const programacao = await response.json();
-            
-            // Preencher o modal
-            document.getElementById('modal-prog-id').textContent = programacao.prg_id;
-            document.getElementById('modal-prog-op').textContent = programacao.prg_numero_op || '—';
             document.getElementById('details-op-number').textContent = programacao.prg_numero_op || '—';
-            document.getElementById('modal-prog-linha').textContent = programacao.lin_codigo;
-            document.getElementById('modal-prog-base-inicio').textContent = formatLocalDate(programacao.prg_base_inicio);
-            document.getElementById('modal-prog-eficiencia').textContent = programacao.prg_eficiencia + '%';
-            document.getElementById('modal-prog-status').textContent = programacao.prg_status;
-            
-            // Renderizar itens (se houver resultado atual, usa os itens do formulário)
-            const itensBody = document.getElementById('details-itens-body');
-            const programItems = state.result && Array.isArray(state.form.items) ? state.form.items.filter((i) => i.sku) : (programacao.itens || []);
 
-            if (programItems.length > 0) {
-                itensBody.innerHTML = programItems.map(item => {
-                    const sku = item.sku || item.prg_sku || '';
-                    const product = (state.datasets.products || {})[sku] || {};
-                    const description = item.description || item.prg_descricao || product.description || '—';
-                    const unit = product.unit || (item.prg_unidade || '—');
-                    const quantity = item.quantity ?? item.prg_quantidade ?? '';
-
-                    return `
-                        <tr>
-                            <td>${escapeHtml(sku)}</td>
-                            <td>${escapeHtml(description)}</td>
-                            <td>${quantity}</td>
-                            <td>${escapeHtml(unit)}</td>
-                        </tr>
-                    `;
-                }).join('');
-            } else {
-                itensBody.innerHTML = '<tr><td colspan="4" style="text-align: center;">Nenhum item encontrado</td></tr>';
-            }
-            
-            // Renderizar schedule (como aparece no resultado de cálculo)
-            const scheduleBody = document.getElementById('details-schedule-body');
-            if (state.result && Array.isArray(state.result.rows) && state.result.rows.length > 0) {
-                renderRowsInto(state.result.rows, scheduleBody);
-            } else if (programacao.schedule && programacao.schedule.length > 0) {
-                const mapped = programacao.schedule.map((row) => {
+            const rows = (programacao.schedule || [])
+                .map((row) => {
                     const durationMinutes = row.sch_duracao_minutos;
                     const durationLabel = durationMinutes !== null && durationMinutes !== undefined
                         ? `${String(Math.floor(durationMinutes / 60)).padStart(2, '0')}:${String(durationMinutes % 60).padStart(2, '0')}`
@@ -1392,7 +1355,7 @@
 
                     return {
                         type: row.sch_tipo,
-                        sequence: row.sch_sequencia,
+                        sequence: Number(row.sch_sequencia) || 0,
                         sku: row.sch_sku,
                         description: row.sch_descricao,
                         rate_per_hour: row.sch_taxa_por_hora,
@@ -1402,19 +1365,28 @@
                         time_start: row.sch_hora_inicio ? row.sch_hora_inicio.slice(0, 5) : '',
                         time_end: row.sch_hora_fim ? row.sch_hora_fim.slice(0, 5) : '',
                         calculation_memory: row.sch_memoria_calculo,
+                        status: row.sch_status,
                     };
-                });
+                })
+                .sort((a, b) => a.sequence - b.sequence);
 
-                renderRowsInto(mapped, scheduleBody);
-            } else {
-                scheduleBody.innerHTML = '<tr><td colspan="10" style="text-align: center;">Nenhum schedule encontrado</td></tr>';
-            }
-            
-            // Mostrar modal
+            const productionRows = rows.filter((r) => r.type === 'production');
+            const totalQty = productionRows.reduce((sum, r) => sum + (Number(r.quantity) || 0), 0);
+            const calculatedRows = productionRows.filter((r) => String(r.status).toLowerCase() === 'calculado').length;
+
+            const modalSummary = document.getElementById('modal-result-summary');
+            modalSummary.innerHTML = `
+                <div class="summary-card"><span>Total de ordens</span><strong>${productionRows.length}</strong></div>
+                <div class="summary-card"><span>Ordens calculadas</span><strong>${calculatedRows}</strong></div>
+                <div class="summary-card"><span>Caixas programadas</span><strong>${formatNumber(totalQty)}</strong></div>
+            `;
+
+            const modalBody = document.getElementById('modal-result-body');
+            renderRowsInto(rows, modalBody);
+
             const modal = document.getElementById('programacao-details-modal');
             modal.classList.remove('is-hidden');
             modal.style.display = 'flex';
-            
         } catch (error) {
             showToast('Erro ao carregar detalhes: ' + error.message, 'danger');
         }

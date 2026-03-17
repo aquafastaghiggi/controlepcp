@@ -31,20 +31,46 @@ final class ProgramacaoRepository
 
         $lineId = $this->ensureLine($lineCode);
 
-        $stmt = $this->pdo->prepare(
-            'INSERT INTO prg_programas (prg_numero_op, prg_linha_id, prg_base_inicio, prg_data_consulta, prg_eficiencia, prg_status) VALUES (:numeroOp, :lineId, :baseStart, :queryDateTime, :efficiency, :status)'
-        );
+        // Se a OP já existe, atualizamos a mesma programação (para evitar duplicidade)
+        $programId = null;
+        if ($numeroOp) {
+            $stmt = $this->pdo->prepare('SELECT prg_id FROM prg_programas WHERE prg_numero_op = :op ORDER BY prg_criado_em DESC LIMIT 1');
+            $stmt->execute(['op' => $numeroOp]);
+            $existing = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($existing) {
+                $programId = (int) $existing['prg_id'];
+            }
+        }
 
-        $stmt->execute([
-            'numeroOp' => $numeroOp,
-            'lineId' => $lineId,
-            'baseStart' => $baseStart->format('Y-m-d H:i:s'),
-            'queryDateTime' => $queryDateTime?->format('Y-m-d H:i:s'),
-            'efficiency' => $productionEfficiency,
-            'status' => 'calculado',
-        ]);
+        if ($programId) {
+            $stmt = $this->pdo->prepare(
+                'UPDATE prg_programas SET prg_linha_id = :lineId, prg_base_inicio = :baseStart, prg_data_consulta = :queryDateTime, prg_eficiencia = :efficiency, prg_status = :status, prg_atualizado_em = CURRENT_TIMESTAMP WHERE prg_id = :programId'
+            );
 
-        $programId = (int) $this->pdo->lastInsertId();
+            $stmt->execute([
+                'lineId' => $lineId,
+                'baseStart' => $baseStart->format('Y-m-d H:i:s'),
+                'queryDateTime' => $queryDateTime?->format('Y-m-d H:i:s'),
+                'efficiency' => $productionEfficiency,
+                'status' => 'calculado',
+                'programId' => $programId,
+            ]);
+        } else {
+            $stmt = $this->pdo->prepare(
+                'INSERT INTO prg_programas (prg_numero_op, prg_linha_id, prg_base_inicio, prg_data_consulta, prg_eficiencia, prg_status) VALUES (:numeroOp, :lineId, :baseStart, :queryDateTime, :efficiency, :status)'
+            );
+
+            $stmt->execute([
+                'numeroOp' => $numeroOp,
+                'lineId' => $lineId,
+                'baseStart' => $baseStart->format('Y-m-d H:i:s'),
+                'queryDateTime' => $queryDateTime?->format('Y-m-d H:i:s'),
+                'efficiency' => $productionEfficiency,
+                'status' => 'calculado',
+            ]);
+
+            $programId = (int) $this->pdo->lastInsertId();
+        }
 
         $this->saveProgramItems($programId, $programItems);
         $this->saveScheduleRows($programId, $resultRows);
@@ -56,6 +82,9 @@ final class ProgramacaoRepository
 
     private function saveProgramItems(int $programId, array $items): void
     {
+        // Remover itens prévios caso a mesma programação esteja sendo recalculada
+        $this->pdo->prepare('DELETE FROM prg_itens WHERE prg_programa_id = :programId')->execute(['programId' => $programId]);
+
         $stmt = $this->pdo->prepare(
             'INSERT INTO prg_itens (prg_programa_id, prg_sequencia, prg_sku, prg_quantidade, prg_inicio_planejado) VALUES (:programId, :sequence, :sku, :quantity, :plannedStart)'
         );
@@ -221,11 +250,13 @@ final class ProgramacaoRepository
 
     public function getProgramacaoByOp(string $op): ?array
     {
+        // Sempre retornar a última programação criada para essa OP
         $stmt = $this->pdo->prepare(
             'SELECT p.*, l.lin_codigo, l.lin_nome 
              FROM prg_programas p
              LEFT JOIN lin_linhas l ON p.prg_linha_id = l.lin_id
              WHERE p.prg_numero_op = :op
+             ORDER BY p.prg_criado_em DESC
              LIMIT 1'
         );
         $stmt->execute(['op' => $op]);

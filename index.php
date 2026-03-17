@@ -205,7 +205,10 @@ $datasets = $databaseData->all();
                             <h2>Programa&ccedil;&atilde;o de PCP</h2>
                             <p>Informe o inicio base, preencha os itens e deixe as proximas datas por conta do calculo.</p>
                         </div>
-                        <button type="button" id="add-row" class="ghost-button">Adicionar item</button>
+                        <div class="panel-actions">
+                            <button type="button" id="new-programacao-btn" class="ghost-button">+ Nova Programação</button>
+                            <button type="button" id="add-row" class="ghost-button">Adicionar item</button>
+                        </div>
                     </div>
 
                     <form id="simulation-form">
@@ -285,9 +288,8 @@ $datasets = $databaseData->all();
                     <div class="panel-heading">
                         <div>
                             <h2>Histórico de Programações</h2>
-                            <p>Consulte, crie, edite ou delete programações de PCP.</p>
+                            <p>Consulte programações já realizadas.</p>
                         </div>
-                        <button type="button" id="new-programacao-btn" class="ghost-button">+ Nova Programação</button>
                     </div>
 
                     <div class="field-grid">
@@ -309,7 +311,6 @@ $datasets = $databaseData->all();
                                     <th>Status</th>
                                     <th>Itens</th>
                                     <th>Criado em</th>
-                                    <th></th>
                                 </tr>
                             </thead>
                             <tbody id="programacoes-body"></tbody>

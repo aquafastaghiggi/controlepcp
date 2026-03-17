@@ -1382,10 +1382,6 @@
                 <td><span class="status-badge">${escapeHtml(prog.prg_status || '—')}</span></td>
                 <td>${prog.total_itens || 0}</td>
                 <td>${formatLocalDate(prog.prg_criado_em)}</td>
-                <td>
-                    <button type="button" class="btn-action" onclick="window.editProgramacao(${prog.prg_id})">Editar</button>
-                    <button type="button" class="btn-action btn-danger" onclick="window.deleteProgramacao(${prog.prg_id})">Deletar</button>
-                </td>
             </tr>
         `).join('');
     }

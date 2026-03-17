@@ -32,6 +32,7 @@
     const queryDateTimeInput = form.querySelector('[name="query_datetime"]');
     const productionEfficiencyInput = form.querySelector('[name="production_efficiency"]');
     const numeroOpInput = form.querySelector('[name="numero_op"]');
+    const calculateButton = form.querySelector('button[type="submit"]');
     const holidayDateInput = document.getElementById('holiday-date');
     const holidayNameInput = document.getElementById('holiday-name');
     const addHolidayButton = document.getElementById('add-holiday');
@@ -993,12 +994,31 @@
         renderRowsInto(rows, resultBody);
     }
 
+    function disableCalculateMode() {
+        if (calculateButton) {
+            calculateButton.disabled = true;
+        }
+        if (numeroOpInput) {
+            numeroOpInput.disabled = true;
+        }
+    }
+
+    function enableCalculateMode() {
+        if (calculateButton) {
+            calculateButton.disabled = false;
+        }
+        if (numeroOpInput) {
+            numeroOpInput.disabled = false;
+        }
+    }
+
     function renderResult(result, persist = true) {
         state.result = result;
         renderSummary(result);
         renderRows(result.rows || []);
         setStatus(result.meta.errors.length ? 'Calculado com alertas' : 'Calculado', result.meta.errors.length ? 'warning' : 'success');
         toggleResultPanel(true);
+        disableCalculateMode();
 
         if (persist) {
             saveState();
@@ -1011,6 +1031,7 @@
         resultBody.innerHTML = '<tr class="empty-state-row"><td colspan="10">Nenhuma simulacao calculada ainda.</td></tr>';
         setStatus('Aguardando calculo', 'idle');
         toggleResultPanel(false);
+        enableCalculateMode();
 
         if (persist) {
             saveState();
@@ -1499,8 +1520,9 @@
 
         renderProgram();
 
-        // Resetar resultado e manter foco na seção de programação
+        // Resetar resultado, ativar modo de cálculo e manter foco na seção de programação
         resetResultArea(false);
+        enableCalculateMode();
         activateSection('section-program');
     }
 

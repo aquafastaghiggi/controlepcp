@@ -1383,7 +1383,8 @@
             
             // Mostrar modal
             const modal = document.getElementById('programacao-details-modal');
-            modal.style.display = 'block';
+            modal.classList.remove('is-hidden');
+            modal.style.display = 'flex';
             
         } catch (error) {
             showToast('Erro ao carregar detalhes: ' + error.message, 'danger');
@@ -1392,7 +1393,8 @@
 
     function closeProgramacaoDetailsModal() {
         const modal = document.getElementById('programacao-details-modal');
-        modal.style.display = 'none';
+        modal.classList.add('is-hidden');
+        modal.style.display = '';
     }
 
     // Adicionar event listeners para o modal de detalhes

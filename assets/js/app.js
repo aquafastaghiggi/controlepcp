@@ -1627,6 +1627,18 @@
             return '—';
         }
     }
+
+    function formatLocalTime(timeStr) {
+        if (!timeStr) return '—';
+        // Accepts either a time string (HH:mm or HH:mm:ss) or a full datetime.
+        try {
+            const normalized = timeStr.length <= 8 ? `1970-01-01T${timeStr}` : timeStr;
+            const date = new Date(normalized);
+            return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        } catch {
+            return timeStr;
+        }
+    }
 })();
 
 

@@ -75,6 +75,9 @@ final class ProgramacaoRepository
 
     private function saveScheduleRows(int $programId, array $rows): void
     {
+        // Sempre remover registros anteriores da mesma programação para evitar duplicações
+        $this->pdo->prepare('DELETE FROM sch_linhas WHERE sch_programa_id = :programId')->execute(['programId' => $programId]);
+
         $stmt = $this->pdo->prepare(
             'INSERT INTO sch_linhas (
                 sch_programa_id,

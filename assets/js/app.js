@@ -962,13 +962,13 @@
         return `<span class="end-meta">${dateLabel}<small>${weekdayLabel}</small></span>`;
     }
 
-    function renderRows(rows) {
-        if (!rows.length) {
-            resetResultArea(false);
+    function renderRowsInto(rows, bodyElement) {
+        if (!rows || !rows.length) {
+            bodyElement.innerHTML = '<tr class="empty-state-row"><td colspan="10">Nenhuma linha disponível.</td></tr>';
             return;
         }
 
-        resultBody.innerHTML = rows.map((row) => `
+        bodyElement.innerHTML = rows.map((row) => `
             <tr class="${row.type === 'setup' ? 'setup-row' : ''}">
                 <td>${row.type === 'setup' ? 'Setup' : ''}</td>
                 <td>${row.sequence ?? ''}</td>
@@ -982,6 +982,15 @@
                 <td>${row.time_end || ''}${formatEndMeta(row)}</td>
             </tr>
         `).join('');
+    }
+
+    function renderRows(rows) {
+        if (!rows.length) {
+            resetResultArea(false);
+            return;
+        }
+
+        renderRowsInto(rows, resultBody);
     }
 
     function renderResult(result, persist = true) {
@@ -1360,23 +1369,31 @@
                 itensBody.innerHTML = '<tr><td colspan="4" style="text-align: center;">Nenhum item encontrado</td></tr>';
             }
             
-            // Renderizar schedule
+            // Renderizar schedule (mesma estrutura da tabela de resultado)
             const scheduleBody = document.getElementById('details-schedule-body');
             if (programacao.schedule && programacao.schedule.length > 0) {
-                scheduleBody.innerHTML = programacao.schedule.map(row => `
-                    <tr>
-                        <td>${formatLocalDate(row.prg_data_inicio)}</td>
-                        <td>${formatLocalTime(row.prg_hora_inicio)}</td>
-                        <td>${formatLocalDate(row.prg_data_fim)}</td>
-                        <td>${formatLocalTime(row.prg_hora_fim)}</td>
-                        <td>${escapeHtml(row.prg_sku)}</td>
-                        <td>${escapeHtml(row.prg_descricao || '—')}</td>
-                        <td>${row.prg_quantidade}</td>
-                        <td>${escapeHtml(row.prg_unidade)}</td>
-                        <td>${row.prg_setup_minutos || 0}</td>
-                        <td>${row.prg_producao_minutos || 0}</td>
-                    </tr>
-                `).join('');
+                const mapped = programacao.schedule.map((row) => {
+                    const durationMinutes = row.sch_duracao_minutos;
+                    const durationLabel = durationMinutes !== null && durationMinutes !== undefined
+                        ? `${String(Math.floor(durationMinutes / 60)).padStart(2, '0')}:${String(durationMinutes % 60).padStart(2, '0')}`
+                        : '';
+
+                    return {
+                        type: row.sch_tipo,
+                        sequence: row.sch_sequencia,
+                        sku: row.sch_sku,
+                        description: row.sch_descricao,
+                        rate_per_hour: row.sch_taxa_por_hora,
+                        quantity: row.sch_quantidade,
+                        duration_label: durationLabel,
+                        date_start: formatSqlDateToPt(row.sch_data_inicio),
+                        time_start: row.sch_hora_inicio ? row.sch_hora_inicio.slice(0, 5) : '',
+                        time_end: row.sch_hora_fim ? row.sch_hora_fim.slice(0, 5) : '',
+                        calculation_memory: row.sch_memoria_calculo,
+                    };
+                });
+
+                renderRowsInto(mapped, scheduleBody);
             } else {
                 scheduleBody.innerHTML = '<tr><td colspan="10" style="text-align: center;">Nenhum schedule encontrado</td></tr>';
             }
@@ -1641,6 +1658,17 @@
             return timeStr;
         }
     }
+
+    function formatSqlDateToPt(dateStr) {
+        if (!dateStr) return '';
+        try {
+            const date = new Date(`${dateStr}T00:00:00`);
+            return date.toLocaleDateString('pt-BR');
+        } catch {
+            return dateStr;
+        }
+    }
+
 })();
 
 

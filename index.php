@@ -406,21 +406,21 @@ $datasets = $databaseData->all();
                                 </div>
 
                                 <div class="details-section">
-                                    <h4>Resultado do Cálculo (Schedule)</h4>
+                                    <h4>Resultado do Cálculo</h4>
                                     <div class="table-wrap">
                                         <table class="result-table">
                                             <thead>
                                                 <tr>
-                                                    <th>Data Início</th>
-                                                    <th>Hora Início</th>
-                                                    <th>Data Fim</th>
-                                                    <th>Hora Fim</th>
-                                                    <th>SKU</th>
-                                                    <th>Descrição</th>
-                                                    <th>Quantidade</th>
-                                                    <th>Unidade</th>
-                                                    <th>Setup (min)</th>
-                                                    <th>Produção (min)</th>
+                                                    <th>Tipo</th>
+                                                    <th>Seq.</th>
+                                                    <th>Produto</th>
+                                                    <th>Producao/h</th>
+                                                    <th>Programado</th>
+                                                    <th>Tempo</th>
+                                                    <th>Data inicio</th>
+                                                    <th>Inicio</th>
+                                                    <th class="is-hidden-column">Memoria do calculo</th>
+                                                    <th>Fim</th>
                                                 </tr>
                                             </thead>
                                             <tbody id="details-schedule-body"></tbody>

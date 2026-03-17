@@ -277,8 +277,17 @@ final class ProgramacaoRepository
 
     public function getProgramacaoSchedule(int $programId): array
     {
+        // Retorna apenas a última execução (batch) para essa programacao, evitando mostrar linhas antigas duplicadas.
         $stmt = $this->pdo->prepare(
-            'SELECT * FROM sch_linhas WHERE sch_programa_id = :programId ORDER BY sch_sequencia ASC'
+            'SELECT *
+             FROM sch_linhas
+             WHERE sch_programa_id = :programId
+               AND sch_criado_em = (
+                 SELECT MAX(sch_criado_em)
+                 FROM sch_linhas
+                 WHERE sch_programa_id = :programId
+               )
+             ORDER BY sch_sequencia ASC'
         );
         $stmt->execute(['programId' => $programId]);
 

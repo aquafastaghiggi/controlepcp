@@ -31,6 +31,7 @@
     const baseStartInput = form.querySelector('[name="base_start"]');
     const queryDateTimeInput = form.querySelector('[name="query_datetime"]');
     const productionEfficiencyInput = form.querySelector('[name="production_efficiency"]');
+    const numeroOpInput = form.querySelector('[name="numero_op"]');
     const holidayDateInput = document.getElementById('holiday-date');
     const holidayNameInput = document.getElementById('holiday-name');
     const addHolidayButton = document.getElementById('add-holiday');
@@ -64,6 +65,7 @@
         form: {
             base_start: baseStartInput.value,
             query_datetime: queryDateTimeInput.value,
+            numero_op: numeroOpInput?.value || '',
             production_efficiency: normalizeEfficiencyValue(productionEfficiencyInput?.value),
             items: defaultProgram.length ? defaultProgram : [{}],
         },
@@ -1387,12 +1389,15 @@
     }
 
     function openNewProgramacao() {
-        prgIdInput.value = '';
-        programacaoForm.reset();
-        programacaoForm.querySelector('[name="prg_eficiencia"]').value = '100';
-        programacaoForm.querySelector('[name="prg_status"]').value = 'rascunho';
-        programacaoForm.querySelector('[name="lin_codigo"]').value = 'L2';
-        programacaoModal.classList.remove('is-hidden');
+        // Limpa o formulário de criação de programação
+        state.form.numero_op = '';
+        numeroOpInput.value = '';
+        state.form.items = [{}];
+        renderProgram();
+
+        // Resetar resultado e manter foco na seção de programação
+        resetResultArea(false);
+        activateSection('section-program');
     }
 
     function closeProgramacaoModal() {

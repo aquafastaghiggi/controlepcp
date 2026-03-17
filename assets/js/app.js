@@ -969,12 +969,15 @@
             return;
         }
 
-        bodyElement.innerHTML = rows.map((row) => `
+        bodyElement.innerHTML = rows.map((row) => {
+            const productionRate = row.rate_per_hour ? formatNumber(Math.trunc(Number(row.rate_per_hour))) : '';
+
+            return `
             <tr class="${row.type === 'setup' ? 'setup-row' : ''}">
                 <td>${row.type === 'setup' ? 'Setup' : ''}</td>
                 <td>${row.sequence ?? ''}</td>
                 <td>${row.description || row.sku}</td>
-                <td>${row.rate_per_hour ?? ''}</td>
+                <td>${productionRate}</td>
                 <td>${formatNumber(row.quantity)}</td>
                 <td>${row.duration_label || ''}</td>
                 <td>${row.date_start || ''}</td>
@@ -982,7 +985,8 @@
                 <td class="is-hidden-column">${row.calculation_memory || ''}</td>
                 <td>${row.time_end || ''}${formatEndMeta(row)}</td>
             </tr>
-        `).join('');
+        `;
+        }).join('');
     }
 
     function renderRows(rows) {

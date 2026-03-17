@@ -369,7 +369,7 @@ $datasets = $databaseData->all();
                     </div>
 
                     <!-- Modal para visualizar detalhes da programação -->
-                    <div class="modal-overlay is-hidden" id="programacao-details-modal">
+                    <div class="modal-overlay modal-overlay--lower is-hidden" id="programacao-details-modal">
                         <div class="modal-dialog modal-dialog-large">
                             <div class="modal-header">
                                 <h3>Resultado da Programação - OP: <span id="details-op-number">—</span></h3>

@@ -278,6 +278,7 @@ final class ProgramacaoRepository
     public function getProgramacaoSchedule(int $programId): array
     {
         // Retorna apenas a última execução (batch) para essa programacao, evitando mostrar linhas antigas duplicadas.
+        // Note: MySQL native prepared statements don't allow reusing the same named parameter twice, so we use two names.
         $stmt = $this->pdo->prepare(
             'SELECT *
              FROM sch_linhas
@@ -285,11 +286,11 @@ final class ProgramacaoRepository
                AND sch_criado_em = (
                  SELECT MAX(sch_criado_em)
                  FROM sch_linhas
-                 WHERE sch_programa_id = :programId
+                 WHERE sch_programa_id = :programIdMax
                )
              ORDER BY sch_sequencia ASC'
         );
-        $stmt->execute(['programId' => $programId]);
+        $stmt->execute(['programId' => $programId, 'programIdMax' => $programId]);
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }

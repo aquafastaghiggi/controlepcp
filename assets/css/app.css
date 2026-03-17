@@ -258,6 +258,12 @@ thead th {
     transition: opacity 0.2s ease;
 }
 
+.modal-overlay.modal-overlay--lower {
+    /* Empurra o modal para baixo para não ficar sob o header do app */
+    align-items: flex-start;
+    padding-top: 180px;
+}
+
 .modal-overlay.is-hidden {
     display: none;
     opacity: 0;

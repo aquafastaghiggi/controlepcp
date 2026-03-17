@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Services;
 
-use App\Data\MockData;
 use App\Support\DateTimeHelper;
 use DateTimeImmutable;
 
@@ -12,9 +11,9 @@ final class Scheduler
 {
     private array $data;
 
-    public function __construct(?array $data = null)
+    public function __construct(array $data)
     {
-        $this->data = $data ?? MockData::all();
+        $this->data = $data;
     }
 
     public function calculate(

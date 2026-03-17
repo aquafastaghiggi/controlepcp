@@ -1,6 +1,5 @@
 (function () {
     const bootstrap = window.PCP_BOOTSTRAP || { datasets: {}, sampleProgram: [] };
-    const STORAGE_KEY = 'controlepcp.system.v3';
     const DEFAULT_SECTION = 'section-home';
     const DEFAULT_INTERVAL_DAYS = [1, 2, 3, 4, 5];
 
@@ -26,6 +25,7 @@
     const matrixImportFile = document.getElementById('matrix-import-file');
     const clearMatrixButton = document.getElementById('clear-matrix');
     const addMatrixRowButton = document.getElementById('add-matrix-row');
+    const resetDataButton = document.getElementById('reset-data');
     const navLinks = document.querySelectorAll('[data-target]');
 
     const baseStartInput = form.querySelector('[name="base_start"]');
@@ -160,30 +160,32 @@
         return result.rows.every((row) => typeof row === 'object' && row !== null && 'production_end' in row);
     }
 
-    function loadState() {
+    async function fetchDatasets() {
+        if (!window.fetch) {
+            return;
+        }
+
         try {
-            const raw = window.localStorage.getItem(STORAGE_KEY);
-            if (!raw) {
+            const response = await fetch('/controlepcp/api/datasets.php');
+            if (!response.ok) {
                 return;
             }
 
-            const parsed = JSON.parse(raw);
-            if (!parsed || typeof parsed !== 'object') {
-                return;
+            const data = await response.json();
+            if (data && typeof data === 'object') {
+                state.datasets = normalizeDatasets(data);
+                // Re-renderizar navegação da matriz após carregar dados
+                if (!state.datasets.setup_matrix[state.activeMatrixLine]) {
+                    state.activeMatrixLine = '';
+                }
+                renderMatrix();
             }
 
-            state.datasets = normalizeDatasets(parsed.datasets || defaultDatasets);
-            state.form = {
-                base_start: parsed.form?.base_start || state.form.base_start,
-                query_datetime: parsed.form?.query_datetime || state.form.query_datetime,
-                production_efficiency: normalizeEfficiencyValue(parsed.form?.production_efficiency ?? state.form.production_efficiency),
-                items: Array.isArray(parsed.form?.items) && parsed.form.items.length ? parsed.form.items : state.form.items,
-            };
-            state.result = hasCurrentResultFormat(parsed.result) ? parsed.result : null;
         } catch (error) {
-            state.result = null;
+            // Caso a requisição falhe, mantemos os dados presentes na inicializacao.
         }
     }
+
 
     function readProgramRows() {
         return [...programBody.querySelectorAll('tr')].map((row, index) => ({
@@ -195,17 +197,38 @@
     }
 
     function saveState() {
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify({
-            datasets: state.datasets,
-            form: {
-                base_start: baseStartInput.value,
-                query_datetime: queryDateTimeInput.value,
-                production_efficiency: normalizeEfficiencyValue(productionEfficiencyInput?.value),
-                items: readProgramRows(),
-            },
-            result: state.result,
-        }));
+        persistDatasets();
     }
+
+    function persistDatasets() {
+        if (!window.fetch) {
+            return;
+        }
+
+        fetch('/controlepcp/api/datasets.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ datasets: state.datasets }),
+        })
+            .then((r) => r.json())
+            .then((data) => {
+                if (data && typeof data === 'object') {
+                    state.datasets = normalizeDatasets(data);
+                    // Re-renderizar navegação da matriz após persistir
+                    if (!state.datasets.setup_matrix[state.activeMatrixLine]) {
+                        state.activeMatrixLine = '';
+                    }
+                    renderMatrix();
+                }
+
+            })
+            .catch(() => {
+                // Falha na persistência não impede operação local.
+            });
+    }
+
 
     function formatNumber(value) {
         if (value === null || value === undefined || value === '') {
@@ -1228,6 +1251,26 @@
         });
     });
 
+    resetDataButton?.addEventListener('click', async () => {
+        if (!window.confirm('Resetar dados para o estado inicial? Isso vai apagar as alteracoes atuais.')) {
+            return;
+        }
+
+        try {
+            const response = await fetch('/controlepcp/api/reset.php', { method: 'POST' });
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.message || 'Falha ao resetar.');
+            }
+
+            showToast('Dados resetados. Recarregando...');
+            window.location.reload();
+        } catch (error) {
+            showToast(error.message || 'Erro ao resetar.', 'danger');
+        }
+    });
+
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
         state.form.items = readProgramRows();
@@ -1268,18 +1311,17 @@
         }
     });
 
-    loadState();
-    renderAllDatasetTables();
-    renderProgram();
-    baseStartInput.value = state.form.base_start || baseStartInput.value;
-    queryDateTimeInput.value = state.form.query_datetime || queryDateTimeInput.value;
-    if (productionEfficiencyInput) {
-        productionEfficiencyInput.value = String(state.form.production_efficiency || 100);
-    }
-    activateSection(DEFAULT_SECTION);
-    resetResultArea(false);
-
-    window.addEventListener('beforeunload', saveState);
+    fetchDatasets().then(() => {
+        renderAllDatasetTables();
+        renderProgram();
+        baseStartInput.value = state.form.base_start || baseStartInput.value;
+        queryDateTimeInput.value = state.form.query_datetime || queryDateTimeInput.value;
+        if (productionEfficiencyInput) {
+            productionEfficiencyInput.value = String(state.form.production_efficiency || 100);
+        }
+        activateSection(DEFAULT_SECTION);
+        resetResultArea(false);
+    });
 })();
 
 

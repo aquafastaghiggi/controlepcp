@@ -3,9 +3,10 @@ declare(strict_types=1);
 
 require __DIR__ . '/src/bootstrap.php';
 
-use App\Data\MockData;
+use App\Data\DatabaseData;
 
-$mockData = MockData::all();
+$databaseData = new DatabaseData();
+$datasets = $databaseData->all();
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -23,12 +24,13 @@ $mockData = MockData::all();
                 <img src="/controlepcp/logo.jpg" alt="Aqua Fast" class="hero-logo">
                 <nav class="top-nav" aria-label="Navegacao principal">
                     <button type="button" class="nav-shortcut" data-target="section-home">Painel Inicial</button>
+                    <!-- <button type="button" class="nav-shortcut" id="reset-data">Resetar dados</button> -->
                 </nav>
             </div>
             <div class="hero-note is-hidden">
                 <span class="note-label">Motor ativo</span>
-                <strong>Linha 2</strong>
-                <span>Calendario, SKU e setup mockados</span>
+                <strong>Linha <?= htmlspecialchars($datasets['calendar']['line'] ?? '') ?></strong>
+                <span>Dados persistidos no banco de dados</span>
             </div>
         </header>
 
@@ -37,7 +39,7 @@ $mockData = MockData::all();
                 <section class="panel">
                     <h2>Calendario produtivo</h2>
                     <ul class="info-list">
-                        <?php foreach ($mockData['calendar']['intervals'] as $interval): ?>
+                        <?php foreach ($datasets['calendar']['intervals'] as $interval): ?>
                             <li><?= htmlspecialchars($interval['start']) ?> - <?= htmlspecialchars($interval['end']) ?></li>
                         <?php endforeach; ?>
                     </ul>
@@ -276,8 +278,8 @@ $mockData = MockData::all();
 
     <script>
         window.PCP_BOOTSTRAP = <?= json_encode([
-            'datasets' => $mockData,
-            'sampleProgram' => $mockData['sample_program'],
+            'datasets' => $datasets,
+            'sampleProgram' => $datasets['sample_program'] ?? [],
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
     </script>
     <div id="app-toast" class="app-toast" aria-live="polite" aria-atomic="true"></div>

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 require __DIR__ . '/../src/bootstrap.php';
 
+use App\Data\DatabaseData;
+use App\Repository\ProgramacaoRepository;
 use App\Services\Scheduler;
 use App\Support\DateTimeHelper;
 
@@ -21,7 +23,6 @@ $baseStart = DateTimeHelper::fromLocalInput((string) ($payload['base_start'] ?? 
 $queryDateTime = DateTimeHelper::fromLocalInput((string) ($payload['query_datetime'] ?? ''));
 $productionEfficiency = (float) ($payload['production_efficiency'] ?? 100);
 $program = $payload['items'] ?? [];
-$datasets = $payload['datasets'] ?? null;
 
 if (!$baseStart) {
     http_response_code(422);
@@ -37,7 +38,20 @@ if (!is_array($program) || $program === []) {
 
 $productionEfficiency = $productionEfficiency <= 0 ? 100.0 : $productionEfficiency;
 
-$scheduler = new Scheduler(is_array($datasets) ? $datasets : null);
+$datasetRepo = new DatabaseData();
+$datasets = $datasetRepo->all();
+
+$scheduler = new Scheduler($datasets);
 $result = $scheduler->calculate($program, $baseStart, $queryDateTime, $productionEfficiency);
+
+$programRepo = new ProgramacaoRepository();
+$programRepo->salvarExecucao(
+    $datasets['calendar']['line'],
+    $baseStart,
+    $queryDateTime,
+    $productionEfficiency,
+    $program,
+    $result['rows'] ?? []
+);
 
 echo json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);

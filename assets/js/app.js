@@ -1328,6 +1328,87 @@
         loadProgramacoes();
     });
 
+    // ===== Funções do Modal de Detalhes da Programação =====
+    async function openProgramacaoDetailsModal(progId) {
+        try {
+            const response = await fetch(`/controlepcp/api/programacoes.php?id=${progId}`);
+            if (!response.ok) throw new Error('Erro ao carregar detalhes da programação');
+            
+            const programacao = await response.json();
+            
+            // Preencher o modal
+            document.getElementById('modal-prog-id').textContent = programacao.prg_id;
+            document.getElementById('modal-prog-op').textContent = programacao.prg_numero_op || '—';
+            document.getElementById('details-op-number').textContent = programacao.prg_numero_op || '—';
+            document.getElementById('modal-prog-linha').textContent = programacao.lin_codigo;
+            document.getElementById('modal-prog-base-inicio').textContent = formatLocalDate(programacao.prg_base_inicio);
+            document.getElementById('modal-prog-eficiencia').textContent = programacao.prg_eficiencia + '%';
+            document.getElementById('modal-prog-status').textContent = programacao.prg_status;
+            
+            // Renderizar itens
+            const itensBody = document.getElementById('details-itens-body');
+            if (programacao.itens && programacao.itens.length > 0) {
+                itensBody.innerHTML = programacao.itens.map(item => `
+                    <tr>
+                        <td>${escapeHtml(item.prg_sku)}</td>
+                        <td>${escapeHtml(item.prg_descricao || '—')}</td>
+                        <td>${item.prg_quantidade}</td>
+                        <td>${escapeHtml(item.prg_unidade)}</td>
+                    </tr>
+                `).join('');
+            } else {
+                itensBody.innerHTML = '<tr><td colspan="4" style="text-align: center;">Nenhum item encontrado</td></tr>';
+            }
+            
+            // Renderizar schedule
+            const scheduleBody = document.getElementById('details-schedule-body');
+            if (programacao.schedule && programacao.schedule.length > 0) {
+                scheduleBody.innerHTML = programacao.schedule.map(row => `
+                    <tr>
+                        <td>${formatLocalDate(row.prg_data_inicio)}</td>
+                        <td>${formatLocalTime(row.prg_hora_inicio)}</td>
+                        <td>${formatLocalDate(row.prg_data_fim)}</td>
+                        <td>${formatLocalTime(row.prg_hora_fim)}</td>
+                        <td>${escapeHtml(row.prg_sku)}</td>
+                        <td>${escapeHtml(row.prg_descricao || '—')}</td>
+                        <td>${row.prg_quantidade}</td>
+                        <td>${escapeHtml(row.prg_unidade)}</td>
+                        <td>${row.prg_setup_minutos || 0}</td>
+                        <td>${row.prg_producao_minutos || 0}</td>
+                    </tr>
+                `).join('');
+            } else {
+                scheduleBody.innerHTML = '<tr><td colspan="10" style="text-align: center;">Nenhum schedule encontrado</td></tr>';
+            }
+            
+            // Mostrar modal
+            const modal = document.getElementById('programacao-details-modal');
+            modal.style.display = 'block';
+            
+        } catch (error) {
+            showToast('Erro ao carregar detalhes: ' + error.message, 'danger');
+        }
+    }
+
+    function closeProgramacaoDetailsModal() {
+        const modal = document.getElementById('programacao-details-modal');
+        modal.style.display = 'none';
+    }
+
+    // Adicionar event listeners para o modal de detalhes
+    document.addEventListener('click', (e) => {
+        if (e.target.matches('[data-action="close-details-modal"]')) {
+            closeProgramacaoDetailsModal();
+        }
+    });
+
+    // Fechar modal ao clicar no overlay
+    document.getElementById('programacao-details-modal').addEventListener('click', (e) => {
+        if (e.target.id === 'programacao-details-modal') {
+            closeProgramacaoDetailsModal();
+        }
+    });
+
     // ===== CRUD de Programações =====
     const newProgramacaoBtn = document.getElementById('new-programacao-btn');
     const programacaoModal = document.getElementById('programacao-modal');
@@ -1343,6 +1424,10 @@
         
         document.querySelectorAll('[data-action="close-modal"]').forEach(btn => {
             btn.addEventListener('click', closeProgramacaoModal);
+        });
+
+        document.querySelectorAll('[data-action="close-details-modal"]').forEach(btn => {
+            btn.addEventListener('click', closeProgramacaoDetailsModal);
         });
     }
 
@@ -1377,7 +1462,7 @@
         programacoesBody.innerHTML = programacoes.map(prog => `
             <tr>
                 <td>${escapeHtml(prog.prg_id)}</td>
-                <td>${escapeHtml(prog.prg_numero_op || '—')}</td>
+                <td><button type="button" class="btn-op-number" data-prog-id="${prog.prg_id}" style="background: none; border: none; color: var(--primary); cursor: pointer; padding: 0; font: inherit; text-decoration: underline;">${escapeHtml(prog.prg_numero_op || '—')}</button></td>
                 <td>${escapeHtml(prog.lin_codigo || '—')}</td>
                 <td>${formatLocalDate(prog.prg_base_inicio)}</td>
                 <td>${escapeHtml(prog.prg_eficiencia || '—')}%</td>
@@ -1386,6 +1471,15 @@
                 <td>${formatLocalDate(prog.prg_criado_em)}</td>
             </tr>
         `).join('');
+
+        // Adicionar event listeners nos botões de OP
+        programacoesBody.querySelectorAll('.btn-op-number').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.preventDefault();
+                const progId = parseInt(btn.dataset.progId);
+                await openProgramacaoDetailsModal(progId);
+            });
+        });
     }
 
     function openNewProgramacao() {

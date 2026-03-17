@@ -321,6 +321,50 @@ thead th {
     padding: 20px;
 }
 
+.modal-dialog-large {
+    max-width: 1000px;
+}
+
+.modal-content {
+    padding: 20px;
+    max-height: calc(80vh - 120px);
+    overflow-y: auto;
+}
+
+.details-section {
+    margin-bottom: 30px;
+}
+
+.details-section h4 {
+    margin: 0 0 15px 0;
+    font-size: 1.1rem;
+    color: var(--primary-strong);
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--line);
+}
+
+.info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.info-grid > div {
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.5);
+    border-radius: 8px;
+    border: 1px solid var(--line);
+}
+
+.info-grid strong {
+    color: var(--primary-strong);
+}
+
+.details-section:last-child {
+    margin-bottom: 0;
+}
+
 /* Button Styles */
 .btn-action {
     padding: 6px 12px;

@@ -1288,6 +1288,7 @@
                 body: JSON.stringify({
                     base_start: state.form.base_start,
                     query_datetime: state.form.query_datetime,
+                    numero_op: form.querySelector('[name="numero_op"]')?.value || null,
                     production_efficiency: state.form.production_efficiency,
                     items: state.form.items.filter((item) => item.sku),
                     datasets: state.datasets,
@@ -1321,7 +1322,209 @@
         }
         activateSection(DEFAULT_SECTION);
         resetResultArea(false);
+        setupProgramacoesHandlers();
+        loadProgramacoes();
     });
+
+    // ===== CRUD de Programações =====
+    const newProgramacaoBtn = document.getElementById('new-programacao-btn');
+    const programacaoModal = document.getElementById('programacao-modal');
+    const programacaoForm = document.getElementById('programacao-form');
+    const programacoesBody = document.getElementById('programacoes-body');
+    const searchOpInput = document.getElementById('search-op');
+    const prgIdInput = document.getElementById('prg_id');
+
+    function setupProgramacoesHandlers() {
+        newProgramacaoBtn?.addEventListener('click', openNewProgramacao);
+        programacaoForm?.addEventListener('submit', saveProgramacao);
+        searchOpInput?.addEventListener('input', debounce(searchProgramacoes, 300));
+        
+        document.querySelectorAll('[data-action="close-modal"]').forEach(btn => {
+            btn.addEventListener('click', closeProgramacaoModal);
+        });
+    }
+
+    function debounce(fn, delay) {
+        let timer;
+        return function (...args) {
+            clearTimeout(timer);
+            timer = setTimeout(() => fn.apply(this, args), delay);
+        };
+    }
+
+    async function loadProgramacoes() {
+        try {
+            const response = await fetch('/controlepcp/api/programacoes.php');
+            if (!response.ok) throw new Error('Erro ao carregar programações');
+            
+            const result = await response.json();
+            const programacoes = result.data || [];
+            renderProgramacoes(programacoes);
+        } catch (error) {
+            showToast('Erro ao carregar programações: ' + error.message, 'danger');
+            programacoesBody.innerHTML = `<tr><td colspan="9" style="text-align: center; padding: 20px;">Erro ao carregar programações</td></tr>`;
+        }
+    }
+
+    function renderProgramacoes(programacoes) {
+        if (!programacoes || programacoes.length === 0) {
+            programacoesBody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 20px;">Nenhuma programação encontrada</td></tr>';
+            return;
+        }
+
+        programacoesBody.innerHTML = programacoes.map(prog => `
+            <tr>
+                <td>${escapeHtml(prog.prg_id)}</td>
+                <td>${escapeHtml(prog.prg_numero_op || '—')}</td>
+                <td>${escapeHtml(prog.lin_codigo || '—')}</td>
+                <td>${formatLocalDate(prog.prg_base_inicio)}</td>
+                <td>${escapeHtml(prog.prg_eficiencia || '—')}%</td>
+                <td><span class="status-badge">${escapeHtml(prog.prg_status || '—')}</span></td>
+                <td>${prog.total_itens || 0}</td>
+                <td>${formatLocalDate(prog.prg_criado_em)}</td>
+                <td>
+                    <button type="button" class="btn-action" onclick="window.editProgramacao(${prog.prg_id})">Editar</button>
+                    <button type="button" class="btn-action btn-danger" onclick="window.deleteProgramacao(${prog.prg_id})">Deletar</button>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    function openNewProgramacao() {
+        prgIdInput.value = '';
+        programacaoForm.reset();
+        programacaoForm.querySelector('[name="prg_eficiencia"]').value = '100';
+        programacaoForm.querySelector('[name="prg_status"]').value = 'rascunho';
+        programacaoForm.querySelector('[name="lin_codigo"]').value = 'L2';
+        programacaoModal.classList.remove('is-hidden');
+    }
+
+    function closeProgramacaoModal() {
+        programacaoModal.classList.add('is-hidden');
+        prgIdInput.value = '';
+        programacaoForm.reset();
+    }
+
+    async function saveProgramacao(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(programacaoForm);
+        const prgId = formData.get('prg_id');
+        const isEdit = !!prgId;
+        
+        const payload = {
+            prg_numero_op: formData.get('prg_numero_op') || null,
+            lin_codigo: formData.get('lin_codigo') || 'L2',
+            prg_base_inicio: formData.get('prg_base_inicio'),
+            prg_data_consulta: formData.get('prg_data_consulta') || null,
+            prg_eficiencia: parseFloat(formData.get('prg_eficiencia')) || 100,
+            prg_status: formData.get('prg_status') || 'rascunho',
+        };
+
+        if (isEdit) {
+            payload.prg_id = parseInt(prgId);
+        }
+
+        try {
+            const method = isEdit ? 'PUT' : 'POST';
+            const response = await fetch('/controlepcp/api/programacoes.php', {
+                method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+
+            if (!response.ok) {
+                const errorResult = await response.json();
+                throw new Error(errorResult.message || `Erro ao ${isEdit ? 'atualizar' : 'criar'} programação`);
+            }
+
+            showToast(`Programação ${isEdit ? 'atualizada' : 'criada'} com sucesso`, 'success');
+            closeProgramacaoModal();
+            loadProgramacoes();
+        } catch (error) {
+            showToast(error.message, 'danger');
+        }
+    }
+
+    async function searchProgramacoes() {
+        const op = searchOpInput.value.trim();
+        
+        if (!op) {
+            loadProgramacoes();
+            return;
+        }
+
+        try {
+            const response = await fetch(`/controlepcp/api/programacoes.php?op=${encodeURIComponent(op)}`);
+            
+            if (response.status === 404) {
+                programacoesBody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 20px;">Nenhuma programação encontrada para essa OP</td></tr>';
+                return;
+            }
+
+            if (!response.ok) throw new Error('Erro ao buscar programação');
+            
+            const programacao = await response.json();
+            renderProgramacoes([programacao]);
+        } catch (error) {
+            showToast('Erro ao buscar programação: ' + error.message, 'danger');
+        }
+    }
+
+    window.editProgramacao = async function(id) {
+        try {
+            const response = await fetch(`/controlepcp/api/programacoes.php?id=${id}`);
+            if (!response.ok) throw new Error('Erro ao carregar programação');
+            
+            const programacao = await response.json();
+            
+            prgIdInput.value = id;
+            programacaoForm.querySelector('[name="prg_numero_op"]').value = programacao.prg_numero_op || '';
+            programacaoForm.querySelector('[name="lin_codigo"]').value = programacao.lin_codigo || 'L2';
+            programacaoForm.querySelector('[name="prg_base_inicio"]').value = programacao.prg_base_inicio ? programacao.prg_base_inicio.replace(' ', 'T') : '';
+            programacaoForm.querySelector('[name="prg_data_consulta"]').value = programacao.prg_data_consulta ? programacao.prg_data_consulta.replace(' ', 'T') : '';
+            programacaoForm.querySelector('[name="prg_eficiencia"]').value = programacao.prg_eficiencia || '100';
+            programacaoForm.querySelector('[name="prg_status"]').value = programacao.prg_status || 'rascunho';
+            
+            programacaoModal.classList.remove('is-hidden');
+        } catch (error) {
+            showToast('Erro ao carregar programação: ' + error.message, 'danger');
+        }
+    };
+
+    window.deleteProgramacao = async function(id) {
+        if (!confirm('Tem certeza que deseja deletar esta programação?')) {
+            return;
+        }
+
+        try {
+            const response = await fetch('/controlepcp/api/programacoes.php', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prg_id: id }),
+            });
+
+            if (!response.ok) {
+                const errorResult = await response.json();
+                throw new Error(errorResult.message || 'Erro ao deletar programação');
+            }
+
+            showToast('Programação deletada com sucesso', 'success');
+            loadProgramacoes();
+        } catch (error) {
+            showToast('Erro ao deletar programação: ' + error.message, 'danger');
+        }
+    };
+
+    function formatLocalDate(dateStr) {
+        if (!dateStr) return '—';
+        try {
+            const date = new Date(dateStr);
+            return date.toLocaleDateString('pt-BR') + ' ' + date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        } catch {
+            return '—';
+        }
+    }
 })();
 
 

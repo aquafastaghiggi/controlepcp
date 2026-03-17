@@ -73,6 +73,10 @@ $datasets = $databaseData->all();
                             <strong>Programa&ccedil;&atilde;o de PCP</strong>
                             <span>Monte a sequencia e calcule a producao.</span>
                         </button>
+                        <button type="button" class="home-card" data-target="section-programacoes">
+                            <strong>Histórico de Programações</strong>
+                            <span>Consulte, crie, edite ou delete programações.</span>
+                        </button>
                     </div>
                 </section>
 
@@ -207,6 +211,10 @@ $datasets = $databaseData->all();
                     <form id="simulation-form">
                         <div class="field-grid">
                             <label class="field">
+                                <span>Número da OP</span>
+                                <input type="text" name="numero_op" placeholder="Ex: OP-2024-001">
+                            </label>
+                            <label class="field">
                                 <span>Eficiencia de producao (%)</span>
                                 <input type="text" name="production_efficiency" value="100" inputmode="decimal" placeholder="100">
                             </label>
@@ -272,9 +280,100 @@ $datasets = $databaseData->all();
                         </div>
                     </section>
                 </section>
+
+                <section class="panel app-section" id="section-programacoes">
+                    <div class="panel-heading">
+                        <div>
+                            <h2>Histórico de Programações</h2>
+                            <p>Consulte, crie, edite ou delete programações de PCP.</p>
+                        </div>
+                        <button type="button" id="new-programacao-btn" class="ghost-button">+ Nova Programação</button>
+                    </div>
+
+                    <div class="field-grid">
+                        <label class="field">
+                            <span>Buscar por Número da OP</span>
+                            <input type="text" id="search-op" placeholder="Digite o número da OP para buscar">
+                        </label>
+                    </div>
+
+                    <div class="table-wrap compact-wrap">
+                        <table class="entry-table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Número da OP</th>
+                                    <th>Linha</th>
+                                    <th>Data Base</th>
+                                    <th>Eficiência</th>
+                                    <th>Status</th>
+                                    <th>Itens</th>
+                                    <th>Criado em</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="programacoes-body"></tbody>
+                        </table>
+                    </div>
+
+                    <!-- Modal para criar/editar programação -->
+                    <div class="modal-overlay is-hidden" id="programacao-modal">
+                        <div class="modal-dialog">
+                            <div class="modal-header">
+                                <h3>Programação</h3>
+                                <button type="button" class="close-button" data-action="close-modal">&times;</button>
+                            </div>
+                            <form id="programacao-form">
+                                <input type="hidden" name="prg_id" id="prg_id">
+                                <div class="field-grid">
+                                    <label class="field">
+                                        <span>Número da OP</span>
+                                        <input type="text" name="prg_numero_op" placeholder="Ex: OP-2024-001">
+                                    </label>
+                                    <label class="field">
+                                        <span>Linha</span>
+                                        <input type="text" name="lin_codigo" value="L2" placeholder="L2">
+                                    </label>
+                                </div>
+                                <div class="field-grid">
+                                    <label class="field">
+                                        <span>Data/Hora Base</span>
+                                        <input type="datetime-local" name="prg_base_inicio" required>
+                                    </label>
+                                    <label class="field">
+                                        <span>Data/Hora Consulta</span>
+                                        <input type="datetime-local" name="prg_data_consulta">
+                                    </label>
+                                </div>
+                                <div class="field-grid">
+                                    <label class="field">
+                                        <span>Eficiência (%)</span>
+                                        <input type="number" name="prg_eficiencia" value="100" min="1" max="200">
+                                    </label>
+                                    <label class="field">
+                                        <span>Status</span>
+                                        <select name="prg_status">
+                                            <option value="rascunho">Rascunho</option>
+                                            <option value="calculado">Calculado</option>
+                                            <option value="executado">Executado</option>
+                                        </select>
+                                    </label>
+                                </div>
+                                <div class="form-actions">
+                                    <button type="button" class="ghost-button" data-action="close-modal">Cancelar</button>
+                                    <button type="submit" class="primary-button">Salvar</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </section>
             </section>
         </main>
     </div>
+
+                        </div>
+                    </section>
+                </section>
 
     <script>
         window.PCP_BOOTSTRAP = <?= json_encode([

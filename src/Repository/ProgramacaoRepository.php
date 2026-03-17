@@ -24,17 +24,19 @@ final class ProgramacaoRepository
         ?DateTimeImmutable $queryDateTime,
         float $productionEfficiency,
         array $programItems,
-        array $resultRows
+        array $resultRows,
+        ?string $numeroOp = null
     ): int {
         $this->pdo->beginTransaction();
 
         $lineId = $this->ensureLine($lineCode);
 
         $stmt = $this->pdo->prepare(
-            'INSERT INTO prg_programas (prg_linha_id, prg_base_inicio, prg_data_consulta, prg_eficiencia, prg_status) VALUES (:lineId, :baseStart, :queryDateTime, :efficiency, :status)'
+            'INSERT INTO prg_programas (prg_numero_op, prg_linha_id, prg_base_inicio, prg_data_consulta, prg_eficiencia, prg_status) VALUES (:numeroOp, :lineId, :baseStart, :queryDateTime, :efficiency, :status)'
         );
 
         $stmt->execute([
+            'numeroOp' => $numeroOp,
             'lineId' => $lineId,
             'baseStart' => $baseStart->format('Y-m-d H:i:s'),
             'queryDateTime' => $queryDateTime?->format('Y-m-d H:i:s'),
@@ -176,5 +178,173 @@ final class ProgramacaoRepository
         $dt = DateTimeHelper::fromLocalInput($value);
 
         return $dt ? $dt->format('Y-m-d H:i:s') : null;
+    }
+
+    public function getAllProgramacoes(int $limit = 100, int $offset = 0): array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT p.prg_id, p.prg_numero_op, p.prg_linha_id, l.lin_codigo, l.lin_nome, 
+                    p.prg_base_inicio, p.prg_data_consulta, p.prg_eficiencia, p.prg_status,
+                    p.prg_criado_em, p.prg_atualizado_em,
+                    COUNT(i.prg_id_item) as total_itens
+             FROM prg_programas p
+             LEFT JOIN lin_linhas l ON p.prg_linha_id = l.lin_id
+             LEFT JOIN prg_itens i ON p.prg_id = i.prg_programa_id
+             GROUP BY p.prg_id
+             ORDER BY p.prg_criado_em DESC
+             LIMIT :limit OFFSET :offset'
+        );
+        $stmt->bindValue('limit', $limit, PDO::PARAM_INT);
+        $stmt->bindValue('offset', $offset, PDO::PARAM_INT);
+        $stmt->execute();
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function getProgramacaoById(int $id): ?array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT p.*, l.lin_codigo, l.lin_nome 
+             FROM prg_programas p
+             LEFT JOIN lin_linhas l ON p.prg_linha_id = l.lin_id
+             WHERE p.prg_id = :id
+             LIMIT 1'
+        );
+        $stmt->execute(['id' => $id]);
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $result ?: null;
+    }
+
+    public function getProgramacaoByOp(string $op): ?array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT p.*, l.lin_codigo, l.lin_nome 
+             FROM prg_programas p
+             LEFT JOIN lin_linhas l ON p.prg_linha_id = l.lin_id
+             WHERE p.prg_numero_op = :op
+             LIMIT 1'
+        );
+        $stmt->execute(['op' => $op]);
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $result ?: null;
+    }
+
+    public function getProgramacaoItens(int $programId): array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT * FROM prg_itens WHERE prg_programa_id = :programId ORDER BY prg_sequencia ASC'
+        );
+        $stmt->execute(['programId' => $programId]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function getProgramacaoSchedule(int $programId): array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT * FROM sch_linhas WHERE sch_programa_id = :programId ORDER BY sch_sequencia ASC'
+        );
+        $stmt->execute(['programId' => $programId]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function createProgramacao(
+        ?string $numeroOp,
+        string $lineCode,
+        DateTimeImmutable $baseStart,
+        ?DateTimeImmutable $queryDateTime = null,
+        float $efficiency = 100,
+        string $status = 'rascunho'
+    ): int {
+        $lineId = $this->ensureLine($lineCode);
+
+        // Verificar se número da OP já existe
+        if ($numeroOp) {
+            $stmt = $this->pdo->prepare('SELECT prg_id FROM prg_programas WHERE prg_numero_op = :op LIMIT 1');
+            $stmt->execute(['op' => $numeroOp]);
+            if ($stmt->fetch()) {
+                throw new \Exception("Número da OP {$numeroOp} já existe.");
+            }
+        }
+
+        $stmt = $this->pdo->prepare(
+            'INSERT INTO prg_programas (prg_numero_op, prg_linha_id, prg_base_inicio, prg_data_consulta, prg_eficiencia, prg_status) 
+             VALUES (:numeroOp, :lineId, :baseStart, :queryDateTime, :efficiency, :status)'
+        );
+
+        $stmt->execute([
+            'numeroOp' => $numeroOp,
+            'lineId' => $lineId,
+            'baseStart' => $baseStart->format('Y-m-d H:i:s'),
+            'queryDateTime' => $queryDateTime?->format('Y-m-d H:i:s'),
+            'efficiency' => $efficiency,
+            'status' => $status,
+        ]);
+
+        return (int) $this->pdo->lastInsertId();
+    }
+
+    public function updateProgramacao(
+        int $programId,
+        ?string $numeroOp = null,
+        ?DateTimeImmutable $baseStart = null,
+        ?DateTimeImmutable $queryDateTime = null,
+        ?float $efficiency = null,
+        ?string $status = null
+    ): void {
+        // Se está tentando atualizar o OP, verificar se já existe outro com esse OP
+        if ($numeroOp !== null) {
+            $stmt = $this->pdo->prepare('SELECT prg_id FROM prg_programas WHERE prg_numero_op = :op AND prg_id != :programId LIMIT 1');
+            $stmt->execute(['op' => $numeroOp, 'programId' => $programId]);
+            if ($stmt->fetch()) {
+                throw new \Exception("Número da OP {$numeroOp} já existe.");
+            }
+        }
+
+        $updates = [];
+        $bind = ['programId' => $programId];
+
+        if ($numeroOp !== null) {
+            $updates[] = 'prg_numero_op = :numeroOp';
+            $bind['numeroOp'] = $numeroOp;
+        }
+
+        if ($baseStart !== null) {
+            $updates[] = 'prg_base_inicio = :baseStart';
+            $bind['baseStart'] = $baseStart->format('Y-m-d H:i:s');
+        }
+
+        if ($queryDateTime !== null) {
+            $updates[] = 'prg_data_consulta = :queryDateTime';
+            $bind['queryDateTime'] = $queryDateTime->format('Y-m-d H:i:s');
+        }
+
+        if ($efficiency !== null) {
+            $updates[] = 'prg_eficiencia = :efficiency';
+            $bind['efficiency'] = $efficiency;
+        }
+
+        if ($status !== null) {
+            $updates[] = 'prg_status = :status';
+            $bind['status'] = $status;
+        }
+
+        if (empty($updates)) {
+            return;
+        }
+
+        $sql = 'UPDATE prg_programas SET ' . implode(', ', $updates) . ' WHERE prg_id = :programId';
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($bind);
+    }
+
+    public function deleteProgramacao(int $programId): void
+    {
+        // Isso vai deletar items e schedule em cascata por causa da FK
+        $stmt = $this->pdo->prepare('DELETE FROM prg_programas WHERE prg_id = :programId');
+        $stmt->execute(['programId' => $programId]);
     }
 }

@@ -22,6 +22,7 @@ if (!is_array($payload)) {
 $baseStart = DateTimeHelper::fromLocalInput((string) ($payload['base_start'] ?? ''));
 $queryDateTime = DateTimeHelper::fromLocalInput((string) ($payload['query_datetime'] ?? ''));
 $productionEfficiency = (float) ($payload['production_efficiency'] ?? 100);
+$numeroOp = !empty($payload['numero_op']) ? (string) $payload['numero_op'] : null;
 $program = $payload['items'] ?? [];
 
 if (!$baseStart) {
@@ -51,7 +52,8 @@ $programRepo->salvarExecucao(
     $queryDateTime,
     $productionEfficiency,
     $program,
-    $result['rows'] ?? []
+    $result['rows'] ?? [],
+    $numeroOp
 );
 
 echo json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);

@@ -1,7 +1,8 @@
-(function () {
+﻿(function () {
     const bootstrap = window.PCP_BOOTSTRAP || { datasets: {}, sampleProgram: [] };
     const DEFAULT_SECTION = 'section-home';
     const DEFAULT_INTERVAL_DAYS = [1, 2, 3, 4, 5];
+    const API_TIMEOUT_MS = 8000;
 
     const weekdays = [
         { value: 1, label: 'Seg' },
@@ -134,7 +135,7 @@
             },
             products: normalizeProducts(raw.products || {}),
             setup_matrix: raw.setup_matrix || {},
-            setup_matrix_sections: Array.isArray(raw.setup_matrix_sections) ? raw.setup_matrix_sections : [],
+            setup_matrix_sections: normalizeMatrixSections(raw.setup_matrix_sections),
         };
     }
 
@@ -163,13 +164,41 @@
         return result.rows.every((row) => typeof row === 'object' && row !== null && 'production_end' in row);
     }
 
+    async function apiFetch(url, options = {}) {
+        if (!window.fetch) {
+            throw new Error('Seu navegador nao suporta requisicoes web.');
+        }
+
+        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        const timeoutId = controller
+            ? window.setTimeout(() => controller.abort(), API_TIMEOUT_MS)
+            : null;
+
+        try {
+            return await fetch(url, {
+                ...options,
+                signal: controller ? controller.signal : options.signal,
+            });
+        } catch (error) {
+            if (error && error.name === 'AbortError') {
+                throw new Error('A requisicao excedeu 8 segundos.');
+            }
+
+            throw error;
+        } finally {
+            if (timeoutId) {
+                window.clearTimeout(timeoutId);
+            }
+        }
+    }
+
     async function fetchDatasets() {
         if (!window.fetch) {
             return;
         }
 
         try {
-            const response = await fetch('/controlepcp/api/datasets.php');
+            const response = await apiFetch('/controlepcp/api/datasets.php');
             if (!response.ok) {
                 return;
             }
@@ -177,7 +206,7 @@
             const data = await response.json();
             if (data && typeof data === 'object') {
                 state.datasets = normalizeDatasets(data);
-                // Re-renderizar navegação da matriz após carregar dados
+                // Re-renderizar navegaÃ§Ã£o da matriz apÃ³s carregar dados
                 if (!state.datasets.setup_matrix[state.activeMatrixLine]) {
                     state.activeMatrixLine = '';
                 }
@@ -185,7 +214,7 @@
             }
 
         } catch (error) {
-            // Caso a requisição falhe, mantemos os dados presentes na inicializacao.
+            // Caso a requisiÃ§Ã£o falhe, mantemos os dados presentes na inicializacao.
         }
     }
 
@@ -199,39 +228,46 @@
         }));
     }
 
-    function saveState() {
-        persistDatasets();
+    function saveState(options = {}) {
+        return persistDatasets(options);
     }
 
-    function persistDatasets() {
+    async function persistDatasets({ notify = false } = {}) {
         if (!window.fetch) {
             return;
         }
 
-        fetch('/controlepcp/api/datasets.php', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ datasets: state.datasets }),
-        })
-            .then((r) => r.json())
-            .then((data) => {
-                if (data && typeof data === 'object') {
-                    state.datasets = normalizeDatasets(data);
-                    // Re-renderizar navegação da matriz após persistir
-                    if (!state.datasets.setup_matrix[state.activeMatrixLine]) {
-                        state.activeMatrixLine = '';
-                    }
-                    renderMatrix();
-                }
-
-            })
-            .catch(() => {
-                // Falha na persistência não impede operação local.
+        try {
+            const response = await apiFetch('/controlepcp/api/datasets.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ datasets: state.datasets }),
             });
-    }
 
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data?.message || 'Falha ao salvar os dados.');
+            }
+
+            if (data && typeof data === 'object') {
+                state.datasets = normalizeDatasets(data);
+                // Re-renderizar navega??o da matriz ap?s persistir
+                if (!state.datasets.setup_matrix[state.activeMatrixLine]) {
+                    state.activeMatrixLine = '';
+                }
+                renderMatrix();
+                if (notify && typeof showToast === 'function') {
+                    showToast('Horario salvo no banco de dados.', 'success');
+                }
+            }
+        } catch (error) {
+            if (notify && typeof showToast === 'function') {
+                showToast(error.message || 'Falha ao salvar os dados.', 'danger');
+            }
+        }
+    }
 
     function formatNumber(value) {
         if (value === null || value === undefined || value === '') {
@@ -291,6 +327,32 @@
         });
 
         return rows;
+    }
+
+    function normalizeMatrixSections(rawSections) {
+        if (!Array.isArray(rawSections) || !rawSections.length) {
+            return [];
+        }
+
+        if (rawSections.some((section) => Array.isArray(section?.rows))) {
+            return rawSections
+                .map((section) => ({
+                    line: String(section?.line || 'SEM LINHA').trim() || 'SEM LINHA',
+                    rows: Array.isArray(section?.rows)
+                        ? section.rows
+                            .map((row) => ({
+                                from: String(row?.from || '').trim(),
+                                to: String(row?.to || '').trim(),
+                                duration: String(row?.duration || '').trim(),
+                                line: String(row?.line || section?.line || 'SEM LINHA').trim() || 'SEM LINHA',
+                            }))
+                            .filter((row) => row.from && row.to && row.duration)
+                        : [],
+                }))
+                .filter((section) => section.rows.length);
+        }
+
+        return buildMatrixSections(rawSections);
     }
 
     function buildMatrixSections(rows) {
@@ -965,7 +1027,7 @@
 
     function renderRowsInto(rows, bodyElement) {
         if (!rows || !rows.length) {
-            bodyElement.innerHTML = '<tr class="empty-state-row"><td colspan="10">Nenhuma linha disponível.</td></tr>';
+            bodyElement.innerHTML = '<tr class="empty-state-row"><td colspan="10">Nenhuma linha disponÃ­vel.</td></tr>';
             return;
         }
 
@@ -1140,28 +1202,44 @@
             syncMatrixState(imported.rows || []);
             state.activeMatrixLine = getMatrixLines(imported.rows || [])[0] || '';
             renderMatrix();
-            saveState();
+            await saveState({ notify: true });
             showToast(Number(imported.count || 0) + ' setups importados.');
         } catch (error) {
+            console.error('[MatrixImport] import failed', error);
             showToast(error.message || 'Falha ao importar a matriz.', 'danger');
         } finally {
             matrixImportFile.value = '';
         }
     });
 
-    clearMatrixButton.addEventListener('click', () => {
+    clearMatrixButton.addEventListener('click', async () => {
         if (!window.confirm('Deseja realmente limpar a base de matrizes?')) {
             return;
         }
 
-        state.datasets.setup_matrix = {};
-        state.datasets.setup_matrix_sections = [];
-        state.activeMatrixLine = '';
-        renderMatrix();
-        saveState();
-        showToast('Base de matrizes limpa.');
-    });
-    addMatrixRowButton.addEventListener('click', () => {
+        try {
+            const response = await apiFetch('/controlepcp/api/matrices.php', { method: 'DELETE' });
+            let payload = null;
+            try {
+                payload = await response.json();
+            } catch {
+                payload = null;
+            }
+
+            if (!response.ok) {
+                throw new Error(payload?.message || 'Erro ao limpar matrizes.');
+            }
+
+            state.datasets.setup_matrix = {};
+            state.datasets.setup_matrix_sections = [];
+            state.activeMatrixLine = '';
+            renderMatrix();
+            showToast('Base de matrizes limpa.');
+            await fetchDatasets();
+        } catch (error) {
+            showToast(error.message || 'Erro ao limpar matrizes.', 'danger');
+        }
+    });    addMatrixRowButton.addEventListener('click', () => {
         const firstSku = Object.keys(state.datasets.products)[0] || '';
         const rows = getMatrixRowsWithLine();
         const targetLine = state.activeMatrixLine || defaultMatrixLineLabel();
@@ -1289,7 +1367,7 @@
         }
 
         try {
-            const response = await fetch('/controlepcp/api/reset.php', { method: 'POST' });
+            const response = await apiFetch('/controlepcp/api/reset.php', { method: 'POST' });
             const result = await response.json();
 
             if (!response.ok) {
@@ -1314,7 +1392,7 @@
         saveState();
 
         try {
-            const response = await fetch('/controlepcp/api/calculate.php', {
+            const response = await apiFetch('/controlepcp/api/calculate.php', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -1358,14 +1436,14 @@
         loadProgramacoes();
     });
 
-    // ===== Funções do Modal de Detalhes da Programação =====
+    // ===== FunÃ§Ãµes do Modal de Detalhes da ProgramaÃ§Ã£o =====
     async function openProgramacaoDetailsModal(progId) {
         try {
-            const response = await fetch(`/controlepcp/api/programacoes.php?id=${progId}`);
-            if (!response.ok) throw new Error('Erro ao carregar detalhes da programação');
+            const response = await apiFetch(`/controlepcp/api/programacoes.php?id=${progId}`);
+            if (!response.ok) throw new Error('Erro ao carregar detalhes da programaÃ§Ã£o');
 
             const programacao = await response.json();
-            document.getElementById('details-op-number').textContent = programacao.prg_numero_op || '—';
+            document.getElementById('details-op-number').textContent = programacao.prg_numero_op || 'â€”';
 
             const rows = (programacao.schedule || [])
                 .map((row) => {
@@ -1433,7 +1511,7 @@
         }
     });
 
-    // ===== CRUD de Programações =====
+    // ===== CRUD de ProgramaÃ§Ãµes =====
     const newProgramacaoBtn = document.getElementById('new-programacao-btn');
     const programacaoModal = document.getElementById('programacao-modal');
     const programacaoForm = document.getElementById('programacao-form');
@@ -1465,38 +1543,38 @@
 
     async function loadProgramacoes() {
         try {
-            const response = await fetch('/controlepcp/api/programacoes.php');
-            if (!response.ok) throw new Error('Erro ao carregar programações');
+            const response = await apiFetch('/controlepcp/api/programacoes.php');
+            if (!response.ok) throw new Error('Erro ao carregar programaÃ§Ãµes');
             
             const result = await response.json();
             const programacoes = result.data || [];
             renderProgramacoes(programacoes);
         } catch (error) {
-            showToast('Erro ao carregar programações: ' + error.message, 'danger');
-            programacoesBody.innerHTML = `<tr><td colspan="9" style="text-align: center; padding: 20px;">Erro ao carregar programações</td></tr>`;
+            showToast('Erro ao carregar programaÃ§Ãµes: ' + error.message, 'danger');
+            programacoesBody.innerHTML = `<tr><td colspan="9" style="text-align: center; padding: 20px;">Erro ao carregar programaÃ§Ãµes</td></tr>`;
         }
     }
 
     function renderProgramacoes(programacoes) {
         if (!programacoes || programacoes.length === 0) {
-            programacoesBody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 20px;">Nenhuma programação encontrada</td></tr>';
+            programacoesBody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 20px;">Nenhuma programaÃ§Ã£o encontrada</td></tr>';
             return;
         }
 
         programacoesBody.innerHTML = programacoes.map(prog => `
             <tr>
                 <td>${escapeHtml(prog.prg_id)}</td>
-                <td><button type="button" class="btn-op-number" data-prog-id="${prog.prg_id}" style="background: none; border: none; color: var(--primary); cursor: pointer; padding: 0; font: inherit; text-decoration: underline;">${escapeHtml(prog.prg_numero_op || '—')}</button></td>
-                <td>${escapeHtml(prog.lin_codigo || '—')}</td>
+                <td><button type="button" class="btn-op-number" data-prog-id="${prog.prg_id}" style="background: none; border: none; color: var(--primary); cursor: pointer; padding: 0; font: inherit; text-decoration: underline;">${escapeHtml(prog.prg_numero_op || 'â€”')}</button></td>
+                <td>${escapeHtml(prog.lin_codigo || 'â€”')}</td>
                 <td>${formatLocalDate(prog.prg_base_inicio)}</td>
-                <td>${escapeHtml(prog.prg_eficiencia || '—')}%</td>
-                <td><span class="status-badge">${escapeHtml(prog.prg_status || '—')}</span></td>
+                <td>${escapeHtml(prog.prg_eficiencia || 'â€”')}%</td>
+                <td><span class="status-badge">${escapeHtml(prog.prg_status || 'â€”')}</span></td>
                 <td>${prog.total_itens || 0}</td>
                 <td>${formatLocalDate(prog.prg_criado_em)}</td>
             </tr>
         `).join('');
 
-        // Adicionar event listeners nos botões de OP
+        // Adicionar event listeners nos botÃµes de OP
         programacoesBody.querySelectorAll('.btn-op-number').forEach(btn => {
             btn.addEventListener('click', async (e) => {
                 e.preventDefault();
@@ -1507,12 +1585,12 @@
     }
 
     function openNewProgramacao() {
-        // Limpa o formulário de criação de programação
+        // Limpa o formulÃ¡rio de criaÃ§Ã£o de programaÃ§Ã£o
         state.form.numero_op = '';
         numeroOpInput.value = '';
         state.form.items = [{}];
 
-        // Garantir que a data base seja sempre o momento de criação da OP
+        // Garantir que a data base seja sempre o momento de criaÃ§Ã£o da OP
         const now = new Date();
         const formatted = now.toISOString().slice(0, 16);
         baseStartInput.value = formatted;
@@ -1520,7 +1598,7 @@
 
         renderProgram();
 
-        // Resetar resultado, ativar modo de cálculo e manter foco na seção de programação
+        // Resetar resultado, ativar modo de cÃ¡lculo e manter foco na seÃ§Ã£o de programaÃ§Ã£o
         resetResultArea(false);
         enableCalculateMode();
         activateSection('section-program');
@@ -1554,7 +1632,7 @@
 
         try {
             const method = isEdit ? 'PUT' : 'POST';
-            const response = await fetch('/controlepcp/api/programacoes.php', {
+            const response = await apiFetch('/controlepcp/api/programacoes.php', {
                 method,
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
@@ -1562,10 +1640,10 @@
 
             if (!response.ok) {
                 const errorResult = await response.json();
-                throw new Error(errorResult.message || `Erro ao ${isEdit ? 'atualizar' : 'criar'} programação`);
+                throw new Error(errorResult.message || `Erro ao ${isEdit ? 'atualizar' : 'criar'} programaÃ§Ã£o`);
             }
 
-            showToast(`Programação ${isEdit ? 'atualizada' : 'criada'} com sucesso`, 'success');
+            showToast(`ProgramaÃ§Ã£o ${isEdit ? 'atualizada' : 'criada'} com sucesso`, 'success');
             closeProgramacaoModal();
             loadProgramacoes();
         } catch (error) {
@@ -1582,26 +1660,26 @@
         }
 
         try {
-            const response = await fetch(`/controlepcp/api/programacoes.php?op=${encodeURIComponent(op)}`);
+            const response = await apiFetch(`/controlepcp/api/programacoes.php?op=${encodeURIComponent(op)}`);
             
             if (response.status === 404) {
-                programacoesBody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 20px;">Nenhuma programação encontrada para essa OP</td></tr>';
+                programacoesBody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 20px;">Nenhuma programaÃ§Ã£o encontrada para essa OP</td></tr>';
                 return;
             }
 
-            if (!response.ok) throw new Error('Erro ao buscar programação');
+            if (!response.ok) throw new Error('Erro ao buscar programaÃ§Ã£o');
             
             const programacao = await response.json();
             renderProgramacoes([programacao]);
         } catch (error) {
-            showToast('Erro ao buscar programação: ' + error.message, 'danger');
+            showToast('Erro ao buscar programaÃ§Ã£o: ' + error.message, 'danger');
         }
     }
 
     window.editProgramacao = async function(id) {
         try {
-            const response = await fetch(`/controlepcp/api/programacoes.php?id=${id}`);
-            if (!response.ok) throw new Error('Erro ao carregar programação');
+            const response = await apiFetch(`/controlepcp/api/programacoes.php?id=${id}`);
+            if (!response.ok) throw new Error('Erro ao carregar programaÃ§Ã£o');
             
             const programacao = await response.json();
             
@@ -1615,17 +1693,17 @@
             
             programacaoModal.classList.remove('is-hidden');
         } catch (error) {
-            showToast('Erro ao carregar programação: ' + error.message, 'danger');
+            showToast('Erro ao carregar programaÃ§Ã£o: ' + error.message, 'danger');
         }
     };
 
     window.deleteProgramacao = async function(id) {
-        if (!confirm('Tem certeza que deseja deletar esta programação?')) {
+        if (!confirm('Tem certeza que deseja deletar esta programaÃ§Ã£o?')) {
             return;
         }
 
         try {
-            const response = await fetch('/controlepcp/api/programacoes.php', {
+            const response = await apiFetch('/controlepcp/api/programacoes.php', {
                 method: 'DELETE',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ prg_id: id }),
@@ -1633,28 +1711,28 @@
 
             if (!response.ok) {
                 const errorResult = await response.json();
-                throw new Error(errorResult.message || 'Erro ao deletar programação');
+                throw new Error(errorResult.message || 'Erro ao deletar programaÃ§Ã£o');
             }
 
-            showToast('Programação deletada com sucesso', 'success');
+            showToast('ProgramaÃ§Ã£o deletada com sucesso', 'success');
             loadProgramacoes();
         } catch (error) {
-            showToast('Erro ao deletar programação: ' + error.message, 'danger');
+            showToast('Erro ao deletar programaÃ§Ã£o: ' + error.message, 'danger');
         }
     };
 
     function formatLocalDate(dateStr) {
-        if (!dateStr) return '—';
+        if (!dateStr) return 'â€”';
         try {
             const date = new Date(dateStr);
             return date.toLocaleDateString('pt-BR') + ' ' + date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
         } catch {
-            return '—';
+            return 'â€”';
         }
     }
 
     function formatLocalTime(timeStr) {
-        if (!timeStr) return '—';
+        if (!timeStr) return 'â€”';
         // Accepts either a time string (HH:mm or HH:mm:ss) or a full datetime.
         try {
             const normalized = timeStr.length <= 8 ? `1970-01-01T${timeStr}` : timeStr;
@@ -1676,6 +1754,16 @@
     }
 
 })();
+
+
+
+
+
+
+
+
+
+
 
 
 

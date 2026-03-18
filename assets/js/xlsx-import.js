@@ -447,6 +447,7 @@
         const matrixRows = [];
 
         sheetInfos.forEach((sheetInfo) => {
+            console.log("[MatrixImport] Reading sheet", sheetInfo.name || sheetInfo.path);
             const rows = readSheetRows(entries, sheetInfo.path, sharedStrings);
             if (!rows.length) {
                 return;
@@ -525,6 +526,8 @@
         if (!matrixRows.length) {
             throw new Error('Nenhum tempo de setup valido foi encontrado na planilha.');
         }
+
+        console.log("[MatrixImport] Matrix rows ready for save", matrixRows);
 
         return {
             rows: matrixRows,

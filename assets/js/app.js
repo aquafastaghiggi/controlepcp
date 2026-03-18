@@ -1,4 +1,4 @@
-﻿(function () {
+(function () {
     const bootstrap = window.PCP_BOOTSTRAP || { datasets: {}, sampleProgram: [] };
     const DEFAULT_SECTION = 'section-home';
     const DEFAULT_INTERVAL_DAYS = [1, 2, 3, 4, 5];
@@ -108,14 +108,24 @@
         return text.replace(/[&<>"']/g, (char) => map[char] || char);
     }
 
+    function formatTimeInputValue(value, fallback) {
+        const text = String(value || '').trim();
+        if (!text) {
+            return fallback;
+        }
+
+        const match = text.match(/^(\d{2}:\d{2})/);
+        return match ? match[1] : fallback;
+    }
+
     function normalizeInterval(interval) {
         const days = Array.isArray(interval?.days) && interval.days.length
             ? interval.days.map(Number).filter((value) => value >= 1 && value <= 7)
             : DEFAULT_INTERVAL_DAYS.slice();
 
         return {
-            start: interval?.start || '07:10',
-            end: interval?.end || '11:28',
+            start: formatTimeInputValue(interval?.start, '07:10'),
+            end: formatTimeInputValue(interval?.end, '11:28'),
             days,
         };
     }
@@ -232,7 +242,7 @@
         return persistDatasets(options);
     }
 
-    async function persistDatasets({ notify = false } = {}) {
+    async function persistDatasets({ notify = false, meta = {} } = {}) {
         if (!window.fetch) {
             return;
         }
@@ -243,7 +253,7 @@
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ datasets: state.datasets }),
+                body: JSON.stringify({ datasets: { ...state.datasets, meta } }),
             });
 
             const data = await response.json();
@@ -847,7 +857,9 @@
                 removeMatrixReferences();
                 renderAllDatasetTables();
                 renderProgram();
-                saveState();
+
+                const shouldClear = Object.keys(state.datasets.products || {}).length === 0;
+                saveState(shouldClear ? { meta: { allow_clear_products: true } } : {});
                 showToast('Registro removido.');
             });
         });
@@ -1157,7 +1169,7 @@
         pruneCatalogReferences([]);
         renderAllDatasetTables();
         renderProgram();
-        saveState();
+        saveState({ meta: { allow_clear_products: true } });
         showToast('Base de produtos limpa.');
     });
 
@@ -1754,6 +1766,7 @@
     }
 
 })();
+
 
 
 

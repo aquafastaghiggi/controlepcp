@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 declare(strict_types=1);
 
@@ -34,10 +34,10 @@ final class DatabaseData
             ];
         }
 
-        $calendar = $this->loadCalendar($line['lin_id']);
-        $products = $this->loadProducts($line['lin_id']);
+        $calendar = $this->loadCalendar((int) $line['lin_id']);
+        $products = $this->loadProducts((int) $line['lin_id']);
         $matrixData = $this->loadSetupMatrixData();
-        $sampleProgram = $this->loadLastProgram($line['lin_id']);
+        $sampleProgram = $this->loadLastProgram((int) $line['lin_id']);
 
         return [
             'calendar' => array_merge($calendar, ['line' => $line['lin_codigo']]),
@@ -48,7 +48,23 @@ final class DatabaseData
         ];
     }
 
-    private function loadLine(): ?array\r\n    {\r\n         = ->pdo->query(\r\n            'SELECT l.*\r\n             FROM lin_linhas l\r\n             WHERE EXISTS (SELECT 1 FROM mat_matriz_setup m WHERE m.mat_linha_id = l.lin_id)\r\n             ORDER BY (\r\n                 SELECT MAX(mat_id) FROM mat_matriz_setup WHERE mat_linha_id = l.lin_id\r\n             ) DESC\r\n             LIMIT 1'\r\n        );\r\n         = ->fetch();\r\n\r\n        if () {\r\n            return ;\r\n        }\r\n\r\n         = ->pdo->query('SELECT * FROM lin_linhas ORDER BY lin_id LIMIT 1');\r\n         = ->fetch();\r\n\r\n        return  ?: null;\r\n    }\r\nprivate function loadCalendar(int $lineId): array
+    private function loadLine(): ?array
+    {
+        $stmt = $this->pdo->query(
+            'SELECT l.*,'
+            . ' (SELECT COUNT(*) FROM prd_produtos p WHERE p.prd_linha_id = l.lin_id) AS products_count,'
+            . ' (SELECT COUNT(*) FROM cal_intervalos i JOIN cal_calendarios c ON c.cal_id = i.cal_calendario_id WHERE c.cal_linha_id = l.lin_id) AS intervals_count,'
+            . ' (SELECT COUNT(*) FROM mat_matriz_setup m WHERE m.mat_linha_id = l.lin_id) AS matrix_count'
+            . ' FROM lin_linhas l'
+            . ' ORDER BY (products_count + intervals_count + matrix_count) DESC, l.lin_id'
+            . ' LIMIT 1'
+        );
+        $line = $stmt->fetch();
+
+        return $line ?: null;
+    }
+
+    private function loadCalendar(int $lineId): array
     {
         $stmt = $this->pdo->prepare('SELECT * FROM cal_calendarios WHERE cal_linha_id = :lineId ORDER BY cal_id LIMIT 1');
         $stmt->execute(['lineId' => $lineId]);
@@ -67,8 +83,8 @@ final class DatabaseData
                 $days = array_map('intval', $weekdayStmt->fetchAll(PDO::FETCH_COLUMN));
 
                 $intervals[] = [
-                    'start' => $interval['cal_inicio'],
-                    'end' => $interval['cal_fim'],
+                    'start' => $this->formatTimeValue((string) $interval['cal_inicio']),
+                    'end' => $this->formatTimeValue((string) $interval['cal_fim']),
                     'days' => $days,
                 ];
             }
@@ -94,9 +110,47 @@ final class DatabaseData
         ];
     }
 
+    private function formatTimeValue(string $value): string
+    {
+        $trimmed = trim($value);
+        if ($trimmed === '') {
+            return '';
+        }
+
+        if (preg_match('/^\d{2}:\d{2}/', $trimmed) === 1) {
+            return substr($trimmed, 0, 5);
+        }
+
+        return $trimmed;
+    }
+
+    private function normalizeSkuValue(string $value): string
+    {
+        $text = trim($value);
+        if ($text === '') {
+            return '';
+        }
+
+        $text = preg_replace('/\s+/', ' ', $text) ?? $text;
+
+        if (preg_match('/^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/', $text) === 1) {
+            $num = (float) $text;
+            if (is_finite($num)) {
+                return (string) (int) $num;
+            }
+        }
+
+        return $text;
+    }
+
+    private function normalizeSkuKey(string $value): string
+    {
+        $normalized = $this->normalizeSkuValue($value);
+        return strtoupper($normalized);
+    }
+
     private function loadDefaultWorkingDays(array $calendar): array
     {
-        // O sistema espera que exista a lista de dias uteis; aqui mantemos a mesma lista de 1 a 5 por padrÃƒÆ’Ã‚Â£o.
         return [1, 2, 3, 4, 5];
     }
 
@@ -190,21 +244,47 @@ final class DatabaseData
 
     public function persistDataset(array $data): void
     {
+        $lineCode = (string) ($data['calendar']['line'] ?? 'L2');
+        $meta = isset($data['meta']) && is_array($data['meta']) ? $data['meta'] : [];
+        $allowClearProducts = !empty($meta['allow_clear_products']);
+        $allowClearMatrix = !empty($meta['allow_clear_matrix']);
+        $allowClearCalendar = !empty($meta['allow_clear_calendar']);
+
         $this->pdo->beginTransaction();
 
-        $lineCode = (string) ($data['calendar']['line'] ?? 'L2');
-        $lineId = $this->ensureLine($lineCode);
+        try {
+            $lineId = $this->ensureLine($lineCode);
+            $calendarId = $this->ensureCalendar($lineId);
 
-        $calendarId = $this->ensureCalendar($lineId);
+            $intervals = $data['calendar']['intervals'] ?? null;
+            if (is_array($intervals) && $intervals !== []) {
+                $this->replaceCalendarIntervals($calendarId, $intervals);
+            } elseif ($allowClearCalendar) {
+                $this->replaceCalendarIntervals($calendarId, []);
+            }
 
-        $this->replaceCalendarIntervals($calendarId, $data['calendar']['intervals'] ?? []);
-        $this->replaceCalendarHolidays($calendarId, $data['calendar']['holidays'] ?? []);
+            $holidays = $data['calendar']['holidays'] ?? null;
+            if (is_array($holidays)) {
+                $this->replaceCalendarHolidays($calendarId, $holidays);
+            }
 
-        $this->replaceProducts($lineId, $data['products'] ?? []);
-        $sections = $this->extractSetupMatrixSections($data, $lineCode);
-        $this->replaceSetupMatrixEntries($sections, $lineCode);
+            if (array_key_exists('products', $data) && is_array($data['products'])) {
+                if ($data['products'] !== [] || $allowClearProducts) {
+                    $this->replaceProducts($lineId, $data['products']);
+                }
+            }
 
-        $this->pdo->commit();
+            $sections = $this->extractSetupMatrixSections($data, $lineCode);
+            $this->replaceSetupMatrixEntries($sections, $lineCode, $allowClearMatrix);
+
+            $this->pdo->commit();
+        } catch (\Throwable $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+
+            throw $e;
+        }
     }
 
     private function ensureLine(string $code): int
@@ -292,8 +372,13 @@ final class DatabaseData
         );
 
         foreach ($products as $sku => $product) {
+            $normalizedSku = $this->normalizeSkuValue((string) $sku);
+            if ($normalizedSku === '') {
+                continue;
+            }
+
             $insert->execute([
-                'sku' => $sku,
+                'sku' => $normalizedSku,
                 'descricao' => (string) ($product['description'] ?? ''),
                 'ref' => (string) ($product['reference_setup'] ?? ''),
                 'lineId' => $lineId,
@@ -303,14 +388,27 @@ final class DatabaseData
         }
     }
 
-    private function replaceSetupMatrixEntries(array $sections, string $defaultLineCode): void
+    private function replaceSetupMatrixEntries(array $sections, string $defaultLineCode, bool $allowClear): void
     {
-        $this->pdo->prepare('DELETE FROM mat_matriz_setup')->execute();
+        $skuStmt = $this->pdo->query('SELECT prd_sku FROM prd_produtos');
+        $allowedSkus = [];
+        foreach ($skuStmt->fetchAll(PDO::FETCH_COLUMN) as $sku) {
+            $key = $this->normalizeSkuKey((string) $sku);
+            if ($key === '') {
+                continue;
+            }
+            $allowedSkus[$key] = $this->normalizeSkuValue((string) $sku);
+        }
 
-        $insert = $this->pdo->prepare(
-            'INSERT INTO mat_matriz_setup (mat_linha_id, mat_sku_origem, mat_sku_destino, mat_duracao_minutos) VALUES (:lineId, :from, :to, :duration)'
-        );
+        if ($allowedSkus === []) {
+            if ($allowClear) {
+                $this->pdo->prepare('DELETE FROM mat_matriz_setup')->execute();
+            }
+            return;
+        }
 
+        $validRows = [];
+        $missingSkus = [];
         $lineCache = [];
 
         foreach ($sections as $section) {
@@ -325,11 +423,26 @@ final class DatabaseData
             }
             $lineId = $lineCache[$lineCode];
 
-            $from = trim((string) ($section['from'] ?? ''));
-            $to = trim((string) ($section['to'] ?? ''));
+            $fromRaw = trim((string) ($section['from'] ?? ''));
+            $toRaw = trim((string) ($section['to'] ?? ''));
             $duration = trim((string) ($section['duration'] ?? ''));
 
-            if ($from === '' || $to === '' || $duration === '') {
+            if ($fromRaw === '' || $toRaw === '' || $duration === '') {
+                continue;
+            }
+
+            $fromKey = $this->normalizeSkuKey($fromRaw);
+            $toKey = $this->normalizeSkuKey($toRaw);
+            $from = $allowedSkus[$fromKey] ?? null;
+            $to = $allowedSkus[$toKey] ?? null;
+
+            if ($from === null || $to === null) {
+                if ($from === null) {
+                    $missingSkus[$fromKey ?: $fromRaw] = true;
+                }
+                if ($to === null) {
+                    $missingSkus[$toKey ?: $toRaw] = true;
+                }
                 continue;
             }
 
@@ -341,11 +454,38 @@ final class DatabaseData
                 continue;
             }
 
-            $insert->execute([
+            $validRows[] = [
                 'lineId' => $lineId,
                 'from' => $from,
                 'to' => $to,
                 'duration' => $minutes,
+            ];
+        }
+
+        if ($validRows === []) {
+            if ($sections !== [] && !$allowClear) {
+                $missingList = array_slice(array_keys($missingSkus), 0, 8);
+                $detail = $missingList ? ' SKUs ausentes: ' . implode(', ', $missingList) : '';
+                throw new \RuntimeException('Nenhum SKU da matriz foi encontrado na base de produtos. Importe os produtos antes da matriz.' . $detail);
+            }
+            if ($allowClear) {
+                $this->pdo->prepare('DELETE FROM mat_matriz_setup')->execute();
+            }
+            return;
+        }
+
+        $this->pdo->prepare('DELETE FROM mat_matriz_setup')->execute();
+
+        $insert = $this->pdo->prepare(
+            'INSERT INTO mat_matriz_setup (mat_linha_id, mat_sku_origem, mat_sku_destino, mat_duracao_minutos) VALUES (:lineId, :from, :to, :duration)'
+        );
+
+        foreach ($validRows as $row) {
+            $insert->execute([
+                'lineId' => $row['lineId'],
+                'from' => $row['from'],
+                'to' => $row['to'],
+                'duration' => $row['duration'],
             ]);
         }
     }
@@ -358,7 +498,7 @@ final class DatabaseData
         }
 
         if ($sections) {
-            return $sections;
+            return $this->flattenSetupMatrixSections($sections, $defaultLineCode);
         }
 
         return $this->buildSectionsFromMatrix($data['setup_matrix'] ?? [], $defaultLineCode);
@@ -385,13 +525,49 @@ final class DatabaseData
         return $rows;
     }
 
+    private function flattenSetupMatrixSections(array $sections, string $defaultLineCode): array
+    {
+        $rows = [];
+
+        foreach ($sections as $section) {
+            if (!is_array($section)) {
+                continue;
+            }
+
+            $sectionLine = trim((string) ($section['line'] ?? ''));
+            if ($sectionLine === '') {
+                $sectionLine = $defaultLineCode;
+            }
+
+            $sectionRows = $section['rows'] ?? [];
+            if (!is_array($sectionRows)) {
+                continue;
+            }
+
+            foreach ($sectionRows as $row) {
+                if (!is_array($row)) {
+                    continue;
+                }
+
+                $rowLine = trim((string) ($row['line'] ?? $sectionLine));
+                if ($rowLine === '') {
+                    $rowLine = $sectionLine;
+                }
+
+                $rows[] = [
+                    'line' => $rowLine,
+                    'from' => $row['from'] ?? '',
+                    'to' => $row['to'] ?? '',
+                    'duration' => $row['duration'] ?? '',
+                ];
+            }
+        }
+
+        return $rows;
+    }
 
     public function clearMatrix(): void
     {
         $this->pdo->prepare('DELETE FROM mat_matriz_setup')->execute();
     }
 }
-
-
-
-

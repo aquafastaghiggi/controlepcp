@@ -11,6 +11,7 @@ use PDO;
 final class DatabaseData
 {
     private PDO $pdo;
+    private ?string $preferredLineCode = null;
 
     public function __construct(?PDO $pdo = null)
     {
@@ -19,7 +20,7 @@ final class DatabaseData
 
     public function all(): array
     {
-        $line = $this->loadLine();
+        $line = $this->loadLine($this->preferredLineCode);
         if (!$line) {
             return [
                 'calendar' => [
@@ -35,7 +36,7 @@ final class DatabaseData
         }
 
         $calendar = $this->loadCalendar((int) $line['lin_id']);
-        $products = $this->loadProducts((int) $line['lin_id']);
+        $products = $this->loadProducts();
         $matrixData = $this->loadSetupMatrixData();
         $sampleProgram = $this->loadLastProgram((int) $line['lin_id']);
 
@@ -48,8 +49,15 @@ final class DatabaseData
         ];
     }
 
-    private function loadLine(): ?array
+    private function loadLine(?string $preferredLineCode = null): ?array
     {
+        if ($preferredLineCode !== null) {
+            $line = $this->fetchLineByCode($preferredLineCode);
+            if ($line) {
+                return $line;
+            }
+        }
+
         $stmt = $this->pdo->query(
             'SELECT l.*,'
             . ' (SELECT COUNT(*) FROM prd_produtos p WHERE p.prd_linha_id = l.lin_id) AS products_count,'
@@ -62,6 +70,22 @@ final class DatabaseData
         $line = $stmt->fetch();
 
         return $line ?: null;
+    }
+
+    private function fetchLineByCode(string $code): ?array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT l.*,'
+            . ' (SELECT COUNT(*) FROM prd_produtos p WHERE p.prd_linha_id = l.lin_id) AS products_count,'
+            . ' (SELECT COUNT(*) FROM cal_intervalos i JOIN cal_calendarios c ON c.cal_id = i.cal_calendario_id WHERE c.cal_linha_id = l.lin_id) AS intervals_count,'
+            . ' (SELECT COUNT(*) FROM mat_matriz_setup m WHERE m.mat_linha_id = l.lin_id) AS matrix_count'
+            . ' FROM lin_linhas l'
+            . ' WHERE l.lin_codigo = :code'
+            . ' LIMIT 1'
+        );
+        $stmt->execute(['code' => $code]);
+
+        return $stmt->fetch() ?: null;
     }
 
     private function loadCalendar(int $lineId): array
@@ -201,22 +225,37 @@ final class DatabaseData
         return strtoupper($normalized);
     }
 
+    private function normalizeLineCode(string $value): string
+    {
+        $code = trim($value);
+        if ($code === '') {
+            return '';
+        }
+
+        $code = preg_replace('/\s+/', '', $code) ?? $code;
+        return strtoupper($code);
+    }
+
     private function loadDefaultWorkingDays(array $calendar): array
     {
         return [1, 2, 3, 4, 5];
     }
 
-    private function loadProducts(int $lineId): array
+    private function loadProducts(): array
     {
-        $stmt = $this->pdo->prepare('SELECT * FROM prd_produtos WHERE prd_linha_id = :lineId ORDER BY prd_sku');
-        $stmt->execute(['lineId' => $lineId]);
+        $stmt = $this->pdo->query(
+            'SELECT p.*, l.lin_codigo AS line_code'
+            . ' FROM prd_produtos p'
+            . ' JOIN lin_linhas l ON p.prd_linha_id = l.lin_id'
+            . ' ORDER BY p.prd_sku'
+        );
 
         $products = [];
         while ($row = $stmt->fetch()) {
             $products[$row['prd_sku']] = [
                 'description' => $row['prd_descricao'],
                 'reference_setup' => $row['prd_referencia_setup'],
-                'line' => $row['prd_linha_id'],
+                'line' => $row['line_code'] ?? '',
                 'rate_per_hour' => (float) $row['prd_taxa_por_hora'],
                 'unit' => $row['prd_unidade'],
             ];
@@ -302,6 +341,9 @@ final class DatabaseData
         $allowClearMatrix = !empty($meta['allow_clear_matrix']);
         $allowClearCalendar = !empty($meta['allow_clear_calendar']);
 
+        $preferredLineCode = isset($meta['preferred_line_code']) && is_string($meta['preferred_line_code']) ? trim($meta['preferred_line_code']) : null;
+        $this->preferredLineCode = $preferredLineCode !== '' ? $preferredLineCode : null;
+
         $this->pdo->beginTransaction();
 
         try {
@@ -320,11 +362,12 @@ final class DatabaseData
                 $this->replaceCalendarHolidays($calendarId, $holidays);
             }
 
-            if (array_key_exists('products', $data) && is_array($data['products'])) {
-                if ($data['products'] !== [] || $allowClearProducts) {
-                    $this->clearMatrixForLine($lineId);
-                    $this->replaceProducts($lineId, $data['products']);
-                }
+            $productsData = array_key_exists('products', $data) && is_array($data['products'])
+                ? $data['products']
+                : [];
+
+            if ($productsData !== [] || $allowClearProducts) {
+                $this->replaceProducts($productsData, $lineCode, $allowClearProducts);
             }
 
             $sections = $this->extractSetupMatrixSections($data, $lineCode);
@@ -416,13 +459,21 @@ final class DatabaseData
         }
     }
 
-    private function replaceProducts(int $lineId, array $products): void
+    private function replaceProducts(array $products, string $defaultLineCode, bool $allowClear): void
     {
-        $this->pdo->prepare('DELETE FROM prd_produtos WHERE prd_linha_id = :lineId')->execute(['lineId' => $lineId]);
+        if ($products === []) {
+            if ($allowClear) {
+                $this->clearMatrix();
+                $this->clearProgramItems();
+                $this->pdo->prepare('DELETE FROM prd_produtos')->execute();
+            }
 
-        $insert = $this->pdo->prepare(
-            'INSERT INTO prd_produtos (prd_sku, prd_descricao, prd_referencia_setup, prd_linha_id, prd_taxa_por_hora, prd_unidade) VALUES (:sku, :descricao, :ref, :lineId, :rate, :unit)'
-        );
+            return;
+        }
+
+        $prepared = [];
+        $lineCache = [];
+        $lineIds = [];
 
         foreach ($products as $sku => $product) {
             $normalizedSku = $this->normalizeSkuValue((string) $sku);
@@ -430,13 +481,52 @@ final class DatabaseData
                 continue;
             }
 
-            $insert->execute([
+            $rawLine = (string) ($product['line'] ?? '');
+            $lineCode = $this->normalizeLineCode($rawLine);
+            if ($lineCode === '') {
+                $lineCode = $defaultLineCode;
+            }
+
+            if (!isset($lineCache[$lineCode])) {
+                $lineCache[$lineCode] = $this->ensureLine($lineCode);
+            }
+
+            $lineId = $lineCache[$lineCode];
+            $lineIds[$lineId] = true;
+
+            $prepared[] = [
                 'sku' => $normalizedSku,
-                'descricao' => (string) ($product['description'] ?? ''),
-                'ref' => (string) ($product['reference_setup'] ?? ''),
+                'description' => (string) ($product['description'] ?? ''),
+                'reference_setup' => (string) ($product['reference_setup'] ?? ''),
                 'lineId' => $lineId,
                 'rate' => (float) ($product['rate_per_hour'] ?? 0),
                 'unit' => (string) ($product['unit'] ?? ''),
+            ];
+        }
+
+        if ($prepared === []) {
+            return;
+        }
+
+        $lineIdList = array_keys($lineIds);
+        foreach ($lineIdList as $lineId) {
+            $this->clearMatrixForLine($lineId);
+        }
+
+        $this->deleteProductsByLineIds($lineIdList);
+
+        $insert = $this->pdo->prepare(
+            'INSERT INTO prd_produtos (prd_sku, prd_descricao, prd_referencia_setup, prd_linha_id, prd_taxa_por_hora, prd_unidade) VALUES (:sku, :descricao, :ref, :lineId, :rate, :unit)'
+        );
+
+        foreach ($prepared as $row) {
+            $insert->execute([
+                'sku' => $row['sku'],
+                'descricao' => $row['description'],
+                'ref' => $row['reference_setup'],
+                'lineId' => $row['lineId'],
+                'rate' => $row['rate'],
+                'unit' => $row['unit'],
             ]);
         }
     }
@@ -474,6 +564,31 @@ final class DatabaseData
 
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($params);
+    }
+
+    private function deleteProductsByLineIds(array $lineIds): void
+    {
+        $filtered = array_values(array_filter(array_unique(array_map('intval', $lineIds))));
+        if ($filtered === []) {
+            return;
+        }
+
+        $placeholders = [];
+        $params = [];
+        foreach ($filtered as $index => $lineId) {
+            $key = "line{$index}";
+            $placeholders[] = ":{$key}";
+            $params[$key] = $lineId;
+        }
+
+        $sql = 'DELETE FROM prd_produtos WHERE prd_linha_id IN (' . implode(', ', $placeholders) . ')';
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
+    }
+
+    private function clearProgramItems(): void
+    {
+        $this->pdo->prepare('DELETE FROM prg_itens')->execute();
     }
 
     private function replaceSetupMatrixEntries(array $sections, string $defaultLineCode, bool $allowClear): void

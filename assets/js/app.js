@@ -994,7 +994,7 @@
                 syncMatrixState(mergedRows);
                 renderMatrixValidated(mergedRows);
                 renderMatrixIssues(mergedRows);
-                saveState();
+                saveState({ meta: { skip_products: true } });
             });
         });
 
@@ -1005,7 +1005,7 @@
                 const mergedRows = [...preservedRows, ...activeRows];
                 syncMatrixState(mergedRows);
                 renderMatrix();
-                saveState();
+                saveState({ meta: { skip_products: true } });
                 showToast('Registro removido.');
             });
         });
@@ -1271,7 +1271,7 @@
             renderMatrixImportSummary();
             state.activeMatrixLine = getMatrixLines(imported.rows || [])[0] || '';
             renderMatrix();
-            await saveState({ notify: true });
+            await saveState({ notify: true, meta: { skip_products: true } });
             showToast(Number(imported.count || 0) + ' setups importados.');
         } catch (error) {
             console.error('[MatrixImport] import failed', error);
@@ -1319,7 +1319,7 @@
         state.matrixPageByLine[targetLine] = Math.max(1, Math.ceil(rowsInLine / pageSize));
         syncMatrixState(rows);
         renderMatrix();
-        saveState();
+        saveState({ meta: { skip_products: true } });
         showToast('Registro salvo.');
 
         window.requestAnimationFrame(() => {

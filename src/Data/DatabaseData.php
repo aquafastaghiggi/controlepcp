@@ -340,6 +340,7 @@ final class DatabaseData
         $allowClearProducts = !empty($meta['allow_clear_products']);
         $allowClearMatrix = !empty($meta['allow_clear_matrix']);
         $allowClearCalendar = !empty($meta['allow_clear_calendar']);
+        $skipProductUpdates = !empty($meta['skip_products']);
 
         $preferredLineCode = isset($meta['preferred_line_code']) && is_string($meta['preferred_line_code']) ? trim($meta['preferred_line_code']) : null;
         $this->preferredLineCode = $preferredLineCode !== '' ? $preferredLineCode : null;
@@ -366,7 +367,7 @@ final class DatabaseData
                 ? $data['products']
                 : [];
 
-            if ($productsData !== [] || $allowClearProducts) {
+            if (!$skipProductUpdates && ($productsData !== [] || $allowClearProducts)) {
                 $this->replaceProducts($productsData, $lineCode, $allowClearProducts);
             }
 

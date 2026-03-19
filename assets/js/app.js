@@ -1198,11 +1198,28 @@
             }
 
             const imported = await window.PCPXlsxImport.parseProducts(file, state.datasets.calendar.line || 'L2');
-            state.datasets.products = imported.products || {};
+            const importedProducts = imported.products || {};
+            state.datasets.products = importedProducts;
+
+            const lineCounts = {};
+            Object.values(importedProducts).forEach((product) => {
+                const line = String(product?.line || state.datasets.calendar.line || 'L2').trim();
+                if (!line) {
+                    return;
+                }
+                lineCounts[line] = (lineCounts[line] || 0) + 1;
+            });
+
+            const preferredLine = Object.keys(lineCounts)
+                .sort((left, right) => (lineCounts[right] || 0) - (lineCounts[left] || 0))[0]
+                || state.datasets.calendar.line
+                || 'L2';
+            state.datasets.calendar.line = preferredLine;
+
             pruneCatalogReferences(Object.keys(state.datasets.products));
             renderAllDatasetTables();
             renderProgram();
-            saveState();
+            await saveState({ meta: { preferred_line_code: preferredLine } });
             showToast(Number(imported.count || 0) + ' produtos importados.');
         } catch (error) {
             showToast(error.message || 'Falha ao importar o arquivo.', 'danger');
@@ -1309,17 +1326,17 @@
             showToast(error.message || 'Erro ao limpar matrizes.', 'danger');
         }
     });    addMatrixRowButton.addEventListener('click', () => {
-        const firstSku = Object.keys(state.datasets.products)[0] || '';
-        const rows = getMatrixRowsWithLine();
-        const targetLine = state.activeMatrixLine || defaultMatrixLineLabel();
-        rows.push({ line: targetLine, from: firstSku, to: firstSku, duration: '00:20' });
-        state.activeMatrixLine = targetLine;
-        const pageSize = getMatrixPageSize();
-        const rowsInLine = rows.filter((row) => row.line === targetLine).length;
-        state.matrixPageByLine[targetLine] = Math.max(1, Math.ceil(rowsInLine / pageSize));
-        syncMatrixState(rows);
-        renderMatrix();
-        saveState({ meta: { skip_products: true } });
+        //const firstSku = Object.keys(state.datasets.products)[0] || '';
+        //const rows = getMatrixRowsWithLine();
+        ///const targetLine = state.activeMatrixLine || defaultMatrixLineLabel();
+        //rows.push({ line: targetLine, from: firstSku, to: firstSku, duration: '00:20' });
+        //state.activeMatrixLine = targetLine;
+        //const pageSize = getMatrixPageSize();
+        //const rowsInLine = rows.filter((row) => row.line === targetLine).length;
+        //state.matrixPageByLine[targetLine] = Math.max(1, Math.ceil(rowsInLine / pageSize));
+        //syncMatrixState(rows);
+        //renderMatrix();
+        //saveState({ meta: { skip_products: true } });
         showToast('Registro salvo.');
 
         window.requestAnimationFrame(() => {
@@ -1823,6 +1840,7 @@
     }
 
 })();
+
 
 
 

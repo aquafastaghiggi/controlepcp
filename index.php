@@ -166,6 +166,10 @@ $datasets = $databaseData->all();
                         </div>
                     </div>
 
+                    <div class="matrix-import-summary" id="matrix-import-summary">
+                        <p class="matrix-import-summary-empty">Nenhuma planilha importada recentemente.</p>
+                    </div>
+
                     <div class="matrix-toolbar">
                         <div id="matrix-line-nav" class="matrix-line-nav"></div>
                         <div class="matrix-toolbar-actions">
@@ -333,7 +337,7 @@ $datasets = $databaseData->all();
                                     </label>
                                     <label class="field">
                                         <span>Linha</span>
-                                        <input type="text" name="lin_codigo" value="L2" placeholder="L2">
+                                        <input type="text" name="lin_codigo" placeholder="Informe a linha">
                                     </label>
                                 </div>
                                 <div class="field-grid">

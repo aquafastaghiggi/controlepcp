@@ -445,20 +445,18 @@
         const sharedStrings = readSharedStrings(entries);
         const sheetInfos = resolveSheetInfos(entries);
         const matrixRows = [];
+        const sheetSummaries = [];
 
-        sheetInfos.forEach((sheetInfo) => {
-            console.log("[MatrixImport] Reading sheet", sheetInfo.name || sheetInfo.path);
+        sheetInfos.forEach((sheetInfo, sheetIndex) => {
+            const sheetLabel = String(sheetInfo.name || '').trim() || `Planilha ${sheetIndex + 1}`;
+            console.log("[MatrixImport] Reading sheet", sheetLabel || sheetInfo.path);
             const rows = readSheetRows(entries, sheetInfo.path, sharedStrings);
-            if (!rows.length) {
-                return;
-            }
-
-            const currentLine = normalizeMatrixLineLabel(sheetInfo.name || '');
+            const currentLine = normalizeMatrixLineLabel(sheetLabel || '');
             const headerRow = rows[0] || {};
             const columns = detectMatrixColumns(headerRow);
             const hasExplicitColumns = isMatrixHeaderRow(headerRow);
-
             const dataRows = hasExplicitColumns ? rows.slice(1) : rows;
+            let sheetRowCount = 0;
 
             dataRows.forEach((row) => {
                 const originRaw = String(row[columns.from] ?? '').trim();
@@ -468,8 +466,6 @@
                 const concatenated = String(row[0] ?? '').trim();
                 const timeValue = durationRaw || String(row[2] || row[1] || '').trim();
 
-                // If the uploaded sheet uses the "concatenated SKU + duration" layout,
-                // the second column may contain the duration (not the destination SKU).
                 const destinationLooksLikeDuration = /^\d{1,2}:\d{2}(?::\d{2})?$/.test(destinationRaw) || parseNumber(destinationRaw) !== null;
 
                 const originLooksLikeConcatenatedSkus = /\s+/.test(originRaw);
@@ -486,14 +482,11 @@
                 let destination = normalizeSku(destinationRaw);
 
                 if (!origin || !destination) {
-                    // Fallback for legacy layout: "ORIGEM DESTINO" in first cell.
-                    // Prefer splitting by common separators first to preserve names with spaces.
                     const separatorMatch = concatenated.split(/\s*(?:->|=>|;|\||\/)\s*/).filter(Boolean);
                     if (separatorMatch.length >= 2) {
                         origin = normalizeSku(separatorMatch[0]);
                         destination = normalizeSku(separatorMatch[1]);
                     } else {
-                        // Last resort: two tokens (works only if SKUs have no spaces, e.g. numeric codes)
                         const skuParts = concatenated.split(/\s+/).filter(Boolean);
                         if (skuParts.length < 2) {
                             return;
@@ -520,6 +513,13 @@
                     to: destination,
                     duration,
                 });
+                sheetRowCount += 1;
+            });
+
+            sheetSummaries.push({
+                sheetName: sheetLabel,
+                lineLabel: currentLine || 'SEM LINHA',
+                count: sheetRowCount,
             });
         });
 
@@ -532,6 +532,7 @@
         return {
             rows: matrixRows,
             count: matrixRows.length,
+            sheetSummaries,
         };
     }
 

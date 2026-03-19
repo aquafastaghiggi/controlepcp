@@ -52,6 +52,7 @@
     const matrixIssuesToggle = document.getElementById('matrix-issues-toggle');
     const matrixIssuesPanel = document.getElementById('matrix-issues-panel');
     const matrixIssuesBody = document.getElementById('matrix-issues-body');
+    const matrixImportSummary = document.getElementById('matrix-import-summary');
     const resultPanel = document.getElementById('result-panel');
     const resultBody = document.getElementById('result-body');
     const resultStatus = document.getElementById('result-status');
@@ -75,6 +76,7 @@
         activeSection: DEFAULT_SECTION,
         activeMatrixLine: '',
         matrixPageByLine: {},
+        matrixImportSheets: [],
         showMatrixValid: false,
         showMatrixIssues: false,
     };
@@ -408,6 +410,35 @@
         state.datasets.setup_matrix_sections = buildMatrixSections(rows);
     }
 
+    function renderMatrixImportSummary(sheets = state.matrixImportSheets) {
+        if (!matrixImportSummary) {
+            return;
+        }
+
+        const entries = Array.isArray(sheets) ? sheets : [];
+        if (!entries.length) {
+            matrixImportSummary.innerHTML = '<p class="matrix-import-summary-empty">Nenhuma planilha importada recentemente.</p>';
+            return;
+        }
+
+        matrixImportSummary.innerHTML = `
+            <div class="matrix-import-summary-heading">Planilhas importadas</div>
+            <div class="matrix-import-summary-list">
+                ${entries.map((sheet) => {
+                    const name = escapeHtml(sheet.sheetName || 'Planilha');
+                    const line = escapeHtml(sheet.lineLabel || 'SEM LINHA');
+                    const count = Number.isFinite(sheet.count) ? sheet.count : 0;
+                    const badge = count === 1 ? 'registro' : 'registros';
+                    return `
+                        <div class="matrix-import-summary-item">
+                            <strong>${line}</strong>
+                            <span class="matrix-import-summary-sheet">${name}</span>
+                            <span class="matrix-import-summary-count">${count} ${badge}</span>
+                        </div>`;
+                }).join('')}
+            </div>
+        `;
+    }
     function defaultMatrixLineLabel() {
         const value = String(state.datasets.calendar.line || '').trim();
         if (!value) {
@@ -959,6 +990,7 @@
                 showToast('Registro removido.');
             });
         });
+        renderMatrixImportSummary();
     }
     function renderProgram() {
         programBody.innerHTML = '';
@@ -1212,6 +1244,12 @@
 
             const imported = await window.PCPXlsxImport.parseMatrix(file);
             syncMatrixState(imported.rows || []);
+            state.matrixImportSheets = (imported.sheetSummaries || []).map((sheet) => ({
+                sheetName: sheet.sheetName || '',
+                lineLabel: sheet.lineLabel || '',
+                count: Number.isFinite(sheet.count) ? sheet.count : 0,
+            }));
+            renderMatrixImportSummary();
             state.activeMatrixLine = getMatrixLines(imported.rows || [])[0] || '';
             renderMatrix();
             await saveState({ notify: true });

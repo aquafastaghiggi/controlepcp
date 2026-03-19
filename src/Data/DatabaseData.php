@@ -56,7 +56,7 @@ final class DatabaseData
             . ' (SELECT COUNT(*) FROM cal_intervalos i JOIN cal_calendarios c ON c.cal_id = i.cal_calendario_id WHERE c.cal_linha_id = l.lin_id) AS intervals_count,'
             . ' (SELECT COUNT(*) FROM mat_matriz_setup m WHERE m.mat_linha_id = l.lin_id) AS matrix_count'
             . ' FROM lin_linhas l'
-            . ' ORDER BY (products_count + intervals_count + matrix_count) DESC, l.lin_id'
+            . ' ORDER BY products_count DESC, (intervals_count + matrix_count) DESC, l.lin_id'
             . ' LIMIT 1'
         );
         $line = $stmt->fetch();
@@ -66,48 +66,100 @@ final class DatabaseData
 
     private function loadCalendar(int $lineId): array
     {
-        $stmt = $this->pdo->prepare('SELECT * FROM cal_calendarios WHERE cal_linha_id = :lineId ORDER BY cal_id LIMIT 1');
-        $stmt->execute(['lineId' => $lineId]);
-        $calendar = $stmt->fetch() ?: [];
+        $calendar = $this->fetchCalendarForLine($lineId);
+        $calendarId = $calendar ? (int) $calendar['cal_id'] : null;
 
-        $intervals = [];
+        $intervals = $this->loadCalendarIntervalsForId($calendarId);
 
-        if ($calendar) {
-            $intervalStmt = $this->pdo->prepare('SELECT * FROM cal_intervalos WHERE cal_calendario_id = :calId ORDER BY cal_id');
-            $intervalStmt->execute(['calId' => $calendar['cal_id']]);
-
-            while ($interval = $intervalStmt->fetch()) {
-                $weekdayStmt = $this->pdo->prepare('SELECT diu_dia_peq FROM cal_dias_uteis WHERE diu_intervalo_id = :intervalId');
-                $weekdayStmt->execute(['intervalId' => $interval['cal_id']]);
-
-                $days = array_map('intval', $weekdayStmt->fetchAll(PDO::FETCH_COLUMN));
-
-                $intervals[] = [
-                    'start' => $this->formatTimeValue((string) $interval['cal_inicio']),
-                    'end' => $this->formatTimeValue((string) $interval['cal_fim']),
-                    'days' => $days,
-                ];
+        if ($intervals === []) {
+            $fallbackCalendar = $this->fetchAnyCalendarWithIntervals($calendarId);
+            if ($fallbackCalendar) {
+                $calendar = $fallbackCalendar;
+                $calendarId = (int) $calendar['cal_id'];
+                $intervals = $this->loadCalendarIntervalsForId($calendarId);
             }
         }
 
-        $holidays = [];
-        if ($calendar) {
-            $holidayStmt = $this->pdo->prepare('SELECT cal_data, cal_nome FROM cal_feriados WHERE cal_calendario_id = :calId ORDER BY cal_data');
-            $holidayStmt->execute(['calId' => $calendar['cal_id']]);
-
-            while ($holiday = $holidayStmt->fetch()) {
-                $holidays[] = [
-                    'date' => $holiday['cal_data'],
-                    'name' => $holiday['cal_nome'],
-                ];
-            }
-        }
+        $holidays = $this->loadCalendarHolidaysForId($calendarId);
 
         return [
-            'working_days' => $this->loadDefaultWorkingDays($calendar),
+            'working_days' => $this->loadDefaultWorkingDays($calendar ?? []),
             'holidays' => $holidays,
             'intervals' => $intervals,
         ];
+    }
+
+    private function fetchCalendarForLine(int $lineId): ?array
+    {
+        $stmt = $this->pdo->prepare('SELECT * FROM cal_calendarios WHERE cal_linha_id = :lineId ORDER BY cal_id LIMIT 1');
+        $stmt->execute(['lineId' => $lineId]);
+
+        return $stmt->fetch() ?: null;
+    }
+
+    private function fetchAnyCalendarWithIntervals(?int $excludeCalendarId = null): ?array
+    {
+        $sql = 'SELECT c.* FROM cal_calendarios c WHERE EXISTS (SELECT 1 FROM cal_intervalos i WHERE i.cal_calendario_id = c.cal_id)';
+        $params = [];
+
+        if ($excludeCalendarId !== null) {
+            $sql .= ' AND c.cal_id != :exclude';
+            $params['exclude'] = $excludeCalendarId;
+        }
+
+        $sql .= ' ORDER BY c.cal_id LIMIT 1';
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
+
+        return $stmt->fetch() ?: null;
+    }
+
+    private function loadCalendarIntervalsForId(?int $calendarId): array
+    {
+        if ($calendarId === null) {
+            return [];
+        }
+
+        $intervalStmt = $this->pdo->prepare('SELECT * FROM cal_intervalos WHERE cal_calendario_id = :calId ORDER BY cal_id');
+        $intervalStmt->execute(['calId' => $calendarId]);
+
+        $weekdayStmt = $this->pdo->prepare('SELECT diu_dia_peq FROM cal_dias_uteis WHERE diu_intervalo_id = :intervalId');
+
+        $intervals = [];
+        while ($interval = $intervalStmt->fetch()) {
+            $weekdayStmt->execute(['intervalId' => $interval['cal_id']]);
+
+            $days = array_map('intval', $weekdayStmt->fetchAll(PDO::FETCH_COLUMN));
+
+            $intervals[] = [
+                'start' => $this->formatTimeValue((string) $interval['cal_inicio']),
+                'end' => $this->formatTimeValue((string) $interval['cal_fim']),
+                'days' => $days,
+            ];
+        }
+
+        return $intervals;
+    }
+
+    private function loadCalendarHolidaysForId(?int $calendarId): array
+    {
+        if ($calendarId === null) {
+            return [];
+        }
+
+        $holidayStmt = $this->pdo->prepare('SELECT cal_data, cal_nome FROM cal_feriados WHERE cal_calendario_id = :calId ORDER BY cal_data');
+        $holidayStmt->execute(['calId' => $calendarId]);
+
+        $holidays = [];
+        while ($holiday = $holidayStmt->fetch()) {
+            $holidays[] = [
+                'date' => $holiday['cal_data'],
+                'name' => $holiday['cal_nome'],
+            ];
+        }
+
+        return $holidays;
     }
 
     private function formatTimeValue(string $value): string
@@ -270,6 +322,7 @@ final class DatabaseData
 
             if (array_key_exists('products', $data) && is_array($data['products'])) {
                 if ($data['products'] !== [] || $allowClearProducts) {
+                    $this->clearMatrixForLine($lineId);
                     $this->replaceProducts($lineId, $data['products']);
                 }
             }
@@ -387,6 +440,42 @@ final class DatabaseData
             ]);
         }
     }
+
+    private function clearMatrixForLine(int $lineId): void
+    {
+        $skuStmt = $this->pdo->prepare('SELECT prd_sku FROM prd_produtos WHERE prd_linha_id = :lineId');
+        $skuStmt->execute(['lineId' => $lineId]);
+        $skus = array_filter($skuStmt->fetchAll(PDO::FETCH_COLUMN));
+
+        if ($skus === []) {
+            return;
+        }
+
+        $originPlaceholders = [];
+        $destinationPlaceholders = [];
+        $params = [];
+
+        foreach ($skus as $index => $sku) {
+            $originKey = "origin{$index}";
+            $destinationKey = "destination{$index}";
+            $originPlaceholders[] = ":{$originKey}";
+            $destinationPlaceholders[] = ":{$destinationKey}";
+            $params[$originKey] = $sku;
+            $params[$destinationKey] = $sku;
+        }
+
+        $originList = implode(', ', $originPlaceholders);
+        $destinationList = implode(', ', $destinationPlaceholders);
+        $sql = sprintf(
+            'DELETE FROM mat_matriz_setup WHERE mat_sku_origem IN (%s) OR mat_sku_destino IN (%s)',
+            $originList,
+            $destinationList
+        );
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
+    }
+
     private function replaceSetupMatrixEntries(array $sections, string $defaultLineCode, bool $allowClear): void
     {
         $skuStmt = $this->pdo->query('SELECT prd_sku FROM prd_produtos');
@@ -580,3 +669,6 @@ final class DatabaseData
         $this->pdo->prepare('DELETE FROM mat_matriz_setup')->execute();
     }
 }
+
+
+

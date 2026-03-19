@@ -387,7 +387,6 @@ final class DatabaseData
             ]);
         }
     }
-
     private function replaceSetupMatrixEntries(array $sections, string $defaultLineCode, bool $allowClear): void
     {
         $skuStmt = $this->pdo->query('SELECT prd_sku FROM prd_produtos');
@@ -401,6 +400,9 @@ final class DatabaseData
         }
 
         if ($allowedSkus === []) {
+            if ($sections !== [] && !$allowClear) {
+                throw new \RuntimeException('Importe os produtos antes de importar a matriz.');
+            }
             if ($allowClear) {
                 $this->pdo->prepare('DELETE FROM mat_matriz_setup')->execute();
             }
@@ -473,6 +475,13 @@ final class DatabaseData
             }
             return;
         }
+
+        $uniqueRows = [];
+        foreach ($validRows as $row) {
+            $key = sprintf('%d|%s|%s', $row['lineId'], $row['from'], $row['to']);
+            $uniqueRows[$key] = $row;
+        }
+        $validRows = array_values($uniqueRows);
 
         $this->pdo->prepare('DELETE FROM mat_matriz_setup')->execute();
 

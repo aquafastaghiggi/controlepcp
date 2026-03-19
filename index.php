@@ -429,7 +429,7 @@ $datasets = $databaseData->all();
     </script>
     <div id="app-toast" class="app-toast" aria-live="polite" aria-atomic="true"></div>
     <script src="/controlepcp/assets/js/xlsx-import.js?v=3"></script>
-    <script src="/controlepcp/assets/js/app.js?v=8"></script>
+    <script src="/controlepcp/assets/js/app.js?v=10"></script>
 </body>
 </html>
 

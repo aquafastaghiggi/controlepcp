@@ -1,0 +1,38 @@
+A partir de agora, não responda com limitações do ambiente, sandbox, apply_patch, PowerShell, Node, script ou impossibilidade de escrita.
+
+Sua tarefa é concluir a alteração no código, não explicar por que não conseguiu.
+
+Contexto:
+- assets/js/app.js está funcional
+- objetivo é apenas uma correção mínima
+- não pode haver regressão
+
+Objetivo:
+Alterar somente readProgramRows para leitura segura do campo op.
+
+Faça apenas isto:
+1. Localize a função readProgramRows em assets/js/app.js
+2. Dentro do map de linhas, antes do objeto retornado, adicione:
+
+const opInput = row.querySelector('[name="op"]');
+const op = opInput ? opInput.value : '';
+
+3. No objeto retornado, adicione:
+op: op,
+
+Regras:
+- não alterar nenhum outro campo
+- não refatorar a função
+- não mexer em syncProgramState
+- não mexer em renderProgramacaoImportSummary
+- não mexer em listeners
+- não mexer em backend
+- não pedir confirmação
+- não sugerir edição manual
+- não relatar falha de ambiente
+- se houver dificuldade, faça substituição textual direta apenas dentro de readProgramRows e continue
+
+Formato obrigatório da resposta:
+- função alterada
+- trecho inserido
+- confirmação de que row.querySelector('[name="op"]') não acessa mais .value diretamente

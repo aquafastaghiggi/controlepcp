@@ -1,0 +1,23 @@
+*** Begin Patch
+*** Update File: assets/js/app.js
+@@
+-    function renderResult(result, persist = true) {\r\n        state.result = result;\r\n        renderSummary(result);\r\n        renderRows(result.rows || []);\r\n\r\n        const meta = result.meta ?? {};\r\n        const metaErrors = Array.isArray(meta.errors) ? meta.errors : [];\r\n        const hasErrors = metaErrors.length > 0;\r\n        setStatus(hasErrors ? Calculado com alertas : Calculado, hasErrors ? warning : success);\r\n\r\n        toggleResultPanel(true);\r\n        disableCalculateMode();\r\n\r\n        if (persist) {\r\n            saveState();\r\n        }\r\n\r\n        return true;\r\n    }
++    function renderResult(result, persist = true) {
++        state.result = result;
++        renderSummary(result);
++        renderRows(result.rows || []);
++
++        const metaErrors = Array.isArray(result?.meta?.errors) ? result.meta.errors : [];
++        const hasErrors = metaErrors.length > 0;
++        setStatus(hasErrors ? 'Calculado com alertas' : 'Calculado', hasErrors ? 'warning' : 'success');
++
++        toggleResultPanel(true);
++        disableCalculateMode();
++
++        if (persist) {
++            saveState();
++        }
++
++        return !hasErrors;
++    }
+*** End Patch

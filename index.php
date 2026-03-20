@@ -70,8 +70,8 @@ $datasets = $databaseData->all();
                             <span>Defina o setup entre origem e destino.</span>
                         </button>
                         <button type="button" class="home-card" data-target="section-program">
-                            <strong>Programa&ccedil;&atilde;o de PCP</strong>
-                            <span>Monte a sequencia e calcule a producao.</span>
+                            <strong>Programação de PCP</strong>
+                            <span>Monte a sequência e calcule a produção.</span>
                         </button>
                         <button type="button" class="home-card" data-target="section-programacoes">
                             <strong>Histórico de Programações</strong>
@@ -206,12 +206,23 @@ $datasets = $databaseData->all();
                 <section class="panel app-section" id="section-program">
                     <div class="panel-heading">
                         <div>
-                            <h2>Programa&ccedil;&atilde;o de PCP</h2>
-                            <p>Informe o inicio base, preencha os itens e deixe as proximas datas por conta do calculo.</p>
+                            <h2>Programação de PCP</h2>
+                            <p>Informe o início base, preencha os itens e deixe as próximas datas por conta do cálculo.</p>
                         </div>
                         <div class="panel-actions">
                             <button type="button" id="new-programacao-btn" class="ghost-button">+ Nova Programação</button>
                             <button type="button" id="add-row" class="ghost-button">Adicionar item</button>
+                            <input type="file" id="programacao-import-file" class="is-hidden" accept=".xlsx">
+                            <button type="button" id="import-programacao" class="ghost-button">Importar Excel</button>
+                        </div>
+                    </div>
+
+                    <div class="programacao-import-wrapper">
+                        <div class="programacao-import-note">
+                            <p class="muted">Importe um arquivo Excel para exibir as abas por linha e carregar os itens na programação.</p>
+                        </div>
+                        <div id="programacao-import-sheets" class="programacao-import-sheets">
+                            <p class="muted">Nenhuma aba importada ainda.</p>
                         </div>
                     </div>
 
@@ -222,7 +233,7 @@ $datasets = $databaseData->all();
                                 <input type="text" name="numero_op" placeholder="Ex: OP-2024-001">
                             </label>
                             <label class="field">
-                                <span>Eficiencia de producao (%)</span>
+                                <span>Eficiência de produção (%)</span>
                                 <input type="text" name="production_efficiency" value="100" inputmode="decimal" placeholder="100">
                             </label>
                         </div>
@@ -235,6 +246,7 @@ $datasets = $databaseData->all();
                                 <thead>
                                     <tr>
                                         <th>Seq.</th>
+                                        <th>OP</th>
                                         <th>SKU</th>
                                         <th>Quantidade (cx)</th>
                                         <th>Inicio informado (1&ordm; item)</th>
@@ -246,8 +258,8 @@ $datasets = $databaseData->all();
                         </div>
 
                         <div class="form-actions">
-                            <button type="button" id="clear-simulation" class="ghost-button">Limpar programacao</button>
-                            <button type="submit" class="primary-button">Calcular programacao</button>
+                            <button type="button" id="clear-simulation" class="ghost-button">Limpar programação</button>
+                            <button type="submit" class="primary-button">Calcular programação</button>
                         </div>
                     </form>
 
@@ -280,7 +292,7 @@ $datasets = $databaseData->all();
                                 </thead>
                                 <tbody id="result-body">
                                     <tr class="empty-state-row">
-                                        <td colspan="10">Nenhuma simulacao calculada ainda.</td>
+                                        <td colspan="10">Nenhuma simulação calculada ainda.</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -299,7 +311,7 @@ $datasets = $databaseData->all();
                     <div class="field-grid">
                         <label class="field">
                             <span>Buscar por Número da OP</span>
-                            <input type="text" id="search-op" placeholder="Digite o número da OP para buscar">
+                            <input type="text" id="search-op" placeholder="Digite o Número da OP para buscar">
                         </label>
                     </div>
 
@@ -325,7 +337,7 @@ $datasets = $databaseData->all();
                     <div class="modal-overlay is-hidden" id="programacao-modal">
                         <div class="modal-dialog">
                             <div class="modal-header">
-                                <h3>Programação</h3>
+                                <h3>programação</h3>
                                 <button type="button" class="close-button" data-action="close-modal">&times;</button>
                             </div>
                             <form id="programacao-form">
@@ -376,7 +388,7 @@ $datasets = $databaseData->all();
                     <div class="modal-overlay is-hidden" id="programacao-details-modal">
                         <div class="modal-dialog modal-dialog-large">
                             <div class="modal-header">
-                                <h3>Resultado da Programação - OP: <span id="details-op-number">—</span></h3>
+                                <h3>Resultado da programação - OP: <span id="details-op-number">—</span></h3>
                                 <button type="button" class="close-button" data-action="close-details-modal">&times;</button>
                             </div>
                             <div class="modal-content">
@@ -417,10 +429,6 @@ $datasets = $databaseData->all();
         </main>
     </div>
 
-                        </div>
-                    </section>
-                </section>
-
     <script>
         window.PCP_BOOTSTRAP = <?= json_encode([
             'datasets' => $datasets,
@@ -432,6 +440,3 @@ $datasets = $databaseData->all();
     <script src="/controlepcp/assets/js/app.js?v=10"></script>
 </body>
 </html>
-
-
-

@@ -473,42 +473,48 @@
 
         const programadoCount = entries.filter((sheet) => sheet.status === 'programado').length;
         const buttonsHtml = entries.map((sheet, index) => {
-            const lineLabel = escapeHtml(sheet.lineLabel || sheet.lineCode || sheet.sheetName || `Linha \${index + 1}`);
-            const isProgramado = sheet.status === 'programado';
-            const status = isProgramado ? 'programado' : 'programar';
-            const statusLabel = isProgramado ? 'Programado' : 'Programar';
-            const buttonClass = isProgramado ? 'primary-button' : 'ghost-button';
+            const lineLabel = escapeHtml(sheet.lineLabel || sheet.lineCode || sheet.sheetName || 'Linha ' + String(index + 1));
+            const status = sheet.status === 'programado' ? 'programado' : 'programar';
+            const isProgramado = status === 'programado';
+            const label = isProgramado ? 'Programado' : 'Programar';
             const disabledAttr = isProgramado ? 'disabled' : '';
-            return `
-                <div class="programacao-import-sheet-item">
-                    <button type="button" class="\${buttonClass} programacao-import-sheet-button programacao-import-sheet-button--\${status}" \${disabledAttr} data-programacao-sheet="\${index}">
-                        <span class="programacao-import-sheet-line">Carregar \${lineLabel}</span>
-                        <span class="programacao-import-sheet-status">\${statusLabel}</span>
-                    </button>
-                </div>`;
+            const buttonStyle = isProgramado ? 'background:#16a34a;color:#fff;border:none;' : '';
+            const badgeStyle = isProgramado ? 'background:#16a34a;color:#fff;' : 'background:#e5e7eb;color:#111;';
+            return '<div class="programacao-import-sheet-item" style="margin-bottom:12px;">' +
+                '<button type="button" class="programacao-import-sheet-button programacao-import-sheet-button--' + status + '" ' +
+                'data-programacao-sheet="' + String(index) + '" ' +
+                'data-programacao-status="' + status + '" ' +
+                'style="border-radius:12px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;gap:12px;' + buttonStyle + '" ' +
+                disabledAttr + '>' +
+                    '<span class="programacao-import-sheet-line">Carregar ' + lineLabel + '</span>' +
+                    '<span class="programacao-import-sheet-status" style="border-radius:999px;padding:4px 10px;font-size:12px;' + badgeStyle + '">' +
+                        label +
+                    '</span>' +
+                '</button>' +
+            '</div>';
         }).join('');
+        const summaryHeading = '<div class="programacao-import-summary-heading">Abas importadas</div>';
+        const summaryMeta = '<div class="programacao-import-summary-meta">' +
+            '<span>' + entries.length + ' ' + (entries.length === 1 ? 'aba importada' : 'abas importadas') + '</span>' +
+            '<span>' + programadoCount + ' ' + (programadoCount === 1 ? 'programado' : 'programados') + '</span>' +
+        '</div>';
+        const sheetList = '<div class="programacao-import-sheet-list">' + buttonsHtml + '</div>';
 
-        programacaoImportSheets.innerHTML = `
-            <div class="programacao-import-summary-heading">Abas importadas</div>
-            <div class="programacao-import-summary-meta">
-                <span>\${entries.length} \${entries.length === 1 ? 'aba' : 'abas'} importada\${entries.length === 1 ? '' : 's'}</span>
-                <span>\${programadoCount} programado\${programadoCount === 1 ? '' : 's'}</span>
-            </div>
-            <div class="programacao-import-sheet-list">
-                \${buttonsHtml}
-            </div>
-        `;
+        programacaoImportSheets.innerHTML = summaryHeading + summaryMeta + sheetList;
 
         programacaoImportSheets.querySelectorAll('[data-programacao-sheet]').forEach((button) => {
-            button.addEventListener('click', () => {
-                if (button.disabled) {
+            button.addEventListener('click', (event) => {
+                const status = button.dataset.programacaoStatus;
+                if (button.disabled || status === 'programado') {
+                    event.preventDefault();
+                    showToast('OP já calculada', 'warning');
                     return;
                 }
                 const index = Number(button.dataset.programacaoSheet);
                 applyProgramacaoSheet(index);
             });
-        });    }
-
+        });
+    }
 function applyProgramacaoSheet(index) {
         const sheet = Array.isArray(state.programacaoImportSheets)
             ? state.programacaoImportSheets[index]
@@ -2053,62 +2059,4 @@ function applyProgramacaoSheet(index) {
     }
 
 })();
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

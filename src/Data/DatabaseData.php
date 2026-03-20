@@ -13,9 +13,13 @@ final class DatabaseData
     private PDO $pdo;
     private ?string $preferredLineCode = null;
 
-    public function __construct(?PDO $pdo = null)
+    public function __construct(?PDO $pdo = null, ?string $preferredLineCode = null)
     {
         $this->pdo = $pdo ?? Connection::get();
+        if ($preferredLineCode !== null) {
+            $normalized = $this->normalizeLineCode($preferredLineCode);
+            $this->preferredLineCode = $normalized !== '' ? $normalized : null;
+        }
     }
 
     public function all(): array

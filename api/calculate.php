@@ -9,6 +9,20 @@ use App\Repository\ProgramacaoRepository;
 use App\Services\Scheduler;
 use App\Support\DateTimeHelper;
 
+function normalize_line_code(?string $value): ?string
+{
+    if ($value === null) {
+        return null;
+    }
+
+    $clean = preg_replace('/[^a-zA-Z0-9]/', '', trim($value));
+    if ($clean === '') {
+        return null;
+    }
+
+    return strtoupper($clean);
+}
+
 header('Content-Type: application/json; charset=utf-8');
 
 $payload = json_decode((string) file_get_contents('php://input'), true);
@@ -18,6 +32,8 @@ if (!is_array($payload)) {
     echo json_encode(['message' => 'Payload invalido.'], JSON_UNESCAPED_UNICODE);
     exit;
 }
+
+$lineCode = !empty($payload['line_code']) ? normalize_line_code((string) $payload['line_code']) : null;
 
 $baseStart = DateTimeHelper::fromLocalInput((string) ($payload['base_start'] ?? ''));
 $queryDateTime = DateTimeHelper::fromLocalInput((string) ($payload['query_datetime'] ?? ''));
@@ -39,15 +55,19 @@ if (!is_array($program) || $program === []) {
 
 $productionEfficiency = $productionEfficiency <= 0 ? 100.0 : $productionEfficiency;
 
-$datasetRepo = new DatabaseData();
+$datasetRepo = new DatabaseData(null, $lineCode);
 $datasets = $datasetRepo->all();
+$effectiveLine = $lineCode ?? ($datasets['calendar']['line'] ?? '');
+if ($effectiveLine === '') {
+    $effectiveLine = 'L2';
+}
 
 $scheduler = new Scheduler($datasets);
 $result = $scheduler->calculate($program, $baseStart, $queryDateTime, $productionEfficiency);
 
 $programRepo = new ProgramacaoRepository();
 $programRepo->salvarExecucao(
-    $datasets['calendar']['line'],
+    $effectiveLine,
     $baseStart,
     $queryDateTime,
     $productionEfficiency,

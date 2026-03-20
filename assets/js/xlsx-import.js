@@ -536,9 +536,218 @@
         };
     }
 
-    window.PCPXlsxImport = {
+    
+    function detectProgramColumns(headerRow) {
+        const columns = {
+            op: null,
+            scheduledDate: null,
+            sequence: null,
+            sku: null,
+            quantity: null,
+        };
+
+        if (!headerRow) {
+            return columns;
+        }
+
+        Object.entries(headerRow).forEach(([index, label]) => {
+            const normalized = normalizeHeader(label);
+
+            if (columns.op === null && matchesAny(normalized, ['op', 'numero da op', 'numero op', 'ordem de producao', 'pedido'])) {
+                columns.op = Number(index);
+                return;
+            }
+
+            if (columns.sequence === null && matchesAny(normalized, ['sequencia', 'seq', 'ordem', 'ordem de execucao'])) {
+                columns.sequence = Number(index);
+                return;
+            }
+
+            if (columns.sku === null && matchesAny(normalized, ['codigo material', 'cod material', 'produto', 'sku', 'codigo produto'])) {
+                columns.sku = Number(index);
+                return;
+            }
+
+            if (columns.quantity === null && matchesAny(normalized, ['quantidade', 'qtd', 'qtde', 'volume', 'caixas', 'qty'])) {
+                columns.quantity = Number(index);
+                return;
+            }
+
+            if (columns.scheduledDate === null && matchesAny(normalized, ['data programada', 'data prevista', 'data programacao', 'data de programacao', 'data'])) {
+                columns.scheduledDate = Number(index);
+            }
+        });
+
+        return columns;
+    }
+
+    function locateProgramHeader(rows) {
+        if (!Array.isArray(rows)) {
+            return null;
+        }
+
+        for (let index = 0; index < rows.length; index += 1) {
+            const columns = detectProgramColumns(rows[index]);
+            if (columns.op !== null && columns.sequence !== null && columns.sku !== null && columns.quantity !== null && columns.scheduledDate !== null) {
+                return { columns, headerIndex: index };
+            }
+        }
+
+        return null;
+    }
+
+    function guessProgramLineCode(label) {
+        const text = String(label || '').trim();
+        if (!text) {
+            return '';
+        }
+
+        const digits = text.match(/\d+/);
+        if (digits && digits[0]) {
+            const numeric = Number(digits[0]);
+            if (Number.isFinite(numeric)) {
+                return 'L' + numeric;
+            }
+        }
+
+        if (/^L\d+/i.test(text)) {
+            return text.toUpperCase().replace(/\s+/g, '');
+        }
+
+        const cleaned = text.replace(/[^A-Za-z0-9]/g, '');
+        return cleaned ? cleaned.toUpperCase() : text.toUpperCase();
+    }
+
+    function formatProgramDate(value) {
+        const text = String(value || '').trim();
+        if (!text) {
+            return '';
+        }
+
+        if (/^\d{4}-\d{2}-\d{2}/.test(text)) {
+            return text.substring(0, 10);
+        }
+
+        const numeric = parseNumber(value);
+        if (numeric === null) {
+            return text;
+        }
+
+        const base = Date.UTC(1899, 11, 30);
+        const millis = Math.round(numeric * 24 * 60 * 60 * 1000);
+        const date = new Date(base + millis);
+        return date.toISOString().slice(0, 10);
+    }
+
+    function parseProgramRow(row, columns, rowNumber, errors) {
+        const op = String(row[columns.op] ?? '').trim();
+        const sku = String(row[columns.sku] ?? '').trim();
+        const scheduledDate = formatProgramDate(row[columns.scheduledDate]);
+        const sequenceValue = parseNumber(row[columns.sequence]);
+        const quantityValue = parseNumber(row[columns.quantity]);
+        const rowErrors = [];
+
+        if (!sku) {
+            rowErrors.push('SKU ausente');
+        }
+
+        if (!Number.isFinite(sequenceValue) || sequenceValue <= 0) {
+            rowErrors.push('Sequencia invalida');
+        }
+
+        if (!Number.isFinite(quantityValue) || quantityValue <= 0) {
+            rowErrors.push('Quantidade invalida');
+        }
+
+        if (!scheduledDate) {
+            rowErrors.push('Data programada indefinida');
+        }
+
+        if (rowErrors.length) {
+            rowErrors.forEach((message) => errors.push({ rowNumber, message }));
+            return null;
+        }
+
+        return {
+            rowNumber,
+            op,
+            sku,
+            sequence: Math.round(sequenceValue),
+            quantity: Number(quantityValue),
+            scheduledDate,
+        };
+    }
+
+    function parseProgramSheet(rows, sheetLabel) {
+        const lineLabel = normalizeMatrixLineLabel(sheetLabel || '');
+        const lineCode = guessProgramLineCode(sheetLabel);
+        const header = locateProgramHeader(rows);
+        const errors = [];
+        const validRows = [];
+
+        if (!header) {
+            errors.push({
+                rowNumber: 1,
+                message: 'Cabecalho com colunas obrigatorias nao encontrado.',
+            });
+            return {
+                sheetName: sheetLabel,
+                lineLabel: lineLabel || sheetLabel || 'Linha',
+                lineCode,
+                rows: [],
+                errors,
+            };
+        }
+
+        rows.slice(header.headerIndex + 1).forEach((row, index) => {
+            const parsedRow = parseProgramRow(row, header.columns, header.headerIndex + 2 + index, errors);
+            if (parsedRow) {
+                validRows.push(parsedRow);
+            }
+        });
+
+        validRows.sort((left, right) => left.sequence - right.sequence);
+
+        return {
+            sheetName: sheetLabel,
+            lineLabel: lineLabel || sheetLabel || 'Linha',
+            lineCode,
+            rows: validRows,
+            errors,
+        };
+    }
+
+    async function parseProgramacao(file) {
+        const entries = await unzipEntries(await file.arrayBuffer());
+        const sharedStrings = readSharedStrings(entries);
+        const sheetInfos = resolveSheetInfos(entries);
+
+        if (!sheetInfos.length) {
+            throw new Error('Nenhuma aba encontrada no arquivo.');
+        }
+
+        const sheets = sheetInfos.map((sheetInfo, sheetIndex) => {
+            const label = String(sheetInfo.name || 'Planilha ' + (sheetIndex + 1)).trim();
+            const rows = readSheetRows(entries, sheetInfo.path, sharedStrings);
+            return parseProgramSheet(rows, label || 'Planilha ' + (sheetIndex + 1));
+        });
+
+        if (!sheets.some((sheet) => sheet.rows.length)) {
+            throw new Error('Nenhum item valido encontrado nas abas importadas.');
+        }
+
+        return {
+            sheets,
+            count: sheets.reduce((sum, sheet) => sum + sheet.rows.length, 0),
+        };
+    }
+
+
+
+window.PCPXlsxImport = {
         parseProducts,
         parseMatrix,
+        parseProgramacao,
     };
 }());
 

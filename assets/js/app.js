@@ -1,4 +1,4 @@
-﻿(function () {
+(function () {
     const bootstrap = window.PCP_BOOTSTRAP || { datasets: {}, sampleProgram: [] };
     const DEFAULT_SECTION = 'section-home';
     const DEFAULT_INTERVAL_DAYS = [1, 2, 3, 4, 5];
@@ -236,15 +236,20 @@
     }
 
 
-    function readProgramRows() {
-        return [...programBody.querySelectorAll('tr')].map((row, index) => ({
-            sequence: Number(row.querySelector('[name="sequence"]').value) || index + 1,
-            sku: row.querySelector('[name="sku"]').value,
-            quantity: Number(row.querySelector('[name="quantity"]').value) || 0,
-            planned_start: index === 0 ? row.querySelector('[name="planned_start"]').value : '',
-        }));
-    }
 
+    function readProgramRows() {
+        return [...programBody.querySelectorAll('tr')].map((row, index) => {
+            const opInput = row.querySelector('[name="op"]');
+            const op = opInput ? opInput.value : '';
+            return {
+                sequence: Number(row.querySelector('[name="sequence"]').value) || index + 1,
+                op,
+                sku: row.querySelector('[name="sku"]').value,
+                quantity: Number(row.querySelector('[name="quantity"]').value) || 0,
+                planned_start: index === 0 ? row.querySelector('[name="planned_start"]').value : '',
+            };
+        });
+    }
     function saveState(options = {}) {
         return persistDatasets(options);
     }
@@ -1139,6 +1144,7 @@ function applyProgramacaoSheet(index) {
             const row = document.createElement('tr');
             row.innerHTML = `
                 <td><input type="number" class="mini-input" name="sequence" value="${item.sequence || index + 1}" min="1" required></td>
+                <td><input type="text" class="mini-input" name="op" value="${item.op || ""}"></td>
                 <td><select name="sku" required>${productOptions(item.sku || '')}</select></td>
                 <td><input type="number" name="quantity" min="1" step="1" value="${item.quantity || ''}" required></td>
                 <td><input type="datetime-local" name="planned_start" value="${item.planned_start || ''}"></td>
@@ -1483,6 +1489,7 @@ function applyProgramacaoSheet(index) {
                         ? (rowScheduled.includes('T') ? rowScheduled : rowScheduled + 'T00:00')
                         : '';
                     parsedRows.push({
+                        op: String(row.op || '').trim(),
                         sequence: Number(row.sequence) || 0,
                         sku: String(row.sku || '').trim(),
                         quantity: Number(row.quantity) || 0,
@@ -2059,4 +2066,5 @@ function applyProgramacaoSheet(index) {
     }
 
 })();
+
 

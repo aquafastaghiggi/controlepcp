@@ -52,8 +52,16 @@ function handleGet(ProgramacaoRepository $repo): void
     }
 
     // Se tem 'id' na query, buscar por ID
-    if (!empty($_GET['id'])) {
-        $id = (int) $_GET['id'];
+    if (isset($_GET['id'])) {
+        $rawId = (string) $_GET['id'];
+        $filteredId = filter_var(trim($rawId), FILTER_VALIDATE_INT);
+        if ($filteredId === false || $filteredId === null || $filteredId <= 0) {
+            http_response_code(400);
+            echo json_encode(['message' => 'ID inválido'], JSON_UNESCAPED_UNICODE);
+            return;
+        }
+
+        $id = (int) $filteredId;
         $programacao = $repo->getProgramacaoById($id);
 
         if (!$programacao) {
@@ -212,3 +220,4 @@ function handleDelete(ProgramacaoRepository $repo): void
         'message' => 'Programação deletada com sucesso',
     ], JSON_UNESCAPED_UNICODE);
 }
+

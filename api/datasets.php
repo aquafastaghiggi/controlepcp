@@ -34,9 +34,25 @@ function pcp_log_error(string $traceId, \Throwable $e): void
     @file_put_contents($dir . '/api-error.log', $line, FILE_APPEND);
 }
 
-$repo = new DatabaseData();
+function buildDatabaseData(): DatabaseData
+{
+    $defaultHost = getenv('DB_HOST') ?: '127.0.0.1';
+
+    try {
+        return new DatabaseData();
+    } catch (\RuntimeException $e) {
+        if (strpos($e->getMessage(), '[2002]') !== false && $defaultHost === '127.0.0.1') {
+            putenv('DB_HOST=localhost');
+            return new DatabaseData();
+        }
+
+        throw $e;
+    }
+}
 
 try {
+    $repo = buildDatabaseData();
+
     if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET') {
         pcp_json_response(200, $repo->all());
     }

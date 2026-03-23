@@ -1,5 +1,4 @@
-<?php
-declare(strict_types=1);
+<?php declare(strict_types=1);
 
 require __DIR__ . '/src/bootstrap.php';
 
@@ -16,6 +15,14 @@ $datasets = $databaseData->all();
     <title>Controle PCP</title>
     <link rel="stylesheet" href="/controlepcp/assets/css/app.css">
     <link rel="stylesheet" href="/controlepcp/assets/css/theme.css">
+    <style>
+        .history-list { display: grid; gap: 12px; margin-top: 10px; }
+        .history-card { border: 1px solid var(--line, #ddd); border-radius: 10px; padding: 12px 14px; display: flex; justify-content: space-between; align-items: center; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.05); cursor: pointer; }
+        .history-card:hover { box-shadow: 0 4px 10px rgba(0,0,0,0.08); }
+        .history-meta { display: flex; gap: 14px; font-size: 14px; color: #555; }
+        .history-title { font-weight: 600; font-size: 16px; color: #111; }
+        .history-empty { text-align: center; padding: 20px; }
+    </style>
 </head>
 <body>
     <div class="app-shell">
@@ -70,8 +77,8 @@ $datasets = $databaseData->all();
                             <span>Defina o setup entre origem e destino.</span>
                         </button>
                         <button type="button" class="home-card" data-target="section-program">
-                            <strong>Programação de PCP</strong>
-                            <span>Monte a sequência e calcule a produção.</span>
+                            <strong>programação de PCP</strong>
+                            <span>Monte a sequÃªncia e calcule a produÃ§Ã£o.</span>
                         </button>
                         <button type="button" class="home-card" data-target="section-programacoes">
                             <strong>Histórico de Programações</strong>
@@ -206,11 +213,11 @@ $datasets = $databaseData->all();
                 <section class="panel app-section" id="section-program">
                     <div class="panel-heading">
                         <div>
-                            <h2>Programação de PCP</h2>
-                            <p>Informe o início base, preencha os itens e deixe as próximas datas por conta do cálculo.</p>
+                            <h2>programação de PCP</h2>
+                            <p>Informe o inÃ­cio base, preencha os itens e deixe as prÃ³ximas datas por conta do cÃ¡lculo.</p>
                         </div>
                         <div class="panel-actions">
-                            <button type="button" id="new-programacao-btn" class="ghost-button">+ Nova Programação</button>
+                            <button type="button" id="new-programacao-btn" class="ghost-button">+ Nova programação</button>
                             <button type="button" id="add-row" class="ghost-button">Adicionar item</button>
                             <input type="file" id="programacao-import-file" class="is-hidden" accept=".xlsx">
                             <button type="button" id="import-programacao" class="ghost-button">Importar Excel</button>
@@ -229,11 +236,11 @@ $datasets = $databaseData->all();
                     <form id="simulation-form">
                         <div class="field-grid">
                             <label class="field">
-                                <span>Número da OP</span>
+                                <span>NÃºmero da OP</span>
                                 <input type="text" name="numero_op" placeholder="Ex: OP-2024-001">
                             </label>
                             <label class="field">
-                                <span>Eficiência de produção (%)</span>
+                                <span>EficiÃªncia de produÃ§Ã£o (%)</span>
                                 <input type="text" name="production_efficiency" value="100" inputmode="decimal" placeholder="100">
                             </label>
                         </div>
@@ -292,7 +299,7 @@ $datasets = $databaseData->all();
                                 </thead>
                                 <tbody id="result-body">
                                     <tr class="empty-state-row">
-                                        <td colspan="10">Nenhuma simulação calculada ainda.</td>
+                                        <td colspan="10">Nenhuma simulaÃ§Ã£o calculada ainda.</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -304,125 +311,15 @@ $datasets = $databaseData->all();
                     <div class="panel-heading">
                         <div>
                             <h2>Histórico de Programações</h2>
-                            <p>Consulte programações já realizadas.</p>
+                            <p>Visualize e imprima programações calculadas.</p>
+                        </div>
+                        <div class="panel-actions">
+                            <button type="button" id="history-refresh" class="ghost-button">Atualizar</button>
                         </div>
                     </div>
 
-                    <div class="field-grid">
-                        <label class="field">
-                            <span>Buscar por Número da OP</span>
-                            <input type="text" id="search-op" placeholder="Digite o Número da OP para buscar">
-                        </label>
-                    </div>
-
-                    <div class="table-wrap compact-wrap">
-                        <table class="entry-table">
-                            <thead>
-                                <tr>
-                                    <th>ID</th>
-                                    <th>Número da OP</th>
-                                    <th>Linha</th>
-                                    <th>Data de lançamento</th>
-                                    <th>Eficiência</th>
-                                    <th>Status</th>
-                                    <th>Itens</th>
-                                    <th>Criado em</th>
-                                </tr>
-                            </thead>
-                            <tbody id="programacoes-body"></tbody>
-                        </table>
-                    </div>
-
-                    <!-- Modal para criar/editar programação -->
-                    <div class="modal-overlay is-hidden" id="programacao-modal">
-                        <div class="modal-dialog">
-                            <div class="modal-header">
-                                <h3>programação</h3>
-                                <button type="button" class="close-button" data-action="close-modal">&times;</button>
-                            </div>
-                            <form id="programacao-form">
-                                <input type="hidden" name="prg_id" id="prg_id">
-                                <div class="field-grid">
-                                    <label class="field">
-                                        <span>Número da OP</span>
-                                        <input type="text" name="prg_numero_op" placeholder="Ex: OP-2024-001">
-                                    </label>
-                                    <label class="field">
-                                        <span>Linha</span>
-                                        <input type="text" name="lin_codigo" placeholder="Informe a linha">
-                                    </label>
-                                </div>
-                                <div class="field-grid">
-                                    <label class="field">
-                                        <span>Data/Hora Base</span>
-                                        <input type="datetime-local" name="prg_base_inicio" required>
-                                    </label>
-                                    <label class="field">
-                                        <span>Data/Hora Consulta</span>
-                                        <input type="datetime-local" name="prg_data_consulta">
-                                    </label>
-                                </div>
-                                <div class="field-grid">
-                                    <label class="field">
-                                        <span>Eficiência (%)</span>
-                                        <input type="number" name="prg_eficiencia" value="100" min="1" max="200">
-                                    </label>
-                                    <label class="field">
-                                        <span>Status</span>
-                                        <select name="prg_status">
-                                            <option value="rascunho">Rascunho</option>
-                                            <option value="calculado">Calculado</option>
-                                            <option value="executado">Executado</option>
-                                        </select>
-                                    </label>
-                                </div>
-                                <div class="form-actions">
-                                    <button type="button" class="ghost-button" data-action="close-modal">Cancelar</button>
-                                    <button type="submit" class="primary-button">Salvar</button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-
-                    <!-- Modal para visualizar detalhes da programação -->
-                    <div class="modal-overlay is-hidden" id="programacao-details-modal">
-                        <div class="modal-dialog modal-dialog-large">
-                            <div class="modal-header">
-                                <h3>Resultado da programação - OP: <span id="details-op-number">—</span></h3>
-                                <button type="button" class="close-button" data-action="close-details-modal">&times;</button>
-                            </div>
-                            <div class="modal-content">
-                                <div id="modal-result-summary" class="summary-grid"></div>
-
-                                <div class="table-wrap">
-                                    <table class="result-table">
-                                        <thead>
-                                            <tr>
-                                                <th>Tipo</th>
-                                                <th>Seq.</th>
-                                                <th>Produto</th>
-                                                <th>Producao/h</th>
-                                                <th>Programado</th>
-                                                <th>Tempo</th>
-                                                <th>Data inicio</th>
-                                                <th>Inicio</th>
-                                                <th class="is-hidden-column">Memoria do calculo</th>
-                                                <th>Fim</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="modal-result-body">
-                                            <tr class="empty-state-row">
-                                                <td colspan="10">Nenhuma simulação disponível para esta OP.</td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
-                                </div>
-
-                                <div class="form-actions" style="justify-content: flex-end; padding-top: 20px; border-top: 1px solid var(--line);">
-                                    <button type="button" class="ghost-button" data-action="close-details-modal">Fechar</button>
-                                </div>
-                            </div>
-                        </div>
+                    <div id="history-list" class="history-list">
+                        <div id="history-empty" class="muted">Nenhuma programação encontrada.</div>
                     </div>
                 </section>
             </section>
@@ -440,3 +337,8 @@ $datasets = $databaseData->all();
     <script src="/controlepcp/assets/js/app.js?v=10"></script>
 </body>
 </html>
+
+
+
+
+

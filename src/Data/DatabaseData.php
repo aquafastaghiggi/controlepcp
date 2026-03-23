@@ -321,7 +321,7 @@ final class DatabaseData
             return [];
         }
 
-        $itemsStmt = $this->pdo->prepare('SELECT prg_sequencia, prg_sku, prg_quantidade, prg_inicio_planejado FROM prg_itens WHERE prg_programa_id = :programId ORDER BY prg_sequencia');
+        $itemsStmt = $this->pdo->prepare('SELECT prg_sequencia, prg_sku, prg_quantidade, prg_inicio_planejado, prg_itens_op FROM prg_itens WHERE prg_programa_id = :programId ORDER BY prg_sequencia');
         $itemsStmt->execute(['programId' => $program['prg_id']]);
 
         $rows = [];
@@ -331,6 +331,7 @@ final class DatabaseData
                 'sku' => $item['prg_sku'],
                 'quantity' => (float) $item['prg_quantidade'],
                 'planned_start' => $item['prg_inicio_planejado'] ? (new \DateTimeImmutable($item['prg_inicio_planejado']))->format('Y-m-d\TH:i') : '',
+                'op' => (string) ($item['prg_itens_op'] ?? ''),
             ];
         }
 

@@ -86,7 +86,21 @@ final class ProgramacaoRepository
         $this->pdo->prepare('DELETE FROM prg_itens WHERE prg_programa_id = :programId')->execute(['programId' => $programId]);
 
         $stmt = $this->pdo->prepare(
-            'INSERT INTO prg_itens (prg_programa_id, prg_sequencia, prg_sku, prg_quantidade, prg_inicio_planejado) VALUES (:programId, :sequence, :sku, :quantity, :plannedStart)'
+            'INSERT INTO prg_itens (
+                prg_programa_id,
+                prg_sequencia,
+                prg_sku,
+                prg_quantidade,
+                prg_inicio_planejado,
+                prg_itens_op
+            ) VALUES (
+                :programId,
+                :sequence,
+                :sku,
+                :quantity,
+                :plannedStart,
+                :op
+            )'
         );
 
         foreach ($items as $item) {
@@ -98,6 +112,7 @@ final class ProgramacaoRepository
                 'sku' => (string) ($item['sku'] ?? ''),
                 'quantity' => (float) ($item['quantity'] ?? 0),
                 'plannedStart' => $planned?->format('Y-m-d H:i:s'),
+                'op' => (string) ($item['op'] ?? ''),
             ]);
         }
     }
@@ -285,11 +300,14 @@ final class ProgramacaoRepository
                AND sch_criado_em = (
                  SELECT MAX(sch_criado_em)
                  FROM sch_linhas
-                 WHERE sch_programa_id = :programId
+                 WHERE sch_programa_id = :programIdHistory
                )
              ORDER BY sch_sequencia ASC'
         );
-        $stmt->execute(['programId' => $programId]);
+        $stmt->execute([
+            'programId' => $programId,
+            'programIdHistory' => $programId,
+        ]);
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }

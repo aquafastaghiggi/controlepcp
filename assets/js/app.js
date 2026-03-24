@@ -2309,10 +2309,25 @@ async function openHistoryPreview(prgId) {
       return dateLabel + "<br>" + dayPart + timeLabel;
     };
 
-    const lineLabel = escapeHtml(data.lin_nome || data.lin_codigo || 'Linha não informada');
-    const loteLabel = escapeHtml(data.prg_id || prgId);
-    const baseInicio = safeCell(data.prg_base_inicio);
-    const eficiencia = safeCell(data.prg_eficiencia);
+    const lineLabel = data.lin_nome || data.lin_codigo || '';
+    const eficiencia = String(data.prg_eficiencia || '');
+    const firstItem = (data.schedule || [])[0];
+
+    function formatDateBR(dataValue) {
+      if (!dataValue) return '';
+      const [y, m, d] = String(dataValue).split('-');
+      if (!y || !m || !d) return '';
+      return `${d}/${m}/${y}`;
+    }
+
+    function formatHora(horaValue) {
+      if (!horaValue) return '';
+      return String(horaValue).slice(0, 5);
+    }
+
+    const inicioBaseFormatado = firstItem
+      ? `${formatDateBR(firstItem.sch_data_inicio)} ${formatHora(firstItem.sch_hora_inicio)}`
+      : '';
 
     const itensRows = itens.length
       ? itens.map((item) => {
@@ -2385,7 +2400,7 @@ async function openHistoryPreview(prgId) {
       <html lang="pt-BR">
       <head>
         <meta charset="UTF-8">
-        <title>Histórico de Programação - Lote ${loteLabel}</title>
+        <title>Histórico de Programação - Lote ${escapeHtml(data.prg_id || prgId)}</title>
         <style>
           @page {
             size: A4 landscape;
@@ -2481,10 +2496,9 @@ async function openHistoryPreview(prgId) {
         <header class="preview-header">
           <h1>Histórico de Programação</h1>
           <div class="preview-subtitle">${lineLabel}</div>
-          <div class="preview-meta">
-            <span><strong>Lote:</strong> ${loteLabel}</span>
-            <span><strong>Início base:</strong> ${baseInicio}</span>
-            <span><strong>Eficiência:</strong> ${eficiencia}</span>
+          <div class="report-header-meta">
+            <span><strong>Início base:</strong> ${escapeHtml(inicioBaseFormatado)}</span>
+            <span><strong>Eficiência:</strong> ${escapeHtml(eficiencia)}%</span>
           </div>
         </header>
 

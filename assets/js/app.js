@@ -2146,8 +2146,8 @@ async function loadHistoryProgramacoes() {
   try {
     const response = await fetch('/controlepcp/api/programacoes.php?limit=50');
     const payload = await response.json();
-
-    const lista = Array.isArray(payload?.data) ? payload.data : [];
+    const rawHistory = payload?.data ?? payload ?? [];
+    const lista = Array.isArray(rawHistory) ? rawHistory : [];
 
     if (!lista.length) {
       historyList.innerHTML = '';

@@ -544,12 +544,15 @@ function applyProgramacaoSheet(index) {
             return;
         }
 
-        const parsedRows = rows.map((row) => {
+        const existingItems = Array.isArray(state.form.items) ? state.form.items : [];
+        const parsedRows = rows.map((row, rowIndex) => {
             const rowScheduled = row.scheduledDate ? String(row.scheduledDate) : '';
             const plannedStart = rowScheduled
                 ? (rowScheduled.includes('T') ? rowScheduled : rowScheduled + 'T00:00')
                 : '';
+            const referenceItem = existingItems[rowIndex] || {};
             return {
+                op: String(row.op || referenceItem.op || '').trim(),
                 sequence: Number(row.sequence) || 0,
                 sku: String(row.sku || '').trim(),
                 quantity: Number(row.quantity) || 0,
@@ -1758,11 +1761,52 @@ function applyProgramacaoSheet(index) {
         setupProgramacoesHandlers();
         loadProgramacoes();
         loadHistoryProgramacoes();
+        fixBrokenUtfText();
     });
 
     }
 
-    if (document.readyState === 'loading') {
+        function fixBrokenUtfText() {
+        const replacements = [
+            {
+                selector: '#section-program .panel-heading > div > p',
+                text: 'Informe o início base, preencha os itens e deixe as próximas datas por conta do cálculo.',
+            },
+            {
+                selector: '.home-card[data-target="section-program"] strong',
+                text: 'Programação de PCP',
+            },
+            {
+                selector: '.home-card[data-target="section-program"] span',
+                text: 'Monte a sequência e calcule a produção.',
+            },
+        ];
+
+        replacements.forEach(({ selector, text }) => {
+            const element = document.querySelector(selector);
+            if (element) {
+                element.textContent = text;
+            }
+        });
+
+        document.querySelectorAll('th').forEach((th) => {
+            const content = th.textContent;
+            if (!content) return;
+            if (content.includes('Inicio')) {
+                th.textContent = content.replace(/Inicio/g, 'Início');
+            }
+        });
+
+        document.querySelectorAll('.matrix-page-button').forEach((button) => {
+            const content = button.textContent;
+            if (!content) return;
+            const updated = content.replace(/Proxima/g, 'Próxima').replace(/Proximas/g, 'Próximas');
+            if (updated !== content) {
+                button.textContent = updated;
+            }
+        });
+    }
+if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', initApp);
     } else {
         initApp();
@@ -2118,9 +2162,18 @@ async function loadHistoryProgramacoes() {
     historyList.innerHTML = '';
 
     lista.forEach((item) => {
-      const linha = item.lin_nome || item.lin_codigo || 'Linha n�o informada';
+            const linha = item.lin_nome || item.lin_codigo || 'Linha não informada';
       const lote = item.prg_id || '-';
-      const inicio = item.prg_base_inicio || item.prg_criado_em || '-';
+      let inicio = item.prg_base_inicio || item.prg_criado_em || '-';
+
+      if (inicio && inicio !== '-') {
+        const [data, hora] = inicio.split(' ');
+        if (data && hora) {
+          const [ano, mes, dia] = data.split('-');
+          const horaFormatada = hora.substring(0, 5);
+          inicio = `${dia}/${mes}/${ano} ${horaFormatada}`;
+        }
+      }
 
       const div = document.createElement('div');
       div.style.padding = '10px';
@@ -2131,7 +2184,7 @@ async function loadHistoryProgramacoes() {
       div.innerHTML = `
         <strong>${linha}</strong><br>
         Lote: ${lote}<br>
-        In�cio: ${inicio}
+        Início: ${inicio}
       `;
 
       div.style.cursor = 'pointer';
@@ -2147,6 +2200,16 @@ async function loadHistoryProgramacoes() {
   }
 }
 
+function escapeHtml(text) {
+  if (text === null || text === undefined) return '';
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 async function openHistoryPreview(prgId) {
   if (!prgId) return;
 
@@ -2155,55 +2218,300 @@ async function openHistoryPreview(prgId) {
     const payload = await response.json();
     const data = payload?.data || payload || {};
     const itens = Array.isArray(data?.itens) ? data.itens : [];
+    const schedule = Array.isArray(data?.schedule) ? data.schedule : [];
 
-    let linhas = '';
+    const safeCell = (value, fallback = '-') => {
+      const text = escapeHtml(value ?? '');
+      return text || fallback;
+    };
 
-    itens.forEach((item) => {
-      const seq = item.prg_sequencia || '';
-      const op = item.prg_itens_op || '';
-      const sku = item.prg_sku || '';
-      const qtd = item.prg_quantidade || '';
-      const inicio = item.prg_inicio_planejado || '';
+    const formatQuantityDisplay = (value) => {
+      if (value === null || value === undefined || String(value).trim() === '') {
+        return "-";
+      }
 
-      linhas +=
-        '<tr>' +
-        '<td>' + seq + '</td>' +
-        '<td>' + op + '</td>' +
-        '<td>' + sku + '</td>' +
-        '<td>' + qtd + '</td>' +
-        '<td>' + inicio + '</td>' +
-        '</tr>';
-    });
+      const parsed = Number(String(value));
+      if (!Number.isFinite(parsed)) {
+        return escapeHtml(value);
+      }
+
+      const normalized = Number.isInteger(parsed)
+        ? String(parsed)
+        : String(parsed).replace(/\.0+$/, '');
+
+      return escapeHtml(normalized);
+    };
+
+    const formatDatePt = (value) => {
+      if (value === null || value === undefined || String(value).trim() === '') {
+        return "-";
+      }
+
+      const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (!match) {
+        return escapeHtml(value);
+      }
+
+      return "" + match[3] + "/" + match[2] + "/" + match[1];
+    };
+
+    const formatTimeShort = (value) => {
+      if (value === null || value === undefined || String(value).trim() === '') {
+        return "-";
+      }
+
+      const match = String(value).match(/^(\d{2}:\d{2})/);
+      if (!match) {
+        return escapeHtml(value);
+      }
+
+      return match[1];
+    };
+
+    const weekDays = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+
+    const getWeekDayLabel = (value) => {
+      if (!value) {
+        return "";
+      }
+
+      const partes = String(value).split("-");
+      if (partes.length !== 3) {
+        return "";
+      }
+
+      const ano = Number(partes[0]);
+      const mes = Number(partes[1]) - 1;
+      const dia = Number(partes[2]);
+
+      const dataLocal = new Date(ano, mes, dia);
+      if (Number.isNaN(dataLocal.getTime())) {
+        return "";
+      }
+
+      return weekDays[dataLocal.getDay()] || "";
+    };
+
+    const formatScheduleDateTime = (dateLabel, timeLabel, dayLabel) => {
+      if (dateLabel === "-" && timeLabel === "-") {
+        return "-";
+      }
+
+      if (dateLabel === "-") {
+        return timeLabel;
+      }
+
+      if (timeLabel === "-") {
+        return dateLabel;
+      }
+
+      const dayPart = dayLabel ? dayLabel + " " : "";
+      return dateLabel + "<br>" + dayPart + timeLabel;
+    };
+
+    const lineLabel = escapeHtml(data.lin_nome || data.lin_codigo || 'Linha não informada');
+    const loteLabel = escapeHtml(data.prg_id || prgId);
+    const baseInicio = safeCell(data.prg_base_inicio);
+    const eficiencia = safeCell(data.prg_eficiencia);
+
+    const itensRows = itens.length
+      ? itens.map((item) => {
+        const seq = safeCell(item.prg_sequencia);
+        const op = safeCell(item.prg_itens_op);
+        const sku = safeCell(item.prg_sku);
+        const qtd = formatQuantityDisplay(item.prg_quantidade);
+        const inicio = safeCell(item.prg_inicio_planejado);
+
+        return `
+          <tr>
+            <td>${seq}</td>
+            <td>${op}</td>
+            <td>${sku}</td>
+            <td>${qtd}</td>
+            <td>${inicio}</td>
+          </tr>
+        `;
+      }).join('')
+      : '<tr><td colspan="5" class="empty-cell">Nenhum item encontrado</td></tr>';
+    const scheduleRows = schedule.length
+      ? schedule.map((item) => {
+        const tipoRaw = String(item.sch_tipo || '').trim().toLowerCase();
+        const isSetup = tipoRaw === 'setup';
+        const tipo = isSetup
+          ? ''
+          : tipoRaw
+            ? escapeHtml(item.sch_tipo)
+            : 'produção';
+        const seq = safeCell(item.sch_sequencia);
+        const sku = safeCell(item.sch_sku);
+        const descricao = safeCell(item.sch_descricao, '');
+        const descricaoStyle = isSetup ? ' style="padding-left:20px; text-align:right;"' : '';
+        const quantidade = formatQuantityDisplay(item.sch_quantidade);
+        const duracao = safeCell(item.sch_duracao_minutos);
+        const dataInicio = formatDatePt(item.sch_data_inicio);
+        const horaInicio = formatTimeShort(item.sch_hora_inicio);
+        const horaFim = formatTimeShort(item.sch_hora_fim);
+        const rowClass = isSetup ? ' class="setup-row"' : '';
+        const dataShort = dataInicio === '-' ? '-' : dataInicio.substring(0, 5);
+        const weekDayLabel = getWeekDayLabel(item.sch_data_inicio);
+        const inicioDisplay = formatScheduleDateTime(dataShort, horaInicio, weekDayLabel);
+        const fimDisplay = formatScheduleDateTime(dataShort, horaFim, weekDayLabel);
+        const seqDisplay = isSetup && sku === '-' ? '' : seq;
+
+        return `
+          <tr${rowClass}>
+            <td>${tipo}</td>
+            <td>${seqDisplay}</td>
+            <td>${sku}</td>
+            <td${descricaoStyle}>${descricao}</td>
+            <td>${quantidade}</td>
+            <td>${duracao}</td>
+            <td>${dataInicio}</td>
+            <td>${inicioDisplay}</td>
+            <td>${fimDisplay}</td>
+          </tr>
+        `;
+      }).join('')
+      : '<tr><td colspan="8" class="empty-cell">Nenhum registro encontrado</td></tr>';
 
     const novaJanela = window.open('', '_blank');
     if (!novaJanela) {
-      console.warn('N�o foi poss�vel abrir a janela de preview.');
+      console.warn('Não foi possível abrir a janela de preview.');
       return;
     }
 
-    const markup =
-      '<html>' +
-        '<head>' +
-          '<title>Lote ' + prgId + '</title>' +
-        '</head>' +
-        '<body>' +
-          '<h2>Lote ' + prgId + '</h2>' +
-          '<table border= 1 cellpadding=6 cellspacing=0 width=100%>' +
-            '<thead>' +
-              '<tr>' +
-                '<th>Seq</th>' +
-                '<th>OP</th>' +
-                '<th>SKU</th>' +
-                '<th>Quantidade</th>' +
-                '<th>In\u00edcio</th>' +
-              '</tr>' +
-            '</thead>' +
-            '<tbody>' +
-              linhas +
-            '</tbody>' +
-          '</table>' +
-        '</body>' +
-      '</html>';
+    const markup = `
+      <!DOCTYPE html>
+      <html lang="pt-BR">
+      <head>
+        <meta charset="UTF-8">
+        <title>Histórico de Programação - Lote ${loteLabel}</title>
+        <style>
+          @page {
+            size: A4 landscape;
+            margin: 10mm;
+          }
+
+          body {
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            color: #111;
+            margin: 0;
+            padding: 12mm;
+          }
+
+          h1, h2, h3 {
+            margin: 0 0 10px 0;
+          }
+
+          .preview-actions {
+            margin-bottom: 12px;
+          }
+
+          .preview-actions button {
+            padding: 8px 16px;
+            font-size: 12px;
+            cursor: pointer;
+          }
+
+          .preview-header {
+            margin-bottom: 20px;
+          }
+
+          .preview-subtitle {
+            font-size: 14px;
+            color: #555;
+            margin-bottom: 12px;
+          }
+
+          .preview-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            font-size: 12px;
+          }
+
+          .preview-meta span {
+            display: inline-flex;
+            gap: 4px;
+          }
+
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 16px;
+          }
+
+          th, td {
+            border: 1px solid #ccc;
+            padding: 6px;
+            font-size: 11px;
+          }
+
+          th {
+            background: #f0f0f0;
+            text-align: left;
+          }
+
+          .setup-row {
+            background: #f5f5f5;
+          }
+
+          .empty-cell {
+            text-align: center;
+            font-style: italic;
+          }
+
+          .preview-section {
+            margin-bottom: 28px;
+          }
+
+          @media print {
+            .no-print {
+              display: none;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="preview-actions no-print">
+          <button type="button" onclick="window.print()">Imprimir</button>
+        </div>
+
+        <header class="preview-header">
+          <h1>Histórico de Programação</h1>
+          <div class="preview-subtitle">${lineLabel}</div>
+          <div class="preview-meta">
+            <span><strong>Lote:</strong> ${loteLabel}</span>
+            <span><strong>Início base:</strong> ${baseInicio}</span>
+            <span><strong>Eficiência:</strong> ${eficiencia}</span>
+          </div>
+        </header>
+
+        <section class="preview-section">
+          <h2>Cronograma calculado</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Tipo</th>
+                <th>Seq</th>
+                <th>SKU</th>
+                <th>Descrição</th>
+                <th>Quantidade</th>
+                <th>Duração (min)</th>
+                <th>Data</th>
+                <th>Início</th>
+                <th>Fim</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${scheduleRows}
+            </tbody>
+          </table>
+        </section>
+      </body>
+      </html>
+    `;
 
     novaJanela.document.write(markup);
     novaJanela.document.close();
@@ -2211,3 +2519,6 @@ async function openHistoryPreview(prgId) {
     console.error('Erro ao carregar preview', error);
   }
 }
+
+
+

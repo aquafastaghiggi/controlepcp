@@ -77,7 +77,7 @@ $datasets = $databaseData->all();
                             <span>Defina o setup entre origem e destino.</span>
                         </button>
                         <button type="button" class="home-card" data-target="section-program">
-                            <strong>programação de PCP</strong>
+                            <strong>Programação de PCP</strong>
                             <span>Monte a sequÃªncia e calcule a produÃ§Ã£o.</span>
                         </button>
                         <button type="button" class="home-card" data-target="section-programacoes">
@@ -213,7 +213,7 @@ $datasets = $databaseData->all();
                 <section class="panel app-section" id="section-program">
                     <div class="panel-heading">
                         <div>
-                            <h2>programação de PCP</h2>
+                            <h2>Programação de PCP</h2>
                             <p>Informe o inÃ­cio base, preencha os itens e deixe as prÃ³ximas datas por conta do cÃ¡lculo.</p>
                         </div>
                         <div class="panel-actions">
@@ -236,11 +236,11 @@ $datasets = $databaseData->all();
                     <form id="simulation-form">
                         <div class="field-grid">
                             <label class="field">
-                                <span>NÃºmero da OP</span>
+                                <span>Número da OP</span>
                                 <input type="text" name="numero_op" placeholder="Ex: OP-2024-001">
                             </label>
                             <label class="field">
-                                <span>EficiÃªncia de produÃ§Ã£o (%)</span>
+                                <span>Eficiência de produção (%)</span>
                                 <input type="text" name="production_efficiency" value="100" inputmode="decimal" placeholder="100">
                             </label>
                         </div>
@@ -337,6 +337,10 @@ $datasets = $databaseData->all();
     <script src="/controlepcp/assets/js/app.js?v=10"></script>
 </body>
 </html>
+
+
+
+
 
 
 

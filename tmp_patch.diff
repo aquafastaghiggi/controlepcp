@@ -1,0 +1,69 @@
+﻿*** Begin Patch
+*** Update File: assets/js/app.js
+@@
+-    const formatTimeShort = (value) => {
++    const formatTimeShort = (value) => {
+       if (value === null || value === undefined || String(value).trim() === '') {
+         return  -;
+       }
+ 
+       const match = String(value).match(/^(\d{2}:\d{2})/);
+       if (!match) {
+         return escapeHtml(value);
+       }
+ 
+       return match[1];
+     };
++
++    const formatDateTimeBR = (dateStr, timeStr) => {
++      if (!dateStr) {
++        return ;
++ }
++
++ const partes = String(dateStr).split(-);
++ if (partes.length !== 3) {
++ return ;
++      }
++
++      const formattedDate = partes[2] + / + partes[1] + / + partes[0];
++      if (!timeStr) {
++        return formattedDate;
++      }
++
++      const formattedTime = String(timeStr).substring(0, 5);
++      return formattedDate +   + formattedTime;
++    };
+@@
+-        <title>Histórico de Programação - Lote </title>
++        <title>Histórico de Programação</title>
+*** End Patch
+*** Begin Patch
+*** Update File: assets/js/app.js
+@@
+-    const lineLabel = escapeHtml(data.lin_nome || data.lin_codigo || 'Linha nÃ£o informada');
+-    const loteLabel = escapeHtml(data.prg_id || prgId);
+-    const baseInicio = safeCell(data.prg_base_inicio);
+-    const eficiencia = safeCell(data.prg_eficiencia);
++    const lineLabel = escapeHtml(data.lin_nome || data.lin_codigo || 'Linha nÃ£o informada');
++    const safeBaseInicio = safeCell(data.prg_base_inicio);
++    const firstScheduleItem = schedule.find((entry) => entry && entry.sch_data_inicio);
++    const baseInicioSchedule = formatDateTimeBR(
++      firstScheduleItem?.sch_data_inicio,
++      firstScheduleItem?.sch_hora_inicio ?? firstScheduleItem?.sch_inicio
++    );
++    const inicioBaseFormatado = baseInicioSchedule || safeBaseInicio;
++    const eficiencia = safeCell(data.prg_eficiencia);
+*** End Patch
+*** Begin Patch
+*** Update File: assets/js/app.js
+@@
+-          <div class= preview-meta>
+-            <span><strong>Lote:</strong> </span>
+-            <span><strong>Início base:</strong> </span>
+-            <span><strong>Eficiência:</strong> </span>
+-          </div>
++          <div class=preview-meta>
++            <span><strong>Início base:</strong> </span>
++            <span><strong>Eficiência:</strong> </span>
++          </div>
+*** End Patch

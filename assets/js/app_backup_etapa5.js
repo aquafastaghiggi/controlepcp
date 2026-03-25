@@ -310,14 +310,11 @@
         const firstRow = programBody.querySelector('tr');
         const globalUseOrder3 = Boolean(firstRow?.querySelector('[name="use_order_3"]')?.checked);
         const globalUseOrder4 = Boolean(firstRow?.querySelector('[name="use_order_4"]')?.checked);
-        const existingItems = Array.isArray(state.form?.items) ? state.form.items : [];
-        const existingConfigItem = existingItems.find((item) => item && item.programacao_config) || null;
-        const programacaoConfig = existingConfigItem?.programacao_config || null;
 
         return [...programBody.querySelectorAll('tr')].map((row, index) => {
             const opInput = row.querySelector('[name="op"]');
             const op = opInput ? opInput.value : '';
-            const parsed = {
+            return {
                 sequence: Number(row.querySelector('[name="sequence"]').value) || index + 1,
                 op,
                 sku: row.querySelector('[name="sku"]').value,
@@ -326,12 +323,6 @@
                 use_order_3: globalUseOrder3,
                 use_order_4: globalUseOrder4,
             };
-
-            if (programacaoConfig) {
-                parsed.programacao_config = programacaoConfig;
-            }
-
-            return parsed;
         });
     }
     function saveState(options = {}) {

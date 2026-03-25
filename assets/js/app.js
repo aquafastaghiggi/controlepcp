@@ -1047,13 +1047,13 @@ function applyProgramacaoSheet(index) {
         const rows = Object.entries(state.datasets.products || {});
         productsBody.innerHTML = rows.map(([sku, product]) => `
             <tr>
-                <td><input type="text" data-product-sku="${sku}" data-field="sku" value="${sku}"></td>
-                <td><input type="text" data-product-sku="${sku}" data-field="description" value="${product.description || ''}"></td>
-                <td><input type="text" data-product-sku="${sku}" data-field="reference_setup" value="${product.reference_setup || ''}"></td>
-                <td><input type="text" data-product-sku="${sku}" data-field="line" value="${product.line || 'L2'}"></td>
+                <td><input type="text" data-product-sku="${sku}" data-field="sku" value="${sku}" disabled></td>
+                <td><input type="text" data-product-sku="${sku}" data-field="description" value="${product.description || ''}" disabled></td>
+                <td><input type="text" data-product-sku="${sku}" data-field="reference_setup" value="${product.reference_setup || ''}" disabled></td>
+                <td><input type="text" data-product-sku="${sku}" data-field="line" value="${product.line || 'L2'}" disabled></td>
                 <td><input type="number" data-product-sku="${sku}" data-field="rate_per_hour" min="0" step="0.01" value="${product.rate_per_hour ?? ''}"></td>
-                <td><input type="text" data-product-sku="${sku}" data-field="unit" value="${product.unit || 'cx'}"></td>
-                <td class="actions-cell"><button type="button" class="row-delete" data-remove-product="${sku}">Remover</button></td>
+                <td><input type="text" data-product-sku="${sku}" data-field="unit" value="${product.unit || 'cx'}" disabled></td>
+                <td class="actions-cell"><button type="button" class="row-delete" data-update-product-rate="${sku}">Atualizar</button></td>
             </tr>
         `).join('');
 
@@ -1088,23 +1088,54 @@ function applyProgramacaoSheet(index) {
                     return;
                 }
 
-                target[field] = field === 'rate_per_hour' ? Number(input.value) : input.value;
+                if (field === 'rate_per_hour') {
+                    target[field] = Number(input.value);
+                    return;
+                }
+
+                target[field] = input.value;
                 saveState();
             });
         });
 
-        productsBody.querySelectorAll('[data-remove-product]').forEach((button) => {
-            button.addEventListener('click', () => {
-                const sku = button.dataset.removeProduct;
-                delete state.datasets.products[sku];
-                remapSkuReferences(sku, '');
-                removeMatrixReferences();
-                renderAllDatasetTables();
-                renderProgram();
+        productsBody.querySelectorAll('[data-update-product-rate]').forEach((button) => {
+            button.addEventListener('click', async () => {
+                const sku = String(button.dataset.updateProductRate || '').trim();
+                if (!sku) {
+                    return;
+                }
 
-                const shouldClear = Object.keys(state.datasets.products || {}).length === 0;
-                saveState(shouldClear ? { meta: { allow_clear_products: true } } : {});
-                showToast('Registro removido.');
+                const row = button.closest('tr');
+                const rateInput = row?.querySelector('input[data-field="rate_per_hour"]');
+                const rateRaw = String(rateInput?.value ?? '').trim();
+                const rate = rateRaw === '' ? 0 : Number(rateRaw);
+
+                try {
+                    const response = await apiFetch('/controlepcp/api/datasets.php', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            sku,
+                            rate_per_hour: Number.isFinite(rate) ? rate : 0,
+                        }),
+                    });
+
+                    const payload = await response.json().catch(() => null);
+                    if (!response.ok) {
+                        throw new Error(payload?.message || 'Falha ao atualizar producao/h.');
+                    }
+
+                    const product = state.datasets.products[sku];
+                    if (product) {
+                        product.rate_per_hour = Number.isFinite(rate) ? rate : 0;
+                    }
+
+                    showToast('Producao/h atualizada.', 'success');
+                } catch (error) {
+                    showToast(error.message || 'Falha ao atualizar producao/h.', 'danger');
+                }
             });
         });
     }
@@ -1162,7 +1193,7 @@ function applyProgramacaoSheet(index) {
                 <td>${matrixProductCell(row.from || '')}</td>
                 <td>${matrixProductCell(row.to || '')}</td>
                 <td><input type="text" data-matrix-index="${pageStart + index}" data-field="duration" value="${row.duration || ''}"></td>
-                <td class="actions-cell"><button type="button" class="row-delete" data-remove-matrix="${pageStart + index}">Remover</button></td>
+                <td class="actions-cell"><button type="button" class="row-delete" data-update-matrix-time="1">Atualizar</button></td>
             </tr>`
         ).join('');
         const readCurrentRows = () => {
@@ -1192,19 +1223,40 @@ function applyProgramacaoSheet(index) {
                 syncMatrixState(mergedRows);
                 renderMatrixValidated(mergedRows);
                 renderMatrixIssues(mergedRows);
-                saveState({ meta: { skip_products: true } });
             });
         });
 
-        matrixBody.querySelectorAll('[data-remove-matrix]').forEach((button) => {
-            button.addEventListener('click', () => {
-                const { preservedRows, activeRows } = readCurrentRows();
-                activeRows.splice(Number(button.dataset.removeMatrix), 1);
-                const mergedRows = [...preservedRows, ...activeRows];
-                syncMatrixState(mergedRows);
-                renderMatrix();
-                saveState({ meta: { skip_products: true } });
-                showToast('Registro removido.');
+        matrixBody.querySelectorAll('[data-update-matrix-time]').forEach((button) => {
+            button.addEventListener('click', async () => {
+                const row = button.closest('tr[data-matrix-row="1"]');
+                const line = String(row?.dataset?.line || '').trim();
+                const from = String(row?.dataset?.from || '').trim();
+                const to = String(row?.dataset?.to || '').trim();
+                const duration = String(row?.querySelector('input[data-field="duration"]')?.value || '').trim();
+
+                if (!line || !from || !to) {
+                    showToast('Linha/origem/destino invalidos.', 'danger');
+                    return;
+                }
+
+                try {
+                    const response = await apiFetch('/controlepcp/api/datasets.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            matrix: { line, from, to, duration },
+                        }),
+                    });
+
+                    const payload = await response.json().catch(() => null);
+                    if (!response.ok) {
+                        throw new Error(payload?.message || 'Falha ao atualizar tempo.');
+                    }
+
+                    showToast('Tempo atualizado.', 'success');
+                } catch (error) {
+                    showToast(error.message || 'Falha ao atualizar tempo.', 'danger');
+                }
             });
         });
         renderMatrixImportSummary();
@@ -1847,6 +1899,15 @@ function applyProgramacaoSheet(index) {
         resetResultArea(false);
         saveProgramDraftToStorage([], state.datasets?.calendar?.line);
         saveState({ meta: { skip_products: true } });
+    });
+
+    historyRefreshButton?.addEventListener('click', async () => {
+        historyRefreshButton.disabled = true;
+        try {
+            await loadHistoryProgramacoes();
+        } finally {
+            historyRefreshButton.disabled = false;
+        }
     });
 
     navLinks.forEach((button) => {

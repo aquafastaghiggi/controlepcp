@@ -63,6 +63,30 @@ try {
         pcp_json_response(400, ['message' => 'Payload invalido: ' . json_last_error_msg()]);
     }
 
+    // Atualizacao pontual do campo "producao/h" (prd_taxa_por_hora) por SKU.
+    if (!array_key_exists('datasets', $payload) && array_key_exists('sku', $payload) && array_key_exists('rate_per_hour', $payload)) {
+        $sku = (string) $payload['sku'];
+        $rateRaw = $payload['rate_per_hour'];
+        $rate = is_numeric($rateRaw) ? (float) $rateRaw : 0.0;
+
+        $repo->updateProductRatePerHour($sku, $rate);
+
+        pcp_json_response(200, ['status' => 'ok']);
+    }
+
+    // Atualizacao pontual do campo "tempo" da matriz (mat_duracao_minutos) por linha/origem/destino.
+    if (!array_key_exists('datasets', $payload) && isset($payload['matrix']) && is_array($payload['matrix'])) {
+        $matrix = $payload['matrix'];
+        $line = (string) ($matrix['line'] ?? '');
+        $from = (string) ($matrix['from'] ?? '');
+        $to = (string) ($matrix['to'] ?? '');
+        $duration = (string) ($matrix['duration'] ?? '');
+
+        $repo->updateMatrixDuration($line, $from, $to, $duration);
+
+        pcp_json_response(200, ['status' => 'ok']);
+    }
+
     $datasets = $payload['datasets'] ?? $payload;
     if (!is_array($datasets)) {
         pcp_json_response(422, ['message' => 'Payload deve conter "datasets".']);

@@ -395,6 +395,103 @@ final class DatabaseData
         }
     }
 
+    public function updateProductRatePerHour(string $sku, float $ratePerHour): void
+    {
+        $normalizedSku = $this->normalizeSkuValue($sku);
+        if ($normalizedSku === '') {
+            throw new \InvalidArgumentException('SKU invalido.');
+        }
+
+        $stmt = $this->pdo->prepare('SELECT 1 FROM prd_produtos WHERE prd_sku = :sku LIMIT 1');
+        $stmt->execute(['sku' => $normalizedSku]);
+        if (!$stmt->fetchColumn()) {
+            throw new \RuntimeException('SKU nao encontrado.');
+        }
+
+        $rate = $ratePerHour;
+        if (!is_finite($rate)) {
+            $rate = 0.0;
+        }
+
+        $update = $this->pdo->prepare('UPDATE prd_produtos SET prd_taxa_por_hora = :rate WHERE prd_sku = :sku');
+        $update->execute([
+            'rate' => $rate,
+            'sku' => $normalizedSku,
+        ]);
+    }
+
+    public function updateMatrixDuration(string $lineCode, string $fromSku, string $toSku, string $duration): void
+    {
+        $rawLineCode = trim($lineCode);
+        if ($rawLineCode === '') {
+            throw new \InvalidArgumentException('Linha invalida.');
+        }
+
+        $normalizedLine = $this->normalizeLineCode($rawLineCode);
+        if ($normalizedLine === '') {
+            throw new \InvalidArgumentException('Linha invalida.');
+        }
+
+        $from = $this->normalizeSkuValue($fromSku);
+        $to = $this->normalizeSkuValue($toSku);
+        if ($from === '' || $to === '') {
+            throw new \InvalidArgumentException('SKU invalido.');
+        }
+
+        $durationTrimmed = trim((string) $duration);
+        if ($durationTrimmed === '') {
+            throw new \InvalidArgumentException('Tempo invalido.');
+        }
+
+        if (str_contains($durationTrimmed, ':')) {
+            $minutes = DateTimeHelper::minutesFromDuration($durationTrimmed);
+        } elseif (is_numeric($durationTrimmed)) {
+            $minutes = (int) $durationTrimmed;
+        } else {
+            throw new \InvalidArgumentException('Tempo invalido.');
+        }
+
+        if ($minutes < 0) {
+            $minutes = 0;
+        }
+
+        $lineStmt = $this->pdo->prepare('SELECT lin_id FROM lin_linhas WHERE lin_codigo = :code LIMIT 1');
+        $lineStmt->execute(['code' => $rawLineCode]);
+        $lineId = (int) ($lineStmt->fetchColumn() ?: 0);
+
+        if ($lineId <= 0) {
+            $lineStmt = $this->pdo->prepare("SELECT lin_id FROM lin_linhas WHERE REPLACE(UPPER(lin_codigo), ' ', '') = :code LIMIT 1");
+            $lineStmt->execute(['code' => $normalizedLine]);
+            $lineId = (int) ($lineStmt->fetchColumn() ?: 0);
+        }
+        if ($lineId <= 0) {
+            throw new \RuntimeException('Linha nao encontrada.');
+        }
+
+        $exists = $this->pdo->prepare(
+            'SELECT mat_id FROM mat_matriz_setup'
+            . ' WHERE mat_linha_id = :lineId AND mat_sku_origem = :fromSku AND mat_sku_destino = :toSku'
+            . ' LIMIT 1'
+        );
+        $exists->execute([
+            'lineId' => $lineId,
+            'fromSku' => $from,
+            'toSku' => $to,
+        ]);
+        $matrixId = (int) ($exists->fetchColumn() ?: 0);
+        if ($matrixId <= 0) {
+            throw new \RuntimeException('Registro de matriz nao encontrado.');
+        }
+
+        $update = $this->pdo->prepare(
+            'UPDATE mat_matriz_setup SET mat_duracao_minutos = :minutes WHERE mat_id = :id'
+        );
+        $update->execute([
+            'minutes' => $minutes,
+            'id' => $matrixId,
+        ]);
+    }
+
     private function ensureLine(string $code): int
     {
         $stmt = $this->pdo->prepare('SELECT lin_id FROM lin_linhas WHERE lin_codigo = :code LIMIT 1');

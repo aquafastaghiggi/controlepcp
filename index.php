@@ -236,7 +236,7 @@ $datasets = $databaseData->all();
 
                     <form id="simulation-form">
                         <div class="field-grid">
-                            <label class="field">
+                            <label class="field is-hidden">
                                 <span>Número da OP</span>
                                 <input type="text" name="numero_op" placeholder="Ex: OP-2024-001">
                             </label>

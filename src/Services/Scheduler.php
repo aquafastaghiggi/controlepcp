@@ -30,16 +30,10 @@ final class Scheduler
         $productionFactor = $productionEfficiency / 100.0;
 
         $calendarData = $this->data['calendar'];
-        $intervals = $calendarData['intervals'];
-        if (is_array($intervals) && count($intervals) > 2) {
-            // Regra padrao: considerar apenas os intervalos de ordem 1 e 2.
-            $intervals = array_slice(array_values($intervals), 0, 2);
-        }
-        $calendar = new WorkCalendar(
-            $intervals,
-            $calendarData['working_days'] ?? [1, 2, 3, 4, 5],
-            $calendarData['holidays'] ?? []
-        );
+        $allIntervals = array_values(is_array($calendarData['intervals'] ?? null) ? $calendarData['intervals'] : []);
+        $baseIntervals = count($allIntervals) > 2 ? array_slice($allIntervals, 0, 2) : $allIntervals;
+        $workingDays = $calendarData['working_days'] ?? [1, 2, 3, 4, 5];
+        $holidays = $calendarData['holidays'] ?? [];
 
         $results = [];
         $errors = [];
@@ -49,11 +43,26 @@ final class Scheduler
             static fn (array $left, array $right): int => ((int) $left['sequence']) <=> ((int) $right['sequence'])
         );
 
+        $globalUseOrder3 = !empty($program[0]['use_order_3']);
+        $globalUseOrder4 = !empty($program[0]['use_order_4']);
+
         $previousSku = null;
         $previousProductionEnd = null;
         $firstItem = true;
 
         foreach ($program as $item) {
+            $intervals = $baseIntervals;
+
+            if ($globalUseOrder3 && isset($allIntervals[2])) {
+                $intervals[] = $allIntervals[2];
+            }
+
+            if ($globalUseOrder4 && isset($allIntervals[3])) {
+                $intervals[] = $allIntervals[3];
+            }
+
+            $calendar = new WorkCalendar($intervals, $workingDays, $holidays);
+
             $sku = trim((string) ($item['sku'] ?? ''));
             $sequence = (int) ($item['sequence'] ?? 0);
             $quantity = (float) ($item['quantity'] ?? 0);

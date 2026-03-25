@@ -75,7 +75,60 @@
     const matrixTableWrap = document.querySelector('.matrix-wrap');
 
     const defaultDatasets = JSON.parse(JSON.stringify(bootstrap.datasets || {}));
-    const defaultProgram = JSON.parse(JSON.stringify(bootstrap.sampleProgram || []));
+
+    const PROGRAM_DRAFT_STORAGE_PREFIX = 'pcp_program_draft:v1:';
+
+    function normalizeDraftLineCode(value) {
+        const clean = String(value || '').trim().replace(/[^a-zA-Z0-9]/g, '');
+        return clean ? clean.toUpperCase() : 'L2';
+    }
+
+    function getProgramDraftStorageKey(lineCode) {
+        return PROGRAM_DRAFT_STORAGE_PREFIX + normalizeDraftLineCode(lineCode);
+    }
+
+    function loadProgramDraftFromStorage(lineCode) {
+        try {
+            if (!window.localStorage) {
+                return { found: false, items: [] };
+            }
+
+            const raw = window.localStorage.getItem(getProgramDraftStorageKey(lineCode));
+            if (raw === null) {
+                return { found: false, items: [] };
+            }
+
+            const parsed = JSON.parse(raw);
+            if (!Array.isArray(parsed)) {
+                return { found: false, items: [] };
+            }
+
+            return { found: true, items: parsed };
+        } catch {
+            return { found: false, items: [] };
+        }
+    }
+
+    function saveProgramDraftToStorage(items, lineCode) {
+        try {
+            if (!window.localStorage) {
+                return;
+            }
+
+            window.localStorage.setItem(
+                getProgramDraftStorageKey(lineCode),
+                JSON.stringify(Array.isArray(items) ? items : []),
+            );
+        } catch {
+            // Ignora falhas de storage (quota / privacidade).
+        }
+    }
+
+    const initialDraftLineCode = defaultDatasets?.calendar?.line || 'L2';
+    const storedProgramDraft = loadProgramDraftFromStorage(initialDraftLineCode);
+    const defaultProgram = storedProgramDraft.found
+        ? storedProgramDraft.items
+        : JSON.parse(JSON.stringify(bootstrap.sampleProgram || []));
 
     const state = {
         datasets: normalizeDatasets(defaultDatasets),
@@ -249,6 +302,10 @@
 
 
     function readProgramRows() {
+        const firstRow = programBody.querySelector('tr');
+        const globalUseOrder3 = Boolean(firstRow?.querySelector('[name="use_order_3"]')?.checked);
+        const globalUseOrder4 = Boolean(firstRow?.querySelector('[name="use_order_4"]')?.checked);
+
         return [...programBody.querySelectorAll('tr')].map((row, index) => {
             const opInput = row.querySelector('[name="op"]');
             const op = opInput ? opInput.value : '';
@@ -258,6 +315,8 @@
                 sku: row.querySelector('[name="sku"]').value,
                 quantity: Number(row.querySelector('[name="quantity"]').value) || 0,
                 planned_start: index === 0 ? row.querySelector('[name="planned_start"]').value : '',
+                use_order_3: globalUseOrder3,
+                use_order_4: globalUseOrder4,
             };
         });
     }
@@ -1153,11 +1212,40 @@ function applyProgramacaoSheet(index) {
     function renderProgram() {
         programBody.innerHTML = '';
         const items = state.form.items.length ? state.form.items : [{}];
+        const extraIntervals = Array.isArray(state.datasets.calendar?.intervals) ? state.datasets.calendar.intervals : [];
+
+        const buildIntervalLabel = (order) => {
+            const interval = extraIntervals[order - 1] || null;
+            const start = String(interval?.start || '').trim();
+            const end = String(interval?.end || '').trim();
+            if (!start || !end) {
+                return '--:-- &agrave;s --:--';
+            }
+            return `${start} &agrave;s ${end}`;
+        };
 
         items.forEach((item, index) => {
             const row = document.createElement('tr');
+            const extraOptions = index === 0
+                ? `
+                    <div style="display:flex;flex-direction:column;gap:2px;align-items:flex-start;margin-top:4px;">
+                        <label style="display:flex;gap:6px;align-items:center;font-size:11px;line-height:1.1;white-space:nowrap;opacity:0.92;">
+                            <input type="checkbox" name="use_order_3" ${item.use_order_3 ? 'checked' : ''} style="width:14px;height:14px;min-height:0;padding:0;margin:0;cursor:pointer;">
+                            ordem 3 &mdash; ${buildIntervalLabel(3)}
+                        </label>
+                        <label style="display:flex;gap:6px;align-items:center;font-size:11px;line-height:1.1;white-space:nowrap;opacity:0.92;">
+                            <input type="checkbox" name="use_order_4" ${item.use_order_4 ? 'checked' : ''} style="width:14px;height:14px;min-height:0;padding:0;margin:0;cursor:pointer;">
+                            ordem 4 &mdash; ${buildIntervalLabel(4)}
+                        </label>
+                    </div>
+                `
+                : '';
+
             row.innerHTML = `
-                <td><input type="number" class="mini-input" name="sequence" value="${item.sequence || index + 1}" min="1" required></td>
+                <td>
+                    <input type="number" class="mini-input" name="sequence" value="${item.sequence || index + 1}" min="1" required>
+                    ${extraOptions}
+                </td>
                 <td><input type="text" class="mini-input" name="op" value="${item.op || ""}"></td>
                 <td><select name="sku" required>${productOptions(item.sku || '')}</select></td>
                 <td><input type="number" name="quantity" min="1" step="1" value="${item.quantity || ''}" required></td>
@@ -1178,7 +1266,8 @@ function applyProgramacaoSheet(index) {
                     state.form.items = [{}];
                 }
                 renderProgram();
-                saveState();
+                saveProgramDraftToStorage(state.form.items, state.datasets?.calendar?.line);
+                saveState({ meta: { skip_products: true } });
             });
 
             row.querySelectorAll('input, select').forEach((field) => {
@@ -1190,6 +1279,7 @@ function applyProgramacaoSheet(index) {
 
     function syncProgramState() {
         state.form.items = readProgramRows();
+        saveProgramDraftToStorage(state.form.items, state.datasets?.calendar?.line);
     }
 
     function renderSummary(result) {
@@ -1731,7 +1821,7 @@ function applyProgramacaoSheet(index) {
         if (productionEfficiencyInput) {
             productionEfficiencyInput.value = String(state.form.production_efficiency);
         }
-        saveState();
+        saveState({ meta: { skip_products: true } });
     });
 
     addRowButton.addEventListener('click', () => {
@@ -1740,9 +1830,12 @@ function applyProgramacaoSheet(index) {
             sku: '',
             quantity: '',
             planned_start: '',
+            use_order_3: false,
+            use_order_4: false,
         });
         renderProgram();
-        saveState();
+        saveProgramDraftToStorage(state.form.items, state.datasets?.calendar?.line);
+        saveState({ meta: { skip_products: true } });
         window.requestAnimationFrame(() => {
             entryTableWrap?.scrollTo({ top: entryTableWrap.scrollHeight, behavior: 'smooth' });
         });
@@ -1752,7 +1845,8 @@ function applyProgramacaoSheet(index) {
         state.form.items = [{}];
         renderProgram();
         resetResultArea(false);
-        saveState();
+        saveProgramDraftToStorage([], state.datasets?.calendar?.line);
+        saveState({ meta: { skip_products: true } });
     });
 
     navLinks.forEach((button) => {

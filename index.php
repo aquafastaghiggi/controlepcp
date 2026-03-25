@@ -138,6 +138,7 @@ $datasets = $databaseData->all();
                             <button type="button" id="import-products" class="ghost-button">Importar Excel</button>
                             <button type="button" id="clear-products" class="ghost-button">Limpar produtos</button>
                             <button type="button" id="add-product" class="ghost-button">Adicionar SKU</button>
+                            <button type="button" id="sync-products" class="ghost-button">Sincronizar produtos</button>
                         </div>
                     </div>
 

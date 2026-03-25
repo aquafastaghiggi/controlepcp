@@ -12,10 +12,58 @@ use PDO;
 final class ProgramacaoRepository
 {
     private PDO $pdo;
+    private ?bool $productsHasExcelLineColumn = null;
 
     public function __construct(?PDO $pdo = null)
     {
         $this->pdo = $pdo ?? Connection::get();
+    }
+
+    private function productsHasExcelLineColumn(): bool
+    {
+        if ($this->productsHasExcelLineColumn !== null) {
+            return $this->productsHasExcelLineColumn;
+        }
+
+        try {
+            $count = $this->pdo->query(
+                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'prd_produtos' AND COLUMN_NAME = 'prd_linha_excel'"
+            )->fetchColumn();
+            $this->productsHasExcelLineColumn = (int) $count > 0;
+        } catch (\Throwable $e) {
+            $this->productsHasExcelLineColumn = false;
+        }
+
+        return $this->productsHasExcelLineColumn;
+    }
+
+    private function sqlDominantExcelLineExpr(string $programAlias = 'p', string $lineAlias = 'l'): string
+    {
+        if (!$this->productsHasExcelLineColumn()) {
+            return 'NULL AS linha_excel_dominante';
+        }
+
+        $programIdExpr = $programAlias . '.prg_id';
+        $fallback = $lineAlias . '.lin_codigo';
+
+        $dominantFromItems = '(SELECT pp.prd_linha_excel'
+            . ' FROM prg_itens ii'
+            . ' JOIN prd_produtos pp ON pp.prd_sku = ii.prg_sku'
+            . " WHERE ii.prg_programa_id = {$programIdExpr} AND pp.prd_linha_excel <> ''"
+            . ' GROUP BY pp.prd_linha_excel'
+            . ' ORDER BY COUNT(*) DESC, pp.prd_linha_excel ASC'
+            . ' LIMIT 1)';
+
+        $dominantFromSchedule = '(SELECT pp.prd_linha_excel'
+            . ' FROM sch_linhas ss'
+            . ' JOIN prd_produtos pp ON pp.prd_sku = ss.sch_sku'
+            . " WHERE ss.sch_programa_id = {$programIdExpr} AND ss.sch_sku IS NOT NULL AND pp.prd_linha_excel <> ''"
+            . " AND ss.sch_criado_em = (SELECT MAX(s2.sch_criado_em) FROM sch_linhas s2 WHERE s2.sch_programa_id = {$programIdExpr})"
+            . ' GROUP BY pp.prd_linha_excel'
+            . ' ORDER BY COUNT(*) DESC, pp.prd_linha_excel ASC'
+            . ' LIMIT 1)';
+
+        return "COALESCE(NULLIF({$dominantFromItems}, ''), NULLIF({$dominantFromSchedule}, ''), {$fallback}) AS linha_excel_dominante";
     }
 
     public function salvarExecucao(
@@ -229,18 +277,29 @@ final class ProgramacaoRepository
 
     public function getAllProgramacoes(int $limit = 100, int $offset = 0): array
     {
-        $stmt = $this->pdo->prepare(
-            'SELECT p.prg_id, p.prg_numero_op, p.prg_linha_id, l.lin_codigo, l.lin_nome, 
-                    p.prg_base_inicio, p.prg_data_consulta, p.prg_eficiencia, p.prg_status,
-                    p.prg_criado_em, p.prg_atualizado_em,
-                    COUNT(i.prg_id_item) as total_itens
-             FROM prg_programas p
-             LEFT JOIN lin_linhas l ON p.prg_linha_id = l.lin_id
-             LEFT JOIN prg_itens i ON p.prg_id = i.prg_programa_id
-             GROUP BY p.prg_id
-             ORDER BY p.prg_criado_em DESC
-             LIMIT :limit OFFSET :offset'
-        );
+        $inicioBaseExpr = "(SELECT CONCAT(ss.sch_data_inicio, ' ', ss.sch_hora_inicio)"
+            . ' FROM sch_linhas ss'
+            . ' WHERE ss.sch_programa_id = p.prg_id'
+            . ' AND ss.sch_criado_em = (SELECT MAX(s2.sch_criado_em) FROM sch_linhas s2 WHERE s2.sch_programa_id = p.prg_id)'
+            . ' AND ss.sch_data_inicio IS NOT NULL'
+            . ' AND ss.sch_hora_inicio IS NOT NULL'
+            . ' ORDER BY ss.sch_sequencia ASC'
+            . ' LIMIT 1) AS inicio_base_cronograma';
+
+        $sql = 'SELECT p.prg_id, p.prg_numero_op, p.prg_linha_id, l.lin_codigo, l.lin_nome,'
+            . ' ' . $this->sqlDominantExcelLineExpr('p', 'l') . ','
+            . ' ' . $inicioBaseExpr . ','
+            . ' p.prg_base_inicio, p.prg_data_consulta, p.prg_eficiencia, p.prg_status,'
+            . ' p.prg_criado_em, p.prg_atualizado_em,'
+            . ' COUNT(i.prg_id_item) as total_itens'
+            . ' FROM prg_programas p'
+            . ' LEFT JOIN lin_linhas l ON p.prg_linha_id = l.lin_id'
+            . ' LEFT JOIN prg_itens i ON p.prg_id = i.prg_programa_id'
+            . ' GROUP BY p.prg_id'
+            . ' ORDER BY p.prg_criado_em DESC'
+            . ' LIMIT :limit OFFSET :offset';
+
+        $stmt = $this->pdo->prepare($sql);
         $stmt->bindValue('limit', $limit, PDO::PARAM_INT);
         $stmt->bindValue('offset', $offset, PDO::PARAM_INT);
         $stmt->execute();
@@ -250,13 +309,14 @@ final class ProgramacaoRepository
 
     public function getProgramacaoById(int $id): ?array
     {
-        $stmt = $this->pdo->prepare(
-            'SELECT p.*, l.lin_codigo, l.lin_nome 
-             FROM prg_programas p
-             LEFT JOIN lin_linhas l ON p.prg_linha_id = l.lin_id
-             WHERE p.prg_id = :id
-             LIMIT 1'
-        );
+        $sql = 'SELECT p.*, l.lin_codigo, l.lin_nome,'
+            . ' ' . $this->sqlDominantExcelLineExpr('p', 'l')
+            . ' FROM prg_programas p'
+            . ' LEFT JOIN lin_linhas l ON p.prg_linha_id = l.lin_id'
+            . ' WHERE p.prg_id = :id'
+            . ' LIMIT 1';
+
+        $stmt = $this->pdo->prepare($sql);
         $stmt->execute(['id' => $id]);
         $result = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -266,14 +326,15 @@ final class ProgramacaoRepository
     public function getProgramacaoByOp(string $op): ?array
     {
         // Sempre retornar a última programação criada para essa OP
-        $stmt = $this->pdo->prepare(
-            'SELECT p.*, l.lin_codigo, l.lin_nome 
-             FROM prg_programas p
-             LEFT JOIN lin_linhas l ON p.prg_linha_id = l.lin_id
-             WHERE p.prg_numero_op = :op
-             ORDER BY p.prg_criado_em DESC
-             LIMIT 1'
-        );
+        $sql = 'SELECT p.*, l.lin_codigo, l.lin_nome,'
+            . ' ' . $this->sqlDominantExcelLineExpr('p', 'l')
+            . ' FROM prg_programas p'
+            . ' LEFT JOIN lin_linhas l ON p.prg_linha_id = l.lin_id'
+            . ' WHERE p.prg_numero_op = :op'
+            . ' ORDER BY p.prg_criado_em DESC'
+            . ' LIMIT 1';
+
+        $stmt = $this->pdo->prepare($sql);
         $stmt->execute(['op' => $op]);
         $result = $stmt->fetch(PDO::FETCH_ASSOC);
 

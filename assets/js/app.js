@@ -22,6 +22,7 @@
     const productsImportFile = document.getElementById('products-import-file');
     const clearProductsButton = document.getElementById('clear-products');
     const addProductButton = document.getElementById('add-product');
+    const syncProductsButton = document.getElementById('sync-products');
     const importMatrixButton = document.getElementById('import-matrix');
     const matrixImportFile = document.getElementById('matrix-import-file');
     const clearMatrixButton = document.getElementById('clear-matrix');
@@ -1371,6 +1372,84 @@ function applyProgramacaoSheet(index) {
         }
     });
 
+    syncProductsButton?.addEventListener('click', async () => {
+        try {
+            const rows = [...productsBody.querySelectorAll('tr')];
+            const products = {};
+
+            rows.forEach((row) => {
+                const sku = String(row.querySelector('input[data-field="sku"]')?.value || '').trim();
+                if (!sku) {
+                    return;
+                }
+
+                const description = String(row.querySelector('input[data-field="description"]')?.value || '').trim();
+                const referenceSetup = String(row.querySelector('input[data-field="reference_setup"]')?.value || '').trim();
+                const line = String(row.querySelector('input[data-field="line"]')?.value || '').trim();
+                const rateRaw = String(row.querySelector('input[data-field="rate_per_hour"]')?.value ?? '').trim();
+                const unit = String(row.querySelector('input[data-field="unit"]')?.value || '').trim();
+
+                products[sku] = {
+                    description,
+                    reference_setup: referenceSetup,
+                    line,
+                    rate_per_hour: rateRaw === '' ? 0 : Number(rateRaw),
+                    unit,
+                };
+            });
+
+            const response = await apiFetch('/controlepcp/api/datasets.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    datasets: {
+                        calendar: {
+                            line: state.datasets.calendar.line || 'L2',
+                        },
+                        products,
+                        meta: {
+                            sync_products_only: true,
+                        },
+                    },
+                }),
+            });
+
+            let payload = null;
+            try {
+                payload = await response.clone().json();
+            } catch {
+                payload = null;
+            }
+
+            if (!response.ok) {
+                let message = payload?.message;
+                if (!message) {
+                    try {
+                        message = (await response.text()).trim();
+                    } catch {
+                        message = '';
+                    }
+                }
+                throw new Error(message || 'Falha ao salvar os dados.');
+            }
+
+            const data = payload ?? (await response.json());
+            if (data && typeof data === 'object') {
+                state.datasets = normalizeDatasets(data);
+                if (!state.datasets.setup_matrix[state.activeMatrixLine]) {
+                    state.activeMatrixLine = '';
+                }
+                renderAllDatasetTables();
+                renderProgram();
+                showToast('Produtos sincronizados no banco de dados.', 'success');
+            }
+        } catch (error) {
+            showToast(error.message || 'Falha ao sincronizar produtos.', 'danger');
+        }
+    });
+
     clearProductsButton.addEventListener('click', () => {
         if (!window.confirm('Deseja realmente limpar a base de produtos?')) {
             return;
@@ -2162,9 +2241,8 @@ async function loadHistoryProgramacoes() {
     historyList.innerHTML = '';
 
     lista.forEach((item) => {
-            const linha = item.lin_nome || item.lin_codigo || 'Linha não informada';
-      const lote = item.prg_id || '-';
-      let inicio = item.prg_base_inicio || item.prg_criado_em || '-';
+            const linha = formatLinhaLabel(item.linha_excel_dominante || item.lin_nome || item.lin_codigo) || 'Linha não informada';
+      let inicio = item.inicio_base_cronograma || item.prg_base_inicio || item.prg_criado_em || '-';
 
       if (inicio && inicio !== '-') {
         const [data, hora] = inicio.split(' ');
@@ -2183,7 +2261,6 @@ async function loadHistoryProgramacoes() {
 
       div.innerHTML = `
         <strong>${linha}</strong><br>
-        Lote: ${lote}<br>
         Início: ${inicio}
       `;
 
@@ -2198,6 +2275,15 @@ async function loadHistoryProgramacoes() {
   } catch (error) {
     console.error('Erro ao carregar hist�rico', error);
   }
+}
+
+function formatLinhaLabel(valor) {
+  if (!valor) return '';
+  const match = String(valor).match(/^LN(\d+)/i);
+  if (match) {
+    return `Linha ${match[1]}`;
+  }
+  return valor;
 }
 
 function escapeHtml(text) {
@@ -2309,7 +2395,7 @@ async function openHistoryPreview(prgId) {
       return dateLabel + "<br>" + dayPart + timeLabel;
     };
 
-    const lineLabel = data.lin_nome || data.lin_codigo || '';
+    const lineLabel = formatLinhaLabel(data.linha_excel_dominante || data.lin_nome || data.lin_codigo) || '';
     const eficiencia = String(data.prg_eficiencia || '');
     const firstItem = (data.schedule || [])[0];
 

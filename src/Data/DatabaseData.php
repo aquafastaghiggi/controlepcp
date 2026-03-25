@@ -12,6 +12,7 @@ final class DatabaseData
 {
     private PDO $pdo;
     private ?string $preferredLineCode = null;
+    private ?bool $productsHasExcelLineColumn = null;
 
     public function __construct(?PDO $pdo = null, ?string $preferredLineCode = null)
     {
@@ -346,9 +347,18 @@ final class DatabaseData
         $allowClearMatrix = !empty($meta['allow_clear_matrix']);
         $allowClearCalendar = !empty($meta['allow_clear_calendar']);
         $skipProductUpdates = !empty($meta['skip_products']);
+        $syncProductsOnly = !empty($meta['sync_products_only']);
 
         $preferredLineCode = isset($meta['preferred_line_code']) && is_string($meta['preferred_line_code']) ? trim($meta['preferred_line_code']) : null;
         $this->preferredLineCode = $preferredLineCode !== '' ? $preferredLineCode : null;
+
+        $productsData = array_key_exists('products', $data) && is_array($data['products'])
+            ? $data['products']
+            : [];
+
+        if (!$skipProductUpdates && ($productsData !== [] || $allowClearProducts)) {
+            $this->ensureProductsExcelLineColumn();
+        }
 
         $this->pdo->beginTransaction();
 
@@ -368,12 +378,8 @@ final class DatabaseData
                 $this->replaceCalendarHolidays($calendarId, $holidays);
             }
 
-            $productsData = array_key_exists('products', $data) && is_array($data['products'])
-                ? $data['products']
-                : [];
-
             if (!$skipProductUpdates && ($productsData !== [] || $allowClearProducts)) {
-                $this->replaceProducts($productsData, $lineCode, $allowClearProducts);
+                $this->replaceProducts($productsData, $lineCode, $allowClearProducts, $syncProductsOnly);
             }
 
             $sections = $this->extractSetupMatrixSections($data, $lineCode);
@@ -465,7 +471,7 @@ final class DatabaseData
         }
     }
 
-    private function replaceProducts(array $products, string $defaultLineCode, bool $allowClear): void
+    private function replaceProducts(array $products, string $defaultLineCode, bool $allowClear, bool $syncOnly = false): void
     {
         if ($products === []) {
             if ($allowClear) {
@@ -477,6 +483,7 @@ final class DatabaseData
             return;
         }
 
+        $hasExcelLineColumn = $this->ensureProductsExcelLineColumn();
         $prepared = [];
         $lineCache = [];
         $lineIds = [];
@@ -488,6 +495,7 @@ final class DatabaseData
             }
 
             $rawLine = (string) ($product['line'] ?? '');
+            $rawLineTrimmed = trim($rawLine);
             $lineCode = $this->normalizeLineCode($rawLine);
             if ($lineCode === '') {
                 $lineCode = $defaultLineCode;
@@ -505,6 +513,7 @@ final class DatabaseData
                 'description' => (string) ($product['description'] ?? ''),
                 'reference_setup' => (string) ($product['reference_setup'] ?? ''),
                 'lineId' => $lineId,
+                'lineExcel' => $rawLineTrimmed !== '' ? $rawLineTrimmed : $lineCode,
                 'rate' => (float) ($product['rate_per_hour'] ?? 0),
                 'unit' => (string) ($product['unit'] ?? ''),
             ];
@@ -514,27 +523,91 @@ final class DatabaseData
             return;
         }
 
-        $lineIdList = array_keys($lineIds);
-        foreach ($lineIdList as $lineId) {
-            $this->clearMatrixForLine($lineId);
+        if (!$syncOnly) {
+            $lineIdList = array_keys($lineIds);
+            foreach ($lineIdList as $lineId) {
+                $this->clearMatrixForLine($lineId);
+            }
+
+            $this->deleteProductsByLineIds($lineIdList);
         }
 
-        $this->deleteProductsByLineIds($lineIdList);
-
-        $insert = $this->pdo->prepare(
-            'INSERT INTO prd_produtos (prd_sku, prd_descricao, prd_referencia_setup, prd_linha_id, prd_taxa_por_hora, prd_unidade) VALUES (:sku, :descricao, :ref, :lineId, :rate, :unit)'
-        );
+        if ($hasExcelLineColumn) {
+            $insert = $this->pdo->prepare(
+                'INSERT INTO prd_produtos (prd_sku, prd_descricao, prd_referencia_setup, prd_linha_id, prd_linha_excel, prd_taxa_por_hora, prd_unidade)'
+                . ' VALUES (:sku, :descricao, :ref, :lineId, :lineExcel, :rate, :unit)'
+                . ' ON DUPLICATE KEY UPDATE'
+                . ' prd_descricao = VALUES(prd_descricao),'
+                . ' prd_referencia_setup = VALUES(prd_referencia_setup),'
+                . ' prd_linha_id = VALUES(prd_linha_id),'
+                . ' prd_linha_excel = VALUES(prd_linha_excel),'
+                . ' prd_taxa_por_hora = VALUES(prd_taxa_por_hora),'
+                . ' prd_unidade = VALUES(prd_unidade)'
+            );
+        } else {
+            $insert = $this->pdo->prepare(
+                'INSERT INTO prd_produtos (prd_sku, prd_descricao, prd_referencia_setup, prd_linha_id, prd_taxa_por_hora, prd_unidade)'
+                . ' VALUES (:sku, :descricao, :ref, :lineId, :rate, :unit)'
+                . ' ON DUPLICATE KEY UPDATE'
+                . ' prd_descricao = VALUES(prd_descricao),'
+                . ' prd_referencia_setup = VALUES(prd_referencia_setup),'
+                . ' prd_linha_id = VALUES(prd_linha_id),'
+                . ' prd_taxa_por_hora = VALUES(prd_taxa_por_hora),'
+                . ' prd_unidade = VALUES(prd_unidade)'
+            );
+        }
 
         foreach ($prepared as $row) {
-            $insert->execute([
+            $params = [
                 'sku' => $row['sku'],
                 'descricao' => $row['description'],
                 'ref' => $row['reference_setup'],
                 'lineId' => $row['lineId'],
                 'rate' => $row['rate'],
                 'unit' => $row['unit'],
-            ]);
+            ];
+            if ($hasExcelLineColumn) {
+                $params['lineExcel'] = $row['lineExcel'];
+            }
+            $insert->execute($params);
         }
+    }
+
+    private function ensureProductsExcelLineColumn(): bool
+    {
+        if ($this->productsHasExcelLineColumn !== null) {
+            return $this->productsHasExcelLineColumn;
+        }
+
+        try {
+            $exists = $this->pdo->query(
+                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'prd_produtos' AND COLUMN_NAME = 'prd_linha_excel'"
+            )->fetchColumn();
+        } catch (\Throwable $e) {
+            return false;
+        }
+
+        if ((int) $exists > 0) {
+            $this->productsHasExcelLineColumn = true;
+            return true;
+        }
+
+        if ($this->pdo->inTransaction()) {
+            return false;
+        }
+
+        try {
+            $this->pdo->exec("ALTER TABLE prd_produtos ADD COLUMN prd_linha_excel VARCHAR(60) NOT NULL DEFAULT '' AFTER prd_linha_id");
+        } catch (\Throwable $e) {
+            // Se nao for possivel alterar o schema, seguimos sem gravar o campo textual para nao quebrar fluxos existentes.
+        }
+
+        $exists = $this->pdo->query(
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'prd_produtos' AND COLUMN_NAME = 'prd_linha_excel'"
+        )->fetchColumn();
+
+        $this->productsHasExcelLineColumn = (int) $exists > 0;
+        return $this->productsHasExcelLineColumn;
     }
 
     private function clearMatrixForLine(int $lineId): void

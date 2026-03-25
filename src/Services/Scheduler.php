@@ -30,8 +30,13 @@ final class Scheduler
         $productionFactor = $productionEfficiency / 100.0;
 
         $calendarData = $this->data['calendar'];
+        $intervals = $calendarData['intervals'];
+        if (is_array($intervals) && count($intervals) > 2) {
+            // Regra padrao: considerar apenas os intervalos de ordem 1 e 2.
+            $intervals = array_slice(array_values($intervals), 0, 2);
+        }
         $calendar = new WorkCalendar(
-            $calendarData['intervals'],
+            $intervals,
             $calendarData['working_days'] ?? [1, 2, 3, 4, 5],
             $calendarData['holidays'] ?? []
         );
@@ -252,4 +257,3 @@ final class Scheduler
         ];
     }
 }
-

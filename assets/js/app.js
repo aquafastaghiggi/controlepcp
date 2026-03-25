@@ -2580,7 +2580,7 @@ async function openHistoryPreview(prgId) {
       <html lang="pt-BR">
       <head>
         <meta charset="UTF-8">
-        <title>Histórico de Programação - Lote ${escapeHtml(data.prg_id || prgId)}</title>
+        <title>Histórico de Programação - ${escapeHtml(lineLabel)}</title>
         <style>
           @page {
             size: A4 landscape;
@@ -2639,8 +2639,15 @@ async function openHistoryPreview(prgId) {
 
           th, td {
             border: 1px solid #ccc;
-            padding: 6px;
+            padding: 4px 6px;
             font-size: 11px;
+            line-height: 1.2;
+            vertical-align: middle;
+          }
+
+          td {
+            padding: 3px 6px;
+            white-space: normal;
           }
 
           th {

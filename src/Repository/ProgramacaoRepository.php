@@ -254,16 +254,29 @@ final class ProgramacaoRepository
 
     private function ensureLine(string $code): int
     {
+        $trimmed = trim($code);
+        if ($trimmed === '') {
+            throw new \InvalidArgumentException('Linha invalida.');
+        }
+
         $stmt = $this->pdo->prepare('SELECT lin_id FROM lin_linhas WHERE lin_codigo = :code LIMIT 1');
-        $stmt->execute(['code' => $code]);
+        $stmt->execute(['code' => $trimmed]);
         $line = $stmt->fetch();
 
         if ($line) {
             return (int) $line['lin_id'];
         }
 
+        $compact = preg_replace('/\s+/', '', strtoupper($trimmed)) ?? strtoupper($trimmed);
+        $stmt = $this->pdo->prepare("SELECT lin_id FROM lin_linhas WHERE REPLACE(UPPER(lin_codigo), ' ', '') = :code LIMIT 1");
+        $stmt->execute(['code' => $compact]);
+        $existingId = (int) ($stmt->fetchColumn() ?: 0);
+        if ($existingId > 0) {
+            return $existingId;
+        }
+
         $stmt = $this->pdo->prepare('INSERT INTO lin_linhas (lin_codigo, lin_nome) VALUES (:code, :name)');
-        $stmt->execute(['code' => $code, 'name' => sprintf('Linha %s', $code)]);
+        $stmt->execute(['code' => $trimmed, 'name' => sprintf('Linha %s', $trimmed)]);
 
         return (int) $this->pdo->lastInsertId();
     }

@@ -22,6 +22,36 @@ final class WorkCalendar
         }
     }
 
+    private function isOrderAllowedForDay(int $orderNumber, DateTimeImmutable $day): bool
+    {
+        $dateKey = $day->format('Y-m-d');
+
+        // Regra A: se a data existir em orders_by_day, ela é soberana (sem fallback).
+        if (array_key_exists($dateKey, $this->dayOrdersByDate)) {
+            $dayOrders = $this->dayOrdersByDate[$dateKey] ?? null;
+            if (!is_array($dayOrders)) {
+                return false;
+            }
+
+            $hasAnyAllowedOrder = false;
+            for ($order = 1; $order <= 4; $order++) {
+                if (!empty($dayOrders[$order])) {
+                    $hasAnyAllowedOrder = true;
+                    break;
+                }
+            }
+
+            if (!$hasAnyAllowedOrder) {
+                return false;
+            }
+
+            return !empty($dayOrders[$orderNumber]);
+        }
+
+        // Data ausente: fallback antigo (ordem não é filtrada por data).
+        return true;
+    }
+
     public function nextValidDateTime(DateTimeImmutable $dateTime): DateTimeImmutable
     {
         $currentInterval = $this->findCurrentInterval($dateTime);
@@ -208,11 +238,27 @@ final class WorkCalendar
             ? $this->dayOrdersByDate[$dateKey]
             : [];
 
+        if ($hasDayOrders) {
+            $hasAnyAllowedOrder = false;
+            for ($order = 1; $order <= 4; $order++) {
+                if (!empty($allowedOrdersForDate[$order])) {
+                    $hasAnyAllowedOrder = true;
+                    break;
+                }
+            }
+
+            // Data presente na agenda + todas as ordens desmarcadas = dia bloqueado (sem fallback).
+            if (!$hasAnyAllowedOrder) {
+                return [];
+            }
+        }
+
         $instances = [];
 
         foreach ($this->intervals as $index => $interval) {
+            $orderNumber = isset($interval['order']) ? (int) $interval['order'] : ($index + 1);
+
             if ($hasDayOrders) {
-                $orderNumber = isset($interval['order']) ? (int) $interval['order'] : ($index + 1);
                 if (empty($allowedOrdersForDate[$orderNumber])) {
                     continue;
                 }
@@ -229,18 +275,13 @@ final class WorkCalendar
             $end = $day->setTime($endHour, $endMinute);
 
             if ($end <= $start) {
-                $end = $end->add(new DateInterval('P1D'));
+                $nextDay = $day->add(new DateInterval('P1D'));
+                $nextDayStart = $nextDay->setTime(0, 0);
+                $end = $nextDay->setTime($endHour, $endMinute);
 
-                if ($hasDayOrders) {
-                    $nextDayKey = $day->add(new DateInterval('P1D'))->format('Y-m-d');
-                    if (array_key_exists($nextDayKey, $this->dayOrdersByDate)) {
-                        $nextOrders = is_array($this->dayOrdersByDate[$nextDayKey] ?? null)
-                            ? $this->dayOrdersByDate[$nextDayKey]
-                            : [];
-                        if (empty($nextOrders[$orderNumber])) {
-                            $end = $day->add(new DateInterval('P1D'));
-                        }
-                    }
+                // Regra B: trecho após 00:00 só existe se o dia seguinte for válido para a mesma ordem.
+                if (!$this->isIntervalAllowedForDay($interval, $nextDay) || !$this->isOrderAllowedForDay($orderNumber, $nextDay)) {
+                    $end = $nextDayStart;
                 }
             }
 

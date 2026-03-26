@@ -328,7 +328,7 @@
             };
 
             if (programacaoConfig) {
-                parsed.programacao_config = programacaoConfig;
+                parsed.programacao_config = JSON.parse(JSON.stringify(programacaoConfig));
             }
 
             return parsed;
@@ -782,10 +782,11 @@
                  }
 
                  const ordersForDay = ordersByDay?.[effectiveSelectedDay] || { 1: true, 2: true, 3: false, 4: false };
+                 const ordersByDaySnapshot = JSON.parse(JSON.stringify(ui.orders_by_day && typeof ui.orders_by_day === 'object' ? ui.orders_by_day : {}));
                  const programacaoConfig = {
                      selected_day: effectiveSelectedDay,
                      efficiency: ui.efficiency,
-                     orders_by_day: ordersByDay,
+                     orders_by_day: ordersByDaySnapshot,
                      orders: {
                          1: Boolean(ordersForDay[1]),
                          2: Boolean(ordersForDay[2]),
@@ -804,12 +805,13 @@
                         if (!item || !item.sku) {
                             return item;
                         }
+                        const programacaoConfigSnapshot = JSON.parse(JSON.stringify(programacaoConfig));
                         return {
                             ...item,
                             planned_start: itemIndex === 0 && selectedDayStart ? selectedDayStart : (item.planned_start || ''),
                             use_order_3: useOrder3,
                             use_order_4: useOrder4,
-                            programacao_config: programacaoConfig,
+                            programacao_config: programacaoConfigSnapshot,
                         };
                     });
                     renderProgram();

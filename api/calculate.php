@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require __DIR__ . '/../src/bootstrap.php';
 
+use App\Database\Connection;
  use App\Data\DatabaseData;
  use App\Repository\ProgramacaoRepository;
  use App\Services\Scheduler;
@@ -22,6 +23,50 @@ function normalize_line_code(?string $value): ?string
     }
 
     return strtoupper($clean);
+}
+
+function infer_line_code_from_program_skus(array $program): ?string
+{
+    $skus = [];
+
+    foreach ($program as $item) {
+        if (!is_array($item)) {
+            continue;
+        }
+
+        $sku = trim((string) ($item['sku'] ?? ''));
+        if ($sku === '' || strtoupper($sku) === 'SETUP') {
+            continue;
+        }
+
+        $skus[] = $sku;
+    }
+
+    $skus = array_values(array_unique($skus));
+    if ($skus === []) {
+        return null;
+    }
+
+    $pdo = Connection::get();
+
+    $placeholders = implode(',', array_fill(0, count($skus), '?'));
+    $stmt = $pdo->prepare(
+        "SELECT prd_linha_id FROM prd_produtos WHERE prd_sku IN ({$placeholders}) GROUP BY prd_linha_id ORDER BY COUNT(*) DESC, prd_linha_id ASC LIMIT 1"
+    );
+    $stmt->execute($skus);
+    $lineId = (int) ($stmt->fetchColumn() ?: 0);
+    if ($lineId <= 0) {
+        return null;
+    }
+
+    $stmt = $pdo->prepare('SELECT lin_codigo FROM lin_linhas WHERE lin_id = :id LIMIT 1');
+    $stmt->execute(['id' => $lineId]);
+    $code = trim((string) ($stmt->fetchColumn() ?: ''));
+    if ($code === '') {
+        return null;
+    }
+
+    return normalize_line_code($code);
 }
 
 header('Content-Type: application/json; charset=utf-8');
@@ -58,7 +103,16 @@ function pcp_log_error(string $traceId, \Throwable $e): void
          pcp_json_response(400, ['message' => 'Payload invalido.']);
      }
 
-     $lineCode = !empty($payload['line_code']) ? normalize_line_code((string) $payload['line_code']) : null;
+     $datasetsPayload = isset($payload['datasets']) && is_array($payload['datasets']) ? $payload['datasets'] : null;
+
+     $lineCodeFromPayload = !empty($payload['line_code']) ? normalize_line_code((string) $payload['line_code']) : null;
+     $lineCodeFromDatasets = null;
+     if (is_array($datasetsPayload) && isset($datasetsPayload['calendar']) && is_array($datasetsPayload['calendar'])) {
+         $lineFromCalendar = trim((string) ($datasetsPayload['calendar']['line'] ?? ''));
+         if ($lineFromCalendar !== '') {
+             $lineCodeFromDatasets = normalize_line_code($lineFromCalendar);
+         }
+     }
 
      $baseStart = DateTimeHelper::fromLocalInput((string) ($payload['base_start'] ?? ''));
      $queryDateTime = DateTimeHelper::fromLocalInput((string) ($payload['query_datetime'] ?? ''));
@@ -70,13 +124,20 @@ function pcp_log_error(string $traceId, \Throwable $e): void
          pcp_json_response(422, ['message' => 'Informe ao menos um item para calcular.']);
      }
 
+     $lineCodeFromSkus = infer_line_code_from_program_skus($program);
+
+     $lineCode = $lineCodeFromDatasets ?? $lineCodeFromSkus ?? $lineCodeFromPayload;
+     if ($lineCodeFromDatasets !== null && $lineCodeFromSkus !== null && $lineCodeFromDatasets !== $lineCodeFromSkus) {
+         $lineCode = $lineCodeFromSkus;
+     }
+
      $productionEfficiency = $productionEfficiency <= 0 ? 100.0 : $productionEfficiency;
 
      $datasetRepo = new DatabaseData(null, $lineCode);
      $datasets = $datasetRepo->all();
-     $effectiveLine = $lineCode ?? ($datasets['calendar']['line'] ?? '');
+     $effectiveLine = (string) ($datasets['calendar']['line'] ?? '');
      if ($effectiveLine === '') {
-         $effectiveLine = 'L2';
+         $effectiveLine = $lineCode ?? 'L2';
      }
 
      $programacaoConfig = null;

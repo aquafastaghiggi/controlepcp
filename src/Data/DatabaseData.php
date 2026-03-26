@@ -79,16 +79,24 @@ final class DatabaseData
 
     private function fetchLineByCode(string $code): ?array
     {
+        $normalized = trim($code);
+        if ($normalized === '') {
+            return null;
+        }
+
+        $normalized = preg_replace('/\s+/', '', $normalized) ?? $normalized;
+        $normalized = strtoupper($normalized);
+
         $stmt = $this->pdo->prepare(
             'SELECT l.*,'
             . ' (SELECT COUNT(*) FROM prd_produtos p WHERE p.prd_linha_id = l.lin_id) AS products_count,'
             . ' (SELECT COUNT(*) FROM cal_intervalos i JOIN cal_calendarios c ON c.cal_id = i.cal_calendario_id WHERE c.cal_linha_id = l.lin_id) AS intervals_count,'
             . ' (SELECT COUNT(*) FROM mat_matriz_setup m WHERE m.mat_linha_id = l.lin_id) AS matrix_count'
             . ' FROM lin_linhas l'
-            . ' WHERE l.lin_codigo = :code'
+            . " WHERE REPLACE(UPPER(l.lin_codigo), ' ', '') = :code"
             . ' LIMIT 1'
         );
-        $stmt->execute(['code' => $code]);
+        $stmt->execute(['code' => $normalized]);
 
         return $stmt->fetch() ?: null;
     }
@@ -98,14 +106,23 @@ final class DatabaseData
         $calendar = $this->fetchCalendarForLine($lineId);
         $calendarId = $calendar ? (int) $calendar['cal_id'] : null;
 
+        if ($calendarId === null) {
+            $calendarId = $this->ensureCalendar($lineId);
+            $calendar = ['cal_id' => $calendarId];
+        }
+
         $intervals = $this->loadCalendarIntervalsForId($calendarId);
 
         if ($intervals === []) {
             $fallbackCalendar = $this->fetchAnyCalendarWithIntervals($calendarId);
             if ($fallbackCalendar) {
-                $calendar = $fallbackCalendar;
-                $calendarId = (int) $calendar['cal_id'];
-                $intervals = $this->loadCalendarIntervalsForId($calendarId);
+                $templateIntervals = $this->loadCalendarIntervalsForId((int) $fallbackCalendar['cal_id']);
+                if ($templateIntervals !== []) {
+                    // Em vez de "emprestar" o calendario de outra linha, replicamos os intervalos/dias uteis
+                    // para o calendario desta linha, garantindo amarracao consistente por linha.
+                    $this->replaceCalendarIntervals($calendarId, $templateIntervals);
+                    $intervals = $this->loadCalendarIntervalsForId($calendarId);
+                }
             }
         }
 
@@ -241,6 +258,45 @@ final class DatabaseData
         return strtoupper($code);
     }
 
+    private function normalizeExcelLineAbbrev(string $value): string
+    {
+        $text = trim($value);
+        if ($text === '') {
+            return '';
+        }
+
+        $text = strtolower($text);
+        $text = preg_replace('/\s+/', '', $text) ?? $text;
+        $text = preg_replace('/[^a-z0-9]/', '', $text) ?? $text;
+        if ($text === '') {
+            return '';
+        }
+
+        $hasPrefix = str_starts_with($text, 'linha') || str_starts_with($text, 'ln');
+        if (!$hasPrefix) {
+            return '';
+        }
+
+        if (str_starts_with($text, 'linha')) {
+            $text = substr($text, 5);
+        }
+
+        if (str_starts_with($text, 'ln')) {
+            $text = substr($text, 2);
+        }
+
+        if (preg_match('/(\d+)/', $text, $match) !== 1) {
+            return '';
+        }
+
+        $number = (int) $match[1];
+        if ($number <= 0) {
+            return '';
+        }
+
+        return 'ln' . str_pad((string) $number, 2, '0', STR_PAD_LEFT);
+    }
+
     private function loadDefaultWorkingDays(array $calendar): array
     {
         return [1, 2, 3, 4, 5];
@@ -341,7 +397,11 @@ final class DatabaseData
 
     public function persistDataset(array $data): void
     {
-        $lineCode = (string) ($data['calendar']['line'] ?? 'L2');
+        $lineCode = trim((string) ($data['calendar']['line'] ?? 'L2'));
+        $normalizedLineCode = $this->normalizeExcelLineAbbrev($lineCode);
+        if ($normalizedLineCode !== '') {
+            $lineCode = $normalizedLineCode;
+        }
         $meta = isset($data['meta']) && is_array($data['meta']) ? $data['meta'] : [];
         $allowClearProducts = !empty($meta['allow_clear_products']);
         $allowClearMatrix = !empty($meta['allow_clear_matrix']);
@@ -494,16 +554,58 @@ final class DatabaseData
 
     private function ensureLine(string $code): int
     {
+        $trimmed = trim($code);
+        if ($trimmed === '') {
+            throw new \InvalidArgumentException('Linha invalida.');
+        }
+
         $stmt = $this->pdo->prepare('SELECT lin_id FROM lin_linhas WHERE lin_codigo = :code LIMIT 1');
-        $stmt->execute(['code' => $code]);
+        $stmt->execute(['code' => $trimmed]);
         $line = $stmt->fetch();
 
         if ($line) {
             return (int) $line['lin_id'];
         }
 
+        $normalizedAbbrev = $this->normalizeExcelLineAbbrev($trimmed);
+        $candidates = [];
+
+        $lowerCompact = strtolower($trimmed);
+        $lowerCompact = preg_replace('/\s+/', '', $lowerCompact) ?? $lowerCompact;
+        $candidates[] = $lowerCompact;
+
+        if ($normalizedAbbrev !== '') {
+            $candidates[] = $normalizedAbbrev;
+            $digits = substr($normalizedAbbrev, 2);
+            if ($digits !== '') {
+                $candidates[] = 'linha' . $digits;
+            }
+        }
+
+        $candidates = array_values(array_filter(array_unique($candidates), static fn (string $value): bool => $value !== ''));
+        if ($candidates !== []) {
+            $placeholders = [];
+            $params = [];
+            foreach ($candidates as $index => $value) {
+                $key = "c{$index}";
+                $placeholders[] = ":{$key}";
+                $params[$key] = $value;
+            }
+
+            $sql = 'SELECT lin_id FROM lin_linhas WHERE REPLACE(LOWER(lin_codigo), \' \', \'\') IN ('
+                . implode(', ', $placeholders)
+                . ') LIMIT 1';
+            $matchStmt = $this->pdo->prepare($sql);
+            $matchStmt->execute($params);
+            $matchId = (int) ($matchStmt->fetchColumn() ?: 0);
+            if ($matchId > 0) {
+                return $matchId;
+            }
+        }
+
+        $insertCode = $normalizedAbbrev !== '' ? $normalizedAbbrev : $trimmed;
         $stmt = $this->pdo->prepare('INSERT INTO lin_linhas (lin_codigo, lin_nome) VALUES (:code, :name)');
-        $stmt->execute(['code' => $code, 'name' => sprintf('Linha %s', $code)]);
+        $stmt->execute(['code' => $insertCode, 'name' => sprintf('Linha %s', $insertCode)]);
 
         return (int) $this->pdo->lastInsertId();
     }
@@ -580,6 +682,12 @@ final class DatabaseData
             return;
         }
 
+        $defaultLineCode = trim($defaultLineCode);
+        $normalizedDefaultLineCode = $this->normalizeExcelLineAbbrev($defaultLineCode);
+        if ($normalizedDefaultLineCode !== '') {
+            $defaultLineCode = $normalizedDefaultLineCode;
+        }
+
         $hasExcelLineColumn = $this->ensureProductsExcelLineColumn();
         $prepared = [];
         $lineCache = [];
@@ -592,8 +700,7 @@ final class DatabaseData
             }
 
             $rawLine = (string) ($product['line'] ?? '');
-            $rawLineTrimmed = trim($rawLine);
-            $lineCode = $this->normalizeLineCode($rawLine);
+            $lineCode = $this->normalizeExcelLineAbbrev($rawLine);
             if ($lineCode === '') {
                 $lineCode = $defaultLineCode;
             }
@@ -610,7 +717,7 @@ final class DatabaseData
                 'description' => (string) ($product['description'] ?? ''),
                 'reference_setup' => (string) ($product['reference_setup'] ?? ''),
                 'lineId' => $lineId,
-                'lineExcel' => $rawLineTrimmed !== '' ? $rawLineTrimmed : $lineCode,
+                'lineExcel' => $lineCode,
                 'rate' => (float) ($product['rate_per_hour'] ?? 0),
                 'unit' => (string) ($product['unit'] ?? ''),
             ];
@@ -799,6 +906,11 @@ final class DatabaseData
                 $lineCode = $defaultLineCode;
             }
             $lineCode = $lineCode ?: 'L2';
+
+            $normalizedLineCode = $this->normalizeExcelLineAbbrev($lineCode);
+            if ($normalizedLineCode !== '') {
+                $lineCode = $normalizedLineCode;
+            }
 
             if (!isset($lineCache[$lineCode])) {
                 $lineCache[$lineCode] = $this->ensureLine($lineCode);

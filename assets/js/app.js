@@ -650,14 +650,19 @@
                 const date = workday.date;
                 const isSelected = selectedDay && selectedDay === date;
                 const dayState = ui.orders_by_day?.[date] || { 1: true, 2: true, 3: false, 4: false };
-                const cardStyle = isSelected
-                    ? 'border:1px solid #2563eb;background:#eff6ff;'
-                    : 'border:1px solid #e5e7eb;background:#fff;';
+                const hasActiveOrder = Object.values(dayState || {}).some((value) => value === true);
+                const cardClass = [
+                    'programacao-dia-card',
+                    hasActiveOrder ? 'dia-ativo' : 'dia-inativo',
+                    isSelected ? 'programacao-dia-selecionado' : '',
+                ].filter(Boolean).join(' ');
+                const statusText = hasActiveOrder ? 'Produzindo' : 'Sem produção';
+                const statusClass = hasActiveOrder ? 'status-ativo' : 'status-inativo';
 
                 const orderChecked = (order) => (dayState?.[order] ? 'checked' : '');
 
                 return `
-                    <div style="${cardStyle}border-radius:10px;padding:8px 10px;">
+                    <div class="${cardClass}" style="border-radius:10px;padding:8px 10px;">
                         <button type="button" data-programacao-select-day="${escapeHtml(date)}" data-programacao-sheet-index="${String(index)}" style="display:block;width:100%;text-align:left;background:transparent;border:0;padding:0;margin:0;font-weight:700;font-size:12px;margin-bottom:6px;white-space:nowrap;cursor:pointer;">
                             ${workday.label}
                         </button>
@@ -679,6 +684,7 @@
                                 <span>ordem 4 &mdash; ${formatIntervalLabel(4)}</span>
                             </label>
                         </div>
+                        <div class="dia-status ${statusClass}">${statusText}</div>
                     </div>
                 `;
             }).join('');
@@ -698,14 +704,35 @@
         };
 
         const buttonsHtml = entries.map((sheet, index) => {
+            const ui = ensureProgramacaoImportSheetUIState(sheet);
+            const ordersByDay = ui.orders_by_day && typeof ui.orders_by_day === 'object' ? ui.orders_by_day : {};
+            const selectedDay = String(ui.selected_day || '');
+            const hasAnyProductionDay = hasAnyProductionDaySelected(ordersByDay);
+            const selectedDayOrders = selectedDay ? (ordersByDay?.[selectedDay] || null) : null;
+
+            let alertText = '';
+            let invalidNoProduction = false;
+            let initialDayInvalid = false;
+
+            if (!hasAnyProductionDay) {
+                invalidNoProduction = true;
+                alertText = 'Nenhum dia produtivo selecionado';
+            } else if (selectedDay && !hasAnyMarkedOrderSelected(selectedDayOrders)) {
+                initialDayInvalid = true;
+                alertText = 'Dia inicial sem produção';
+            }
+
             const lineLabel = escapeHtml(sheet.lineLabel || sheet.lineCode || sheet.sheetName || 'Linha ' + String(index + 1));
             const status = sheet.status === 'programado' ? 'programado' : 'programar';
             const isProgramado = status === 'programado';
             const label = isProgramado ? 'Programado' : 'Programar';
-            const disabledAttr = isProgramado ? 'disabled' : '';
+            const disabledAttr = (isProgramado || invalidNoProduction) ? 'disabled' : '';
             const buttonStyle = isProgramado ? 'background:#16a34a;color:#fff;border:none;' : '';
             const badgeStyle = isProgramado ? 'background:#16a34a;color:#fff;' : 'background:#e5e7eb;color:#111;';
-            return '<div class="programacao-import-sheet-item" style="margin-bottom:12px;display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;">' +
+            const containerClass = 'programacao-import-sheet-item'
+                + (invalidNoProduction ? ' linha-invalida' : '')
+                + (!invalidNoProduction && initialDayInvalid ? ' linha-dia-inicial-invalido' : '');
+            return '<div class="' + containerClass + '" style="margin-bottom:12px;display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;">' +
                 '<button type="button" class="programacao-import-sheet-button programacao-import-sheet-button--' + status + '" ' +
                 'data-programacao-sheet="' + String(index) + '" ' +
                 'data-programacao-status="' + status + '" ' +
@@ -716,6 +743,7 @@
                         label +
                     '</span>' +
                 '</button>' +
+                '<div class="programacao-alerta">' + escapeHtml(alertText) + '</div>' +
                 buildWorkdaysPanelHtml(sheet, index) +
             '</div>';
         }).join('');
@@ -851,6 +879,23 @@
                     ui.orders_by_day[date] = { 1: true, 2: true, 3: false, 4: false };
                 }
                 ui.orders_by_day[date][order] = Boolean(checkbox.checked);
+
+                const dayState = ui.orders_by_day?.[date] || { 1: true, 2: true, 3: false, 4: false };
+                const hasActiveOrder = Object.values(dayState || {}).some((value) => value === true);
+                const card = checkbox.closest('.programacao-dia-card');
+                if (card) {
+                    card.classList.toggle('dia-ativo', hasActiveOrder);
+                    card.classList.toggle('dia-inativo', !hasActiveOrder);
+
+                    const statusEl = card.querySelector('.dia-status');
+                    if (statusEl) {
+                        statusEl.innerText = hasActiveOrder ? 'Produzindo' : 'Sem produção';
+                        statusEl.classList.toggle('status-ativo', hasActiveOrder);
+                        statusEl.classList.toggle('status-inativo', !hasActiveOrder);
+                    }
+                }
+
+                syncProgramacaoSheetValidation(sheetIndex);
             });
         });
 
@@ -870,6 +915,87 @@
                 renderProgramacaoImportSummary();
             });
         });
+
+        syncActiveProgramacaoSheetHighlight();
+    }
+
+    function hasAnyMarkedOrderSelected(dayOrders) {
+        if (!dayOrders || typeof dayOrders !== 'object') {
+            return false;
+        }
+        for (let order = 1; order <= 4; order++) {
+            if (Boolean(dayOrders[order] ?? dayOrders[String(order)])) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function hasAnyProductionDaySelected(ordersByDay) {
+        if (!ordersByDay || typeof ordersByDay !== 'object') {
+            return false;
+        }
+        return Object.values(ordersByDay).some((dayOrders) => hasAnyMarkedOrderSelected(dayOrders));
+    }
+
+    function syncProgramacaoSheetValidation(sheetIndex) {
+        if (!programacaoImportSheets) {
+            return;
+        }
+        if (!Number.isFinite(sheetIndex) || sheetIndex < 0) {
+            return;
+        }
+
+        const button = programacaoImportSheets.querySelector(`[data-programacao-sheet="${String(sheetIndex)}"]`);
+        const container = button ? button.closest('.programacao-import-sheet-item') : null;
+        if (!button || !container) {
+            return;
+        }
+
+        const sheet = Array.isArray(state.programacaoImportSheets) ? state.programacaoImportSheets[sheetIndex] : null;
+        const ui = sheet && typeof sheet.programacao_ui === 'object' && sheet.programacao_ui ? sheet.programacao_ui : null;
+        const ordersByDay = ui?.orders_by_day && typeof ui.orders_by_day === 'object' ? ui.orders_by_day : {};
+        const selectedDay = String(ui?.selected_day || '');
+
+        const hasAnyProductionDay = hasAnyProductionDaySelected(ordersByDay);
+        const invalidNoProduction = !hasAnyProductionDay;
+        const initialDayInvalid = Boolean(hasAnyProductionDay && selectedDay && !hasAnyMarkedOrderSelected(ordersByDay?.[selectedDay] || null));
+
+        const alertText = invalidNoProduction
+            ? 'Nenhum dia produtivo selecionado'
+            : (initialDayInvalid ? 'Dia inicial sem produção' : '');
+
+        container.classList.toggle('linha-invalida', invalidNoProduction);
+        container.classList.toggle('linha-dia-inicial-invalido', !invalidNoProduction && initialDayInvalid);
+
+        const alertEl = container.querySelector('.programacao-alerta');
+        if (alertEl) {
+            alertEl.innerText = alertText;
+        }
+
+        const status = String(button.dataset.programacaoStatus || '');
+        button.disabled = status === 'programado' || invalidNoProduction;
+    }
+
+    function syncActiveProgramacaoSheetHighlight() {
+        if (!programacaoImportSheets) {
+            return;
+        }
+
+        programacaoImportSheets.querySelectorAll('.programacao-import-sheet-item').forEach((container) => {
+            container.classList.remove('programacao-linha-ativa');
+        });
+
+        const activeIndex = Number.isFinite(state.activeProgramacaoSheetIndex) ? state.activeProgramacaoSheetIndex : null;
+        if (activeIndex === null) {
+            return;
+        }
+
+        const button = programacaoImportSheets.querySelector(`[data-programacao-sheet="${String(activeIndex)}"]`);
+        const container = button ? button.closest('.programacao-import-sheet-item') : null;
+        if (container) {
+            container.classList.add('programacao-linha-ativa');
+        }
     }
 function applyProgramacaoSheet(index) {
         const sheet = Array.isArray(state.programacaoImportSheets)
@@ -904,6 +1030,7 @@ function applyProgramacaoSheet(index) {
         const sortedRows = parsedRows.sort((left, right) => (left.sequence || 0) - (right.sequence || 0));
         state.form.items = sortedRows.length ? sortedRows : [{}];
         state.activeProgramacaoSheetIndex = index;
+        syncActiveProgramacaoSheetHighlight();
         state.form.numero_op = '';
         if (numeroOpInput) {
             numeroOpInput.value = '';

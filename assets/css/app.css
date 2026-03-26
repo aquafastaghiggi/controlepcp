@@ -473,3 +473,80 @@ select {
     }
     h1 { font-size: 1.9rem; }
 }
+
+.programacao-linha-ativa {
+    border: 2px solid #4f46e5;
+    background: #eef2ff;
+    border-radius: 10px;
+    padding: 12px;
+}
+
+.dia-ativo {
+    border: 2px solid #22c55e;
+    background: #f0fdf4;
+}
+
+.dia-inativo {
+    border: 2px dashed #e5e7eb;
+    background: #f9fafb;
+    opacity: 0.7;
+}
+
+.programacao-dia-selecionado {
+    border: 2px solid #2563eb;
+    background: #dbeafe;
+    opacity: 1;
+}
+
+.programacao-dia-card {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.dia-status {
+    font-size: 11px;
+    font-weight: 600;
+    margin-top: 6px;
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 6px;
+}
+
+.status-ativo {
+    background: #22c55e;
+    color: white;
+}
+
+.status-inativo {
+    background: #e5e7eb;
+    color: #374151;
+}
+
+.linha-invalida {
+    border: 2px solid #ef4444 !important;
+    background: #fef2f2 !important;
+    border-radius: 10px;
+    padding: 12px;
+}
+
+.linha-dia-inicial-invalido {
+    box-shadow: inset 0 0 0 2px #f59e0b;
+}
+
+.programacao-alerta {
+    flex-basis: 100%;
+    margin-top: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #b91c1c;
+}
+
+.programacao-alerta:empty {
+    display: none;
+}
+
+.programacao-import-sheet-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}

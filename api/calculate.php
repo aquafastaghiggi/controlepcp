@@ -80,11 +80,12 @@ function pcp_log_error(string $traceId, \Throwable $e): void
      }
 
      $programacaoConfig = null;
+     $calendarDayOrders = [];
      foreach ($program as $item) {
          if (!is_array($item)) {
              continue;
          }
-
+ 
          if (isset($item['programacao_config']) && is_array($item['programacao_config'])) {
              $programacaoConfig = $item['programacao_config'];
              break;
@@ -96,15 +97,59 @@ function pcp_log_error(string $traceId, \Throwable $e): void
          $efficiencyFromConfig = (float) ($programacaoConfig['efficiency'] ?? 100);
          $ordersFromConfig = is_array($programacaoConfig['orders'] ?? null) ? $programacaoConfig['orders'] : [];
 
-         if ($selectedDay !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $selectedDay) === 1) {
-             $calendarData = is_array($datasets['calendar'] ?? null) ? $datasets['calendar'] : [];
-             $allIntervals = array_values(is_array($calendarData['intervals'] ?? null) ? $calendarData['intervals'] : []);
-             $baseIntervals = count($allIntervals) > 2 ? array_slice($allIntervals, 0, 2) : $allIntervals;
-             $workingDays = $calendarData['working_days'] ?? [1, 2, 3, 4, 5];
-             $holidays = $calendarData['holidays'] ?? [];
+         $ordersByDayFromConfig = $programacaoConfig['orders_by_day'] ?? null;
+         if (is_array($ordersByDayFromConfig)) {
+             foreach ($ordersByDayFromConfig as $dateKey => $dayOrdersRaw) {
+                 $date = trim((string) $dateKey);
+                 if ($date === '' || preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', $date) !== 1) {
+                     continue;
+                 }
 
+                 if (!is_array($dayOrdersRaw)) {
+                     continue;
+                 }
+
+                 $normalized = [1 => false, 2 => false, 3 => false, 4 => false];
+                 for ($order = 1; $order <= 4; $order++) {
+                     $raw = $dayOrdersRaw[$order] ?? $dayOrdersRaw[(string) $order] ?? null;
+                     if (is_bool($raw)) {
+                         $normalized[$order] = $raw;
+                         continue;
+                     }
+
+                     if ($raw === 0 || $raw === 1 || $raw === '0' || $raw === '1') {
+                         $normalized[$order] = ((int) $raw) === 1;
+                         continue;
+                     }
+                 }
+
+                 $calendarDayOrders[$date] = $normalized;
+             }
+         }
+ 
+         if ($selectedDay !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $selectedDay) === 1) {
              $useOrder3 = !empty($ordersFromConfig[3]) || !empty($ordersFromConfig['3']);
              $useOrder4 = !empty($ordersFromConfig[4]) || !empty($ordersFromConfig['4']);
+
+             if ($calendarDayOrders !== []) {
+                 foreach ($calendarDayOrders as $dayOrders) {
+                     if (!is_array($dayOrders)) {
+                         continue;
+                     }
+
+                     if (!empty($dayOrders[3])) {
+                         $useOrder3 = true;
+                     }
+
+                     if (!empty($dayOrders[4])) {
+                         $useOrder4 = true;
+                     }
+
+                     if ($useOrder3 && $useOrder4) {
+                         break;
+                     }
+                 }
+             }
 
              if (isset($program[0]) && is_array($program[0])) {
                  if (!array_key_exists('use_order_3', $program[0])) {
@@ -112,23 +157,6 @@ function pcp_log_error(string $traceId, \Throwable $e): void
                  }
                  if (!array_key_exists('use_order_4', $program[0])) {
                      $program[0]['use_order_4'] = $useOrder4;
-                 }
-             }
-
-             $intervals = $baseIntervals;
-             if ($useOrder3 && isset($allIntervals[2])) {
-                 $intervals[] = $allIntervals[2];
-             }
-             if ($useOrder4 && isset($allIntervals[3])) {
-                 $intervals[] = $allIntervals[3];
-             }
-
-             $calendar = new WorkCalendar($intervals, $workingDays, $holidays);
-             $dayStart = DateTimeHelper::fromLocalInput($selectedDay . ' 00:00');
-             if ($dayStart instanceof \DateTimeImmutable) {
-                 $baseStart = $calendar->nextValidDateTime($dayStart);
-                 if (isset($program[0]) && is_array($program[0])) {
-                     $program[0]['planned_start'] = $baseStart->format('Y-m-d\TH:i');
                  }
              }
          }
@@ -143,7 +171,7 @@ function pcp_log_error(string $traceId, \Throwable $e): void
      }
 
      $scheduler = new Scheduler($datasets);
-     $result = $scheduler->calculate($program, $baseStart, $queryDateTime, $productionEfficiency);
+     $result = $scheduler->calculate($program, $baseStart, $queryDateTime, $productionEfficiency, $calendarDayOrders);
 
     $programRepo = new ProgramacaoRepository();
     $programRepo->salvarExecucao(

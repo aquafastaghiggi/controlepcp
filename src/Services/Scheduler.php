@@ -20,7 +20,8 @@ final class Scheduler
         array $program,
         DateTimeImmutable $baseStart,
         ?DateTimeImmutable $queryDateTime = null,
-        float $productionEfficiency = 100.0
+        float $productionEfficiency = 100.0,
+        array $calendarDayOrders = []
     ): array
     {
         if ($productionEfficiency <= 0.0) {
@@ -31,7 +32,6 @@ final class Scheduler
 
         $calendarData = $this->data['calendar'];
         $allIntervals = array_values(is_array($calendarData['intervals'] ?? null) ? $calendarData['intervals'] : []);
-        $baseIntervals = count($allIntervals) > 2 ? array_slice($allIntervals, 0, 2) : $allIntervals;
         $workingDays = $calendarData['working_days'] ?? [1, 2, 3, 4, 5];
         $holidays = $calendarData['holidays'] ?? [];
 
@@ -46,22 +46,50 @@ final class Scheduler
         $globalUseOrder3 = !empty($program[0]['use_order_3']);
         $globalUseOrder4 = !empty($program[0]['use_order_4']);
 
+        if ($calendarDayOrders !== []) {
+            foreach ($calendarDayOrders as $dayOrders) {
+                if (!is_array($dayOrders)) {
+                    continue;
+                }
+
+                if (!empty($dayOrders[3])) {
+                    $globalUseOrder3 = true;
+                }
+
+                if (!empty($dayOrders[4])) {
+                    $globalUseOrder4 = true;
+                }
+
+                if ($globalUseOrder3 && $globalUseOrder4) {
+                    break;
+                }
+            }
+        }
+
         $previousSku = null;
         $previousProductionEnd = null;
         $firstItem = true;
 
         foreach ($program as $item) {
-            $intervals = $baseIntervals;
+            $intervals = [];
+
+            if (isset($allIntervals[0])) {
+                $intervals[] = $allIntervals[0] + ['order' => 1];
+            }
+
+            if (isset($allIntervals[1])) {
+                $intervals[] = $allIntervals[1] + ['order' => 2];
+            }
 
             if ($globalUseOrder3 && isset($allIntervals[2])) {
-                $intervals[] = $allIntervals[2];
+                $intervals[] = $allIntervals[2] + ['order' => 3];
             }
 
             if ($globalUseOrder4 && isset($allIntervals[3])) {
-                $intervals[] = $allIntervals[3];
+                $intervals[] = $allIntervals[3] + ['order' => 4];
             }
 
-            $calendar = new WorkCalendar($intervals, $workingDays, $holidays);
+            $calendar = new WorkCalendar($intervals, $workingDays, $holidays, $calendarDayOrders);
 
             $sku = trim((string) ($item['sku'] ?? ''));
             $sequence = (int) ($item['sequence'] ?? 0);

@@ -14,7 +14,8 @@ final class WorkCalendar
     public function __construct(
         private readonly array $intervals,
         private readonly array $workingDays = [1, 2, 3, 4, 5],
-        private readonly array $holidays = []
+        private readonly array $holidays = [],
+        private readonly array $dayOrdersByDate = []
     ) {
         if ($intervals === []) {
             throw new RuntimeException('Nenhum intervalo de trabalho cadastrado.');
@@ -201,9 +202,22 @@ final class WorkCalendar
             return [];
         }
 
+        $dateKey = $day->format('Y-m-d');
+        $hasDayOrders = array_key_exists($dateKey, $this->dayOrdersByDate);
+        $allowedOrdersForDate = $hasDayOrders && is_array($this->dayOrdersByDate[$dateKey] ?? null)
+            ? $this->dayOrdersByDate[$dateKey]
+            : [];
+
         $instances = [];
 
-        foreach ($this->intervals as $interval) {
+        foreach ($this->intervals as $index => $interval) {
+            if ($hasDayOrders) {
+                $orderNumber = isset($interval['order']) ? (int) $interval['order'] : ($index + 1);
+                if (empty($allowedOrdersForDate[$orderNumber])) {
+                    continue;
+                }
+            }
+
             if (!$this->isIntervalAllowedForDay($interval, $day)) {
                 continue;
             }
@@ -216,6 +230,18 @@ final class WorkCalendar
 
             if ($end <= $start) {
                 $end = $end->add(new DateInterval('P1D'));
+
+                if ($hasDayOrders) {
+                    $nextDayKey = $day->add(new DateInterval('P1D'))->format('Y-m-d');
+                    if (array_key_exists($nextDayKey, $this->dayOrdersByDate)) {
+                        $nextOrders = is_array($this->dayOrdersByDate[$nextDayKey] ?? null)
+                            ? $this->dayOrdersByDate[$nextDayKey]
+                            : [];
+                        if (empty($nextOrders[$orderNumber])) {
+                            $end = $day->add(new DateInterval('P1D'));
+                        }
+                    }
+                }
             }
 
             $instances[] = [

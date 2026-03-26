@@ -737,28 +737,68 @@
                     return;
                 }
                 const index = Number(button.dataset.programacaoSheet);
-                const sheet = Array.isArray(state.programacaoImportSheets)
-                    ? state.programacaoImportSheets[index]
-                    : null;
-                const ui = ensureProgramacaoImportSheetUIState(sheet);
-                const selectedDay = String(ui.selected_day || '');
-                const ordersForDay = ui.orders_by_day?.[selectedDay] || { 1: true, 2: true, 3: false, 4: false };
-                const programacaoConfig = {
-                    selected_day: selectedDay,
-                    efficiency: ui.efficiency,
-                    orders: {
-                        1: Boolean(ordersForDay[1]),
-                        2: Boolean(ordersForDay[2]),
-                        3: Boolean(ordersForDay[3]),
-                        4: Boolean(ordersForDay[4]),
-                    },
-                };
-                applyProgramacaoSheet(index);
+                 const sheet = Array.isArray(state.programacaoImportSheets)
+                     ? state.programacaoImportSheets[index]
+                     : null;
+                 const ui = ensureProgramacaoImportSheetUIState(sheet);
+                 const ordersByDay = ui.orders_by_day && typeof ui.orders_by_day === 'object' ? ui.orders_by_day : {};
 
-                if (Array.isArray(state.form.items) && state.form.items.length) {
-                    const selectedDayStart = selectedDay ? `${selectedDay}T00:00` : '';
-                    const useOrder3 = Boolean(programacaoConfig.orders?.[3]);
-                    const useOrder4 = Boolean(programacaoConfig.orders?.[4]);
+                 const hasAnyMarkedOrder = (dayOrders) => {
+                     if (!dayOrders || typeof dayOrders !== 'object') {
+                         return false;
+                     }
+                     for (let order = 1; order <= 4; order++) {
+                         if (Boolean(dayOrders[order] ?? dayOrders[String(order)])) {
+                             return true;
+                         }
+                     }
+                     return false;
+                 };
+
+                 const selectedDay = String(ui.selected_day || '');
+                 const selectedDayOrders = ordersByDay?.[selectedDay] || null;
+                 let effectiveSelectedDay = selectedDay;
+
+                 if (!hasAnyMarkedOrder(selectedDayOrders)) {
+                     effectiveSelectedDay = '';
+                     for (const workday of nextWorkdays) {
+                         const date = workday?.date ? String(workday.date) : '';
+                         if (!date) {
+                             continue;
+                         }
+                         const dayOrders = ordersByDay?.[date] || null;
+                         if (hasAnyMarkedOrder(dayOrders)) {
+                             effectiveSelectedDay = date;
+                             break;
+                         }
+                     }
+
+                     if (!effectiveSelectedDay) {
+                         showToast('Nenhum dia com ordens marcadas nos prÃ³ximos 10 dias.', 'warning');
+                         return;
+                     }
+
+                     ui.selected_day = effectiveSelectedDay;
+                 }
+
+                 const ordersForDay = ordersByDay?.[effectiveSelectedDay] || { 1: true, 2: true, 3: false, 4: false };
+                 const programacaoConfig = {
+                     selected_day: effectiveSelectedDay,
+                     efficiency: ui.efficiency,
+                     orders_by_day: ordersByDay,
+                     orders: {
+                         1: Boolean(ordersForDay[1]),
+                         2: Boolean(ordersForDay[2]),
+                         3: Boolean(ordersForDay[3]),
+                         4: Boolean(ordersForDay[4]),
+                     },
+                 };
+                 applyProgramacaoSheet(index);
+
+                 if (Array.isArray(state.form.items) && state.form.items.length) {
+                     const selectedDayStart = effectiveSelectedDay ? `${effectiveSelectedDay}T00:00` : '';
+                     const useOrder3 = Boolean(programacaoConfig.orders?.[3]);
+                     const useOrder4 = Boolean(programacaoConfig.orders?.[4]);
 
                     state.form.items = state.form.items.map((item, itemIndex) => {
                         if (!item || !item.sku) {
@@ -2709,6 +2749,7 @@ async function loadHistoryProgramacoes() {
     lista.forEach((item) => {
             const linha = formatLinhaLabel(item.linha_excel_dominante || item.lin_nome || item.lin_codigo) || 'Linha não informada';
       let inicio = item.inicio_base_cronograma || item.prg_base_inicio || item.prg_criado_em || '-';
+      let programacaoCriadaEm = item.programacao_criada_em || '-';
 
       if (inicio && inicio !== '-') {
         const [data, hora] = inicio.split(' ');
@@ -2716,6 +2757,15 @@ async function loadHistoryProgramacoes() {
           const [ano, mes, dia] = data.split('-');
           const horaFormatada = hora.substring(0, 5);
           inicio = `${dia}/${mes}/${ano} ${horaFormatada}`;
+        }
+      }
+
+      if (programacaoCriadaEm && programacaoCriadaEm !== '-') {
+        const [data, hora] = String(programacaoCriadaEm).split(' ');
+        if (data && hora) {
+          const [ano, mes, dia] = data.split('-');
+          const horaFormatada = hora.substring(0, 5);
+          programacaoCriadaEm = `${dia}/${mes}/${ano} ${horaFormatada}`;
         }
       }
 
@@ -2727,7 +2777,8 @@ async function loadHistoryProgramacoes() {
 
       div.innerHTML = `
         <strong>${linha}</strong><br>
-        Início: ${inicio}
+        Início: ${inicio}<br>
+        Data da Programa&ccedil;&atilde;o: ${programacaoCriadaEm}
       `;
 
       div.style.cursor = 'pointer';

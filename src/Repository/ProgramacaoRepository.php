@@ -286,9 +286,14 @@ final class ProgramacaoRepository
             . ' ORDER BY ss.sch_sequencia ASC'
             . ' LIMIT 1) AS inicio_base_cronograma';
 
+        $programacaoCriadaExpr = '(SELECT MIN(ss.sch_criado_em)'
+            . ' FROM sch_linhas ss'
+            . ' WHERE ss.sch_programa_id = p.prg_id) AS programacao_criada_em';
+
         $sql = 'SELECT p.prg_id, p.prg_numero_op, p.prg_linha_id, l.lin_codigo, l.lin_nome,'
             . ' ' . $this->sqlDominantExcelLineExpr('p', 'l') . ','
             . ' ' . $inicioBaseExpr . ','
+            . ' ' . $programacaoCriadaExpr . ','
             . ' p.prg_base_inicio, p.prg_data_consulta, p.prg_eficiencia, p.prg_status,'
             . ' p.prg_criado_em, p.prg_atualizado_em,'
             . ' COUNT(i.prg_id_item) as total_itens'

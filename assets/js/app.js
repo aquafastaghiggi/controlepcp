@@ -2917,12 +2917,21 @@ async function openHistoryPreview(prgId) {
         const duracao = safeCell(item.sch_duracao_minutos);
         const dataInicio = formatDatePt(item.sch_data_inicio);
         const horaInicio = formatTimeShort(item.sch_hora_inicio);
-        const horaFim = formatTimeShort(item.sch_hora_fim);
+
+        const fimProducaoRaw = item.sch_fim_producao;
+        const fimDateRawMatch = fimProducaoRaw ? String(fimProducaoRaw).match(/^(\d{4}-\d{2}-\d{2})/) : null;
+        const fimDateRaw = fimDateRawMatch ? fimDateRawMatch[1] : item.sch_data_inicio;
+        const fimTimeRawMatch = fimProducaoRaw ? String(fimProducaoRaw).match(/(\d{2}:\d{2})(?::\d{2})?/) : null;
+        const fimTimeRaw = fimTimeRawMatch ? fimTimeRawMatch[0] : item.sch_hora_fim;
+        const horaFim = formatTimeShort(fimTimeRaw);
         const rowClass = isSetup ? ' class="setup-row"' : '';
         const dataShort = dataInicio === '-' ? '-' : dataInicio.substring(0, 5);
         const weekDayLabel = getWeekDayLabel(item.sch_data_inicio);
         const inicioDisplay = formatScheduleDateTime(dataShort, horaInicio, weekDayLabel);
-        const fimDisplay = formatScheduleDateTime(dataShort, horaFim, weekDayLabel);
+        const dataFim = formatDatePt(fimDateRaw);
+        const dataFimShort = dataFim === '-' ? '-' : dataFim.substring(0, 5);
+        const weekDayFimLabel = getWeekDayLabel(fimDateRaw);
+        const fimDisplay = formatScheduleDateTime(dataFimShort, horaFim, weekDayFimLabel);
         const seqDisplay = isSetup && sku === '-' ? '' : seq;
 
         return `

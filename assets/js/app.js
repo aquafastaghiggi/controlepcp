@@ -643,7 +643,6 @@
 
         const buildWorkdaysPanelHtml = (sheet, index) => {
             const ui = ensureProgramacaoImportSheetUIState(sheet);
-            const efficiencyValue = ui.efficiency;
             const selectedDay = String(ui.selected_day || '');
 
             const ordersByDayHtml = nextWorkdays.map((workday, dayIndex) => {
@@ -662,26 +661,26 @@
                 const orderChecked = (order) => (dayState?.[order] ? 'checked' : '');
 
                 return `
-                    <div class="${cardClass}" style="border-radius:10px;padding:8px 10px;">
-                        <button type="button" data-programacao-select-day="${escapeHtml(date)}" data-programacao-sheet-index="${String(index)}" style="display:block;width:100%;text-align:left;background:transparent;border:0;padding:0;margin:0;font-weight:700;font-size:12px;margin-bottom:6px;white-space:nowrap;cursor:pointer;">
+                    <div class="${cardClass}" style="border-radius:10px;padding:3px 5px;min-height:115px;box-sizing:border-box;display:flex;flex-direction:column;gap:1px;line-height:1.05;">
+                        <button type="button" data-programacao-select-day="${escapeHtml(date)}" data-programacao-sheet-index="${String(index)}" style="display:block;width:100%;text-align:left;background:transparent;border:0;padding:0;margin:0;font-weight:700;font-size:11px;margin-bottom:1px;line-height:1.05;white-space:nowrap;cursor:pointer;">
                             ${workday.label}
                         </button>
-                        <div class="programacao-orders" style="display:flex;flex-direction:column;gap:4px;font-size:11px;line-height:1.2;">
-                            <label style="display:flex;gap:6px;align-items:center;">
-                                <input type="checkbox" ${orderChecked(1)} data-order="1" data-day="${dayIndex}" data-programacao-order="1" data-programacao-date="${escapeHtml(date)}" data-programacao-sheet-index="${String(index)}" style="width:14px;height:14px;margin:0;">
-                                <span>ordem 1 &mdash; ${formatIntervalLabel(1)}</span>
+                        <div class="programacao-orders" style="display:flex;flex-direction:column;gap:0px;font-size:10px;line-height:1.02;">
+                            <label style="display:flex;gap:3px;align-items:center;min-width:0;">
+                                <input type="checkbox" ${orderChecked(1)} data-order="1" data-day="${dayIndex}" data-programacao-order="1" data-programacao-date="${escapeHtml(date)}" data-programacao-sheet-index="${String(index)}" style="width:11px;height:11px;margin:0;">
+                                <span style="display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">ordem 1 &mdash; ${formatIntervalLabel(1)}</span>
                             </label>
-                            <label style="display:flex;gap:6px;align-items:center;">
-                                <input type="checkbox" ${orderChecked(2)} data-order="2" data-day="${dayIndex}" data-programacao-order="2" data-programacao-date="${escapeHtml(date)}" data-programacao-sheet-index="${String(index)}" style="width:14px;height:14px;margin:0;">
-                                <span>ordem 2 &mdash; ${formatIntervalLabel(2)}</span>
+                            <label style="display:flex;gap:3px;align-items:center;min-width:0;">
+                                <input type="checkbox" ${orderChecked(2)} data-order="2" data-day="${dayIndex}" data-programacao-order="2" data-programacao-date="${escapeHtml(date)}" data-programacao-sheet-index="${String(index)}" style="width:11px;height:11px;margin:0;">
+                                <span style="display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">ordem 2 &mdash; ${formatIntervalLabel(2)}</span>
                             </label>
-                            <label style="display:flex;gap:6px;align-items:center;">
-                                <input type="checkbox" ${orderChecked(3)} data-order="3" data-day="${dayIndex}" data-programacao-order="3" data-programacao-date="${escapeHtml(date)}" data-programacao-sheet-index="${String(index)}" style="width:14px;height:14px;margin:0;">
-                                <span>ordem 3 &mdash; ${formatIntervalLabel(3)}</span>
+                            <label style="display:flex;gap:3px;align-items:center;min-width:0;">
+                                <input type="checkbox" ${orderChecked(3)} data-order="3" data-day="${dayIndex}" data-programacao-order="3" data-programacao-date="${escapeHtml(date)}" data-programacao-sheet-index="${String(index)}" style="width:11px;height:11px;margin:0;">
+                                <span style="display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">ordem 3 &mdash; ${formatIntervalLabel(3)}</span>
                             </label>
-                            <label style="display:flex;gap:6px;align-items:center;">
-                                <input type="checkbox" ${orderChecked(4)} data-order="4" data-day="${dayIndex}" data-programacao-order="4" data-programacao-date="${escapeHtml(date)}" data-programacao-sheet-index="${String(index)}" style="width:14px;height:14px;margin:0;">
-                                <span>ordem 4 &mdash; ${formatIntervalLabel(4)}</span>
+                            <label style="display:flex;gap:3px;align-items:center;min-width:0;">
+                                <input type="checkbox" ${orderChecked(4)} data-order="4" data-day="${dayIndex}" data-programacao-order="4" data-programacao-date="${escapeHtml(date)}" data-programacao-sheet-index="${String(index)}" style="width:11px;height:11px;margin:0;">
+                                <span style="display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">ordem 4 &mdash; ${formatIntervalLabel(4)}</span>
                             </label>
                         </div>
                         <div class="dia-status ${statusClass}">${statusText}</div>
@@ -691,13 +690,6 @@
             }).join('');
 
             return '<div class="programacao-workdays-panel" style="flex:1;min-width:320px;max-width:740px;">' +
-                '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">' +
-                    '<label style="font-weight:700;font-size:12px;white-space:nowrap;">Efici&ecirc;ncia (%)</label>' +
-                    '<input type="number" min="0" max="200" step="1" ' +
-                        'data-programacao-efficiency="' + String(index) + '" ' +
-                        'value="' + escapeHtml(String(efficiencyValue)) + '" ' +
-                        'style="width:76px;padding:4px 6px;border:1px solid #e5e7eb;border-radius:10px;font-size:12px;line-height:1.1;">' +
-                '</div>' +
                 '<div class="programacao-dias-grid" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;">' +
                     ordersByDayHtml +
                 '</div>' +
@@ -706,13 +698,14 @@
 
         const buttonsHtml = entries.map((sheet, index) => {
             const ui = ensureProgramacaoImportSheetUIState(sheet);
+            const efficiencyValue = resolveSheetEfficiencyValue(sheet);
             const ordersByDay = ui.orders_by_day && typeof ui.orders_by_day === 'object' ? ui.orders_by_day : {};
             const selectedDay = String(ui.selected_day || '');
             const hasAnyProductionDay = hasAnyProductionDaySelected(ordersByDay);
             const selectedDayOrders = selectedDay ? (ordersByDay?.[selectedDay] || null) : null;
             const resumo = computeProgramacaoResumo(ordersByDay);
             const resumoHtml = '<div class="programacao-resumo">'
-                + '<div>📅 Início: ' + escapeHtml(resumo.firstDay || '-') + '</div>'
+                + '<div>📅 Início: ' + escapeHtml(resumo.firstDay ? formatIsoDatePt(resumo.firstDay) : '-') + '</div>'
                 + '<div>🗓 Dias produtivos: ' + String(resumo.productiveDays) + '</div>'
                 + '<div>⏱ Turnos ativos: ' + String(resumo.totalShifts) + '</div>'
                 + '</div>';
@@ -743,16 +736,23 @@
             return '<div class="' + containerClass + '" style="margin-bottom:12px;display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;">' +
                 resumoHtml +
                 '<div class="programacao-linha-topo">' +
-                    '<button type="button" class="programacao-import-sheet-button programacao-import-sheet-button--' + status + '" ' +
-                    'data-programacao-sheet="' + String(index) + '" ' +
-                    'data-programacao-status="' + status + '" ' +
-                    'style="border-radius:12px;padding:12px 16px;min-width:240px;display:flex;justify-content:space-between;align-items:center;gap:12px;' + buttonStyle + '" ' +
-                    disabledAttr + '>' +
-                        '<span class="programacao-import-sheet-line" style="font-weight:700;white-space:nowrap;">' + lineLabel + '</span>' +
-                        '<span class="programacao-import-sheet-status" style="border-radius:999px;padding:4px 10px;font-size:12px;' + badgeStyle + '">' +
-                            label +
-                        '</span>' +
-                    '</button>' +
+                    '<button type="button" class="programacao-import-sheet-button programacao-import-sheet-button--' + status + '" ' + 
+                    'data-programacao-sheet="' + String(index) + '" ' + 
+                    'data-programacao-status="' + status + '" ' + 
+                    'style="border-radius:12px;padding:10px 14px;min-width:240px;display:flex;justify-content:space-between;align-items:center;gap:12px;' + buttonStyle + '" ' + 
+                    disabledAttr + '>' + 
+                        '<span class="programacao-import-sheet-line" style="font-weight:700;white-space:nowrap;">' + lineLabel + '</span>' + 
+                        '<span class="programacao-import-sheet-status" style="border-radius:999px;padding:3px 10px;font-size:12px;' + badgeStyle + '">' + 
+                            label + 
+                        '</span>' + 
+                    '</button>' + 
+                    '<div style="display:flex;align-items:center;gap:8px;">' +
+                        '<label style="font-weight:700;font-size:12px;white-space:nowrap;">Efici&ecirc;ncia (%)</label>' +
+                        '<input type="number" min="0" max="200" step="1" ' +
+                            'data-programacao-efficiency="' + String(index) + '" ' +
+                            'value="' + escapeHtml(String(efficiencyValue)) + '" ' +
+                            'style="width:76px;padding:4px 6px;border:1px solid #e5e7eb;border-radius:10px;font-size:12px;line-height:1.1;">' +
+                    '</div>' +
                     '<div class="programacao-quick-actions">' +
                         '<button type="button" class="btn-quick" data-action="marcar-todos" data-programacao-sheet-index="' + String(index) + '" ' + quickDisabledAttr + '>Todos</button>' +
                         '<button type="button" class="btn-quick" data-action="limpar-todos" data-programacao-sheet-index="' + String(index) + '" ' + quickDisabledAttr + '>Limpar</button>' +
@@ -1043,6 +1043,14 @@
         return { productiveDays, totalShifts, firstDay };
     }
 
+    function formatIsoDatePt(value) {
+        const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (!match) {
+            return String(value || '');
+        }
+        return `${match[3]}/${match[2]}/${match[1]}`;
+    }
+
     function syncProgramacaoSheetValidation(sheetIndex) {
         if (!programacaoImportSheets) {
             return;
@@ -1082,7 +1090,7 @@
         if (resumoEl) {
             const resumo = computeProgramacaoResumo(ordersByDay);
             resumoEl.innerHTML = `
-                <div>📅 Início: ${escapeHtml(resumo.firstDay || '-')}</div>
+                <div>📅 Início: ${escapeHtml(resumo.firstDay ? formatIsoDatePt(resumo.firstDay) : '-')}</div>
                 <div>🗓 Dias produtivos: ${String(resumo.productiveDays)}</div>
                 <div>⏱ Turnos ativos: ${String(resumo.totalShifts)}</div>
             `;
@@ -1867,9 +1875,7 @@ function applyProgramacaoSheet(index) {
             }
         }
 
-        const legacyOrderOptionsStyle = isNewFlowActive
-            ? 'display:none;'
-            : 'display:flex;flex-direction:column;gap:2px;align-items:flex-start;margin-top:4px;';
+        const legacyOrderOptionsStyle = 'display:none;';
 
         items.forEach((item, index) => {
             const row = document.createElement('tr');
@@ -2026,7 +2032,7 @@ function applyProgramacaoSheet(index) {
         disableCalculateMode();
 
         if (persist) {
-            saveState();
+            saveState({ meta: { skip_products: true } });
         }
 
         return !hasErrors;
@@ -2040,7 +2046,7 @@ function applyProgramacaoSheet(index) {
         enableCalculateMode();
 
         if (persist) {
-            saveState();
+            saveState({ meta: { skip_products: true } });
         }
     }
 
@@ -2363,7 +2369,7 @@ function applyProgramacaoSheet(index) {
             }));
             state.activeProgramacaoSheetIndex = null;
             renderProgramacaoImportSummary();
-            saveState();
+            saveState({ meta: { skip_products: true } });
             if (parsedRows.length) {
                 showToast(parsedRows.length + ' itens importados.');
             } else {
@@ -2429,12 +2435,12 @@ function applyProgramacaoSheet(index) {
     });
     baseStartInput.addEventListener('change', () => {
         state.form.base_start = baseStartInput.value;
-        saveState();
+        saveState({ meta: { skip_products: true } });
     });
 
     queryDateTimeInput.addEventListener('change', () => {
         state.form.query_datetime = queryDateTimeInput.value;
-        saveState();
+        saveState({ meta: { skip_products: true } });
     });
 
     function normalizeEfficiencyValue(rawValue) {
@@ -2571,7 +2577,7 @@ function applyProgramacaoSheet(index) {
             setStatus('Erro no calculo', 'danger');
             toggleResultPanel(true);
             state.result = null;
-            saveState();
+            saveState({ meta: { skip_products: true } });
         }
     });
 

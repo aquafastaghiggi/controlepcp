@@ -13,8 +13,10 @@ $datasets = $databaseData->all();
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Controle PCP</title>
-    <link rel="stylesheet" href="/controlepcp/assets/css/app.css">
-    <link rel="stylesheet" href="/controlepcp/assets/css/theme.css">
+    <?php $appCssVersion = @filemtime(__DIR__ . '/assets/css/app.css') ?: 'dev'; ?>
+    <?php $appJsVersion = @filemtime(__DIR__ . '/assets/js/app.js') ?: 'dev'; ?>
+    <link rel="stylesheet" href="/controlepcp/assets/css/app.css?v=<?= urlencode((string) $appCssVersion) ?>">
+    <link rel="stylesheet" href="/controlepcp/assets/css/theme.css?v=11">
     <style>
         .history-list { display: grid; gap: 12px; margin-top: 10px; }
         .history-card { border: 1px solid var(--line, #ddd); border-radius: 10px; padding: 12px 14px; display: flex; justify-content: space-between; align-items: center; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.05); cursor: pointer; }
@@ -335,7 +337,7 @@ $datasets = $databaseData->all();
     </script>
     <div id="app-toast" class="app-toast" aria-live="polite" aria-atomic="true"></div>
     <script src="/controlepcp/assets/js/xlsx-import.js?v=3"></script>
-    <script src="/controlepcp/assets/js/app.js?v=10"></script>
+    <script src="/controlepcp/assets/js/app.js?v=<?= urlencode((string) $appJsVersion) ?>"></script>
 </body>
 </html>
 

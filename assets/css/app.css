@@ -185,6 +185,30 @@ input, select {
     max-height: 420px;
 }
 
+/* Compactar levemente apenas a tabela de programacao (abaixo dos cards). */
+.entry-table-wrap th,
+.entry-table-wrap td {
+    padding: 10px 12px;
+}
+
+.entry-table-wrap thead th {
+    font-size: 0.88rem;
+}
+
+.entry-table-wrap input:not([type="checkbox"]):not([type="radio"]),
+.entry-table-wrap select {
+    min-height: 40px;
+    padding: 0 12px;
+    border-radius: 12px;
+    font-size: 0.95rem;
+}
+
+.entry-table-wrap .row-delete {
+    min-height: 38px;
+    padding: 0 14px;
+    font-size: 0.92rem;
+}
+
 table {
     width: 100%;
     border-collapse: collapse;
@@ -588,6 +612,17 @@ select {
     text-decoration: underline;
 }
 
+/* Ocultar textos auxiliares do resumo de importacao (mantem no DOM). */ 
+.programacao-import-summary-heading, 
+.programacao-import-summary-meta { 
+    display: none; 
+} 
+
+/* Ocultar texto informativo de importacao (mantem no DOM). */
+.programacao-import-note {
+    display: none;
+}
+
 .programacao-resumo {
     flex-basis: 100%;
     background: #f1f5f9;
@@ -631,7 +666,8 @@ select {
     display: grid;
     grid-template-columns: repeat(5, minmax(180px, 1fr)) !important;
     gap: 10px !important;
-    align-items: start;
+    align-items: start !important;
+    align-content: start !important;
     justify-items: stretch;
     width: 100%;
     margin-left: 0;
@@ -639,25 +675,45 @@ select {
 }
 
 .programacao-dia-card {
-    min-height: 165px;
-    padding: 4px 6px !important;
+    min-height: 115px;
+    padding: 3px 5px !important;
     border-radius: 10px !important;
+    box-sizing: border-box;
+    align-self: start;
+    justify-content: flex-start;
 }
 
 .programacao-dia-card button[data-programacao-select-day] {
     font-size: 11px !important;
-    margin-bottom: 2px !important;
-    line-height: 1.1 !important;
-}
-
-.programacao-dia-card .programacao-orders {
-    gap: 1px !important;
-    font-size: 10px !important;
+    margin-bottom: 1px !important;
     line-height: 1.05 !important;
 }
 
+.programacao-dia-card .programacao-orders {
+    gap: 0px !important;
+    font-size: 10px !important;
+    line-height: 1 !important;
+}
+
 .programacao-dia-card .programacao-orders label {
-    gap: 3px !important;
+    gap: 1px !important;
+    margin: 0;
+    padding: 0;
+    min-height: 0;
+    line-height: 1 !important;
+}
+
+.programacao-dia-card .programacao-orders input[type="checkbox"] {
+    -webkit-appearance: auto;
+    appearance: auto;
+    width: 12px !important;
+    height: 12px !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    zoom: 0.85;
+    accent-color: #2563eb;
 }
 
 .programacao-dia-card .programacao-orders label span {
@@ -666,11 +722,12 @@ select {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    line-height: 1 !important;
 }
 
 .programacao-dia-card .dia-status {
     margin-top: 1px !important;
-    font-size: 9px;
+    font-size: 10px;
     padding: 1px 5px !important;
 }
 
@@ -690,7 +747,7 @@ select {
 .programacao-dia-card .programacao-orders {
     display: flex;
     flex-direction: column;
-    gap: 1px;
+    gap: 0px;
 }
 
 @media (max-width: 1400px) {

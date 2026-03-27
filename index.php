@@ -2,7 +2,11 @@
 
 require __DIR__ . '/src/bootstrap.php';
 
+use App\Auth\Auth;
 use App\Data\DatabaseData;
+
+Auth::startSession();
+Auth::requireLogin();
 
 $databaseData = new DatabaseData();
 $datasets = $databaseData->all();
@@ -33,6 +37,10 @@ $datasets = $databaseData->all();
                 <img src="/controlepcp/logo.jpg" alt="Aqua Fast" class="hero-logo">
                 <nav class="top-nav" aria-label="Navegacao principal">
                     <button type="button" class="nav-shortcut" data-target="section-home">Painel Inicial</button>
+                    <?php if (Auth::isAdmin()): ?>
+                        <a class="nav-link" href="users.php">Usuários</a>
+                    <?php endif; ?>
+                    <a class="nav-link" href="logout.php">Sair</a>
                     <!-- <button type="button" class="nav-shortcut" id="reset-data">Resetar dados</button> -->
                 </nav>
             </div>

@@ -1580,6 +1580,13 @@ function applyProgramacaoSheet(index) {
         }); 
 
         updateProgramacaoStickyActions();
+
+        // Garantir que o Histórico esteja sempre atualizado ao entrar na tela (sem precisar F5).
+        if (targetId === 'section-programacoes' && typeof window.loadHistoryProgramacoes === 'function') {
+            window.loadHistoryProgramacoes().catch((error) => {
+                console.warn('Falha ao atualizar histórico ao abrir a tela.', error);
+            });
+        }
     } 
 
     function intervalDaySelector(index, selectedDays) {
@@ -3146,7 +3153,8 @@ async function loadHistoryProgramacoes() {
   if (!historyList || !historyEmpty) return;
 
   try {
-    const response = await fetch('/controlepcp/api/programacoes.php?limit=50');
+    // Cache-busting para evitar histórico "travado" até F5.
+    const response = await fetch(`/controlepcp/api/programacoes.php?limit=50&_=${Date.now()}`, { cache: 'no-store' });
     const payload = await response.json();
     const rawHistory = payload?.data ?? payload ?? [];
     const lista = Array.isArray(rawHistory) ? rawHistory : [];

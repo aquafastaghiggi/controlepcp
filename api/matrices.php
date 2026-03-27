@@ -4,7 +4,11 @@ declare(strict_types=1);
 
 require __DIR__ . '/../src/bootstrap.php';
 
+use App\Auth\Auth;
 use App\Data\DatabaseData;
+
+Auth::startSession();
+Auth::requireLoginApi();
 
 header('Content-Type: application/json; charset=utf-8');
 

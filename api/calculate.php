@@ -4,12 +4,16 @@ declare(strict_types=1);
 
 require __DIR__ . '/../src/bootstrap.php';
 
+use App\Auth\Auth;
 use App\Database\Connection;
  use App\Data\DatabaseData;
  use App\Repository\ProgramacaoRepository;
  use App\Services\Scheduler;
  use App\Services\WorkCalendar;
  use App\Support\DateTimeHelper;
+
+Auth::startSession();
+Auth::requireLoginApi();
 
 function normalize_line_code(?string $value): ?string
 {

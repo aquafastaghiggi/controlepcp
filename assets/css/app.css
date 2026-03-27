@@ -778,6 +778,11 @@ select {
     display: none !important;
 }
 
+/* Histórico: ocultar botão "Atualizar" (mantém no DOM). */
+#section-programacoes #history-refresh {
+    display: none !important;
+}
+
 /* Painel inicial: ocultar somente as métricas/badge do card "Programação de PCP" (mantém no DOM/JS). */
 #section-home [data-home-badge="program"],
 #section-home [data-home-meta="program"] {

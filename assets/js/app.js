@@ -666,7 +666,7 @@
                         <button type="button" data-programacao-select-day="${escapeHtml(date)}" data-programacao-sheet-index="${String(index)}" style="display:block;width:100%;text-align:left;background:transparent;border:0;padding:0;margin:0;font-weight:700;font-size:12px;margin-bottom:6px;white-space:nowrap;cursor:pointer;">
                             ${workday.label}
                         </button>
-                        <div style="display:flex;flex-direction:column;gap:4px;font-size:11px;line-height:1.2;">
+                        <div class="programacao-orders" style="display:flex;flex-direction:column;gap:4px;font-size:11px;line-height:1.2;">
                             <label style="display:flex;gap:6px;align-items:center;">
                                 <input type="checkbox" ${orderChecked(1)} data-order="1" data-day="${dayIndex}" data-programacao-order="1" data-programacao-date="${escapeHtml(date)}" data-programacao-sheet-index="${String(index)}" style="width:14px;height:14px;margin:0;">
                                 <span>ordem 1 &mdash; ${formatIntervalLabel(1)}</span>
@@ -685,11 +685,12 @@
                             </label>
                         </div>
                         <div class="dia-status ${statusClass}">${statusText}</div>
+                        <button type="button" class="btn-copy-day" data-date="${escapeHtml(date)}" data-programacao-sheet-index="${String(index)}">Copiar</button>
                     </div>
                 `;
             }).join('');
 
-            return '<div style="flex:1;min-width:320px;max-width:740px;">' +
+            return '<div class="programacao-workdays-panel" style="flex:1;min-width:320px;max-width:740px;">' +
                 '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">' +
                     '<label style="font-weight:700;font-size:12px;white-space:nowrap;">Efici&ecirc;ncia (%)</label>' +
                     '<input type="number" min="0" max="200" step="1" ' +
@@ -697,7 +698,7 @@
                         'value="' + escapeHtml(String(efficiencyValue)) + '" ' +
                         'style="width:76px;padding:4px 6px;border:1px solid #e5e7eb;border-radius:10px;font-size:12px;line-height:1.1;">' +
                 '</div>' +
-                '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;">' +
+                '<div class="programacao-dias-grid" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;">' +
                     ordersByDayHtml +
                 '</div>' +
             '</div>';
@@ -709,6 +710,12 @@
             const selectedDay = String(ui.selected_day || '');
             const hasAnyProductionDay = hasAnyProductionDaySelected(ordersByDay);
             const selectedDayOrders = selectedDay ? (ordersByDay?.[selectedDay] || null) : null;
+            const resumo = computeProgramacaoResumo(ordersByDay);
+            const resumoHtml = '<div class="programacao-resumo">'
+                + '<div>📅 Início: ' + escapeHtml(resumo.firstDay || '-') + '</div>'
+                + '<div>🗓 Dias produtivos: ' + String(resumo.productiveDays) + '</div>'
+                + '<div>⏱ Turnos ativos: ' + String(resumo.totalShifts) + '</div>'
+                + '</div>';
 
             let alertText = '';
             let invalidNoProduction = false;
@@ -727,23 +734,32 @@
             const isProgramado = status === 'programado';
             const label = isProgramado ? 'Programado' : 'Programar';
             const disabledAttr = (isProgramado || invalidNoProduction) ? 'disabled' : '';
+            const quickDisabledAttr = isProgramado ? 'disabled' : '';
             const buttonStyle = isProgramado ? 'background:#16a34a;color:#fff;border:none;' : '';
             const badgeStyle = isProgramado ? 'background:#16a34a;color:#fff;' : 'background:#e5e7eb;color:#111;';
             const containerClass = 'programacao-import-sheet-item'
                 + (invalidNoProduction ? ' linha-invalida' : '')
                 + (!invalidNoProduction && initialDayInvalid ? ' linha-dia-inicial-invalido' : '');
             return '<div class="' + containerClass + '" style="margin-bottom:12px;display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;">' +
-                '<button type="button" class="programacao-import-sheet-button programacao-import-sheet-button--' + status + '" ' +
-                'data-programacao-sheet="' + String(index) + '" ' +
-                'data-programacao-status="' + status + '" ' +
-                'style="border-radius:12px;padding:12px 16px;min-width:240px;display:flex;justify-content:space-between;align-items:center;gap:12px;' + buttonStyle + '" ' +
-                disabledAttr + '>' +
-                    '<span class="programacao-import-sheet-line" style="font-weight:700;white-space:nowrap;">' + lineLabel + '</span>' +
-                    '<span class="programacao-import-sheet-status" style="border-radius:999px;padding:4px 10px;font-size:12px;' + badgeStyle + '">' +
-                        label +
-                    '</span>' +
-                '</button>' +
-                '<div class="programacao-alerta">' + escapeHtml(alertText) + '</div>' +
+                resumoHtml +
+                '<div class="programacao-linha-topo">' +
+                    '<button type="button" class="programacao-import-sheet-button programacao-import-sheet-button--' + status + '" ' +
+                    'data-programacao-sheet="' + String(index) + '" ' +
+                    'data-programacao-status="' + status + '" ' +
+                    'style="border-radius:12px;padding:12px 16px;min-width:240px;display:flex;justify-content:space-between;align-items:center;gap:12px;' + buttonStyle + '" ' +
+                    disabledAttr + '>' +
+                        '<span class="programacao-import-sheet-line" style="font-weight:700;white-space:nowrap;">' + lineLabel + '</span>' +
+                        '<span class="programacao-import-sheet-status" style="border-radius:999px;padding:4px 10px;font-size:12px;' + badgeStyle + '">' +
+                            label +
+                        '</span>' +
+                    '</button>' +
+                    '<div class="programacao-quick-actions">' +
+                        '<button type="button" class="btn-quick" data-action="marcar-todos" data-programacao-sheet-index="' + String(index) + '" ' + quickDisabledAttr + '>Todos</button>' +
+                        '<button type="button" class="btn-quick" data-action="limpar-todos" data-programacao-sheet-index="' + String(index) + '" ' + quickDisabledAttr + '>Limpar</button>' +
+                        '<button type="button" class="btn-quick" data-action="padrao-12" data-programacao-sheet-index="' + String(index) + '" ' + quickDisabledAttr + '>Padrão 1-2</button>' +
+                    '</div>' +
+                    '<div class="programacao-alerta">' + escapeHtml(alertText) + '</div>' +
+                '</div>' +
                 buildWorkdaysPanelHtml(sheet, index) +
             '</div>';
         }).join('');
@@ -916,6 +932,71 @@
             });
         });
 
+        programacaoImportSheets.querySelectorAll('.btn-quick').forEach((button) => {
+            button.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+
+                const action = String(button.dataset.action || '');
+                const sheetIndex = Number(button.dataset.programacaoSheetIndex);
+                if (!Number.isFinite(sheetIndex) || !Array.isArray(state.programacaoImportSheets) || !state.programacaoImportSheets[sheetIndex]) {
+                    return;
+                }
+
+                const sheet = state.programacaoImportSheets[sheetIndex];
+                const ui = ensureProgramacaoImportSheetUIState(sheet);
+                const ordersByDay = ui.orders_by_day && typeof ui.orders_by_day === 'object' ? ui.orders_by_day : {};
+
+                Object.keys(ordersByDay).forEach((date) => {
+                    if (action === 'marcar-todos') {
+                        ordersByDay[date] = { 1: true, 2: true, 3: true, 4: true };
+                    }
+                    if (action === 'limpar-todos') {
+                        ordersByDay[date] = { 1: false, 2: false, 3: false, 4: false };
+                    }
+                    if (action === 'padrao-12') {
+                        ordersByDay[date] = { 1: true, 2: true, 3: false, 4: false };
+                    }
+                });
+
+                renderProgramacaoImportSummary();
+            });
+        });
+
+        programacaoImportSheets.querySelectorAll('.btn-copy-day').forEach((button) => {
+            button.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+
+                const selectedDate = String(button.dataset.date || '');
+                const sheetIndex = Number(button.dataset.programacaoSheetIndex);
+                if (!selectedDate || !Number.isFinite(sheetIndex) || !Array.isArray(state.programacaoImportSheets) || !state.programacaoImportSheets[sheetIndex]) {
+                    return;
+                }
+
+                const sheet = state.programacaoImportSheets[sheetIndex];
+                const ui = ensureProgramacaoImportSheetUIState(sheet);
+                const ordersByDay = ui.orders_by_day && typeof ui.orders_by_day === 'object' ? ui.orders_by_day : {};
+                const source = ordersByDay[selectedDate] || null;
+                if (!source || typeof source !== 'object') {
+                    return;
+                }
+
+                Object.keys(ordersByDay).forEach((date) => {
+                    if (String(date) >= selectedDate) {
+                        ordersByDay[date] = {
+                            1: Boolean(source[1] ?? source['1']),
+                            2: Boolean(source[2] ?? source['2']),
+                            3: Boolean(source[3] ?? source['3']),
+                            4: Boolean(source[4] ?? source['4']),
+                        };
+                    }
+                });
+
+                renderProgramacaoImportSummary();
+            });
+        });
+
         syncActiveProgramacaoSheetHighlight();
     }
 
@@ -936,6 +1017,30 @@
             return false;
         }
         return Object.values(ordersByDay).some((dayOrders) => hasAnyMarkedOrderSelected(dayOrders));
+    }
+
+    function computeProgramacaoResumo(ordersByDay) {
+        const days = Object.entries((ordersByDay && typeof ordersByDay === 'object') ? ordersByDay : {});
+
+        let productiveDays = 0;
+        let totalShifts = 0;
+        let firstDay = null;
+
+        days.forEach(([date, orders]) => {
+            const values = (orders && typeof orders === 'object') ? Object.values(orders) : [];
+            const active = values.some((value) => value === true);
+
+            if (active) {
+                productiveDays += 1;
+                totalShifts += values.filter((value) => value === true).length;
+
+                if (!firstDay) {
+                    firstDay = String(date);
+                }
+            }
+        });
+
+        return { productiveDays, totalShifts, firstDay };
     }
 
     function syncProgramacaoSheetValidation(sheetIndex) {
@@ -971,6 +1076,16 @@
         const alertEl = container.querySelector('.programacao-alerta');
         if (alertEl) {
             alertEl.innerText = alertText;
+        }
+
+        const resumoEl = container.querySelector('.programacao-resumo');
+        if (resumoEl) {
+            const resumo = computeProgramacaoResumo(ordersByDay);
+            resumoEl.innerHTML = `
+                <div>📅 Início: ${escapeHtml(resumo.firstDay || '-')}</div>
+                <div>🗓 Dias produtivos: ${String(resumo.productiveDays)}</div>
+                <div>⏱ Turnos ativos: ${String(resumo.totalShifts)}</div>
+            `;
         }
 
         const status = String(button.dataset.programacaoStatus || '');

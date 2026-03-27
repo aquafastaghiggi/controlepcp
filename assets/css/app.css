@@ -501,7 +501,8 @@ select {
 .programacao-dia-card {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 2px;
+    line-height: 1.1;
 }
 
 .dia-status {
@@ -549,4 +550,163 @@ select {
 .programacao-import-sheet-button:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+}
+
+.programacao-quick-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.btn-quick {
+    font-size: 11px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: #e5e7eb;
+    cursor: pointer;
+    border: 0;
+}
+
+.btn-quick:hover {
+    background: #d1d5db;
+}
+
+.btn-copy-day {
+    font-size: 10px;
+    margin-top: 4px;
+    opacity: 0.7;
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    padding: 0;
+    align-self: flex-start;
+}
+
+.btn-copy-day:hover {
+    opacity: 1;
+    text-decoration: underline;
+}
+
+.programacao-resumo {
+    flex-basis: 100%;
+    background: #f1f5f9;
+    border-radius: 8px;
+    padding: 8px;
+    margin-bottom: 10px;
+    width: 100%;
+    font-size: 12px;
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.programacao-import-sheet-item {
+    display: flex;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+}
+
+.programacao-linha-topo {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    margin-bottom: 2px;
+}
+
+.programacao-linha-topo .programacao-alerta {
+    margin-top: 0;
+}
+
+.programacao-workdays-panel {
+    width: 100%;
+    min-width: 0 !important;
+    max-width: none !important;
+}
+
+.programacao-dias-grid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(180px, 1fr)) !important;
+    gap: 10px !important;
+    align-items: start;
+    justify-items: stretch;
+    width: 100%;
+    margin-left: 0;
+    padding-left: 0;
+}
+
+.programacao-dia-card {
+    min-height: 165px;
+    padding: 4px 6px !important;
+    border-radius: 10px !important;
+}
+
+.programacao-dia-card button[data-programacao-select-day] {
+    font-size: 11px !important;
+    margin-bottom: 2px !important;
+    line-height: 1.1 !important;
+}
+
+.programacao-dia-card .programacao-orders {
+    gap: 1px !important;
+    font-size: 10px !important;
+    line-height: 1.05 !important;
+}
+
+.programacao-dia-card .programacao-orders label {
+    gap: 3px !important;
+}
+
+.programacao-dia-card .programacao-orders label span {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.programacao-dia-card .dia-status {
+    margin-top: 1px !important;
+    font-size: 9px;
+    padding: 1px 5px !important;
+}
+
+.programacao-dia-card label,
+.programacao-dia-card .day-order-label {
+    font-size: 10px;
+    line-height: 1.05;
+}
+
+.programacao-dia-card .btn-copy-day {
+    font-size: 10px;
+    margin-top: 1px !important;
+    line-height: 1.05;
+}
+
+.programacao-dia-card .orders-list,
+.programacao-dia-card .programacao-orders {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+@media (max-width: 1400px) {
+    .programacao-dias-grid {
+        grid-template-columns: repeat(4, minmax(180px, 1fr)) !important;
+    }
+}
+
+@media (max-width: 1100px) {
+    .programacao-dias-grid {
+        grid-template-columns: repeat(3, minmax(180px, 1fr)) !important;
+    }
+}
+
+@media (max-width: 800px) {
+    .programacao-dias-grid {
+        grid-template-columns: repeat(2, minmax(160px, 1fr)) !important;
+    }
 }

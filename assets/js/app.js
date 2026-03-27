@@ -534,10 +534,10 @@
         return rows;
     }
 
-    function normalizeMatrixSections(rawSections) {
-        if (!Array.isArray(rawSections) || !rawSections.length) {
-            return [];
-        }
+    function normalizeMatrixSections(rawSections) { 
+        if (!Array.isArray(rawSections) || !rawSections.length) { 
+            return []; 
+        } 
 
         if (rawSections.some((section) => Array.isArray(section?.rows))) {
             return rawSections
@@ -557,7 +557,66 @@
                 .filter((section) => section.rows.length);
         }
 
-        return buildMatrixSections(rawSections);
+        return buildMatrixSections(rawSections); 
+    } 
+
+    // Painel inicial (PCP): badges e métricas (apenas UI).
+    function setHomeBadge(key, text, variant) {
+        const el = document.querySelector(`#section-home [data-home-badge="${key}"]`);
+        if (!el) {
+            return;
+        }
+        el.textContent = text || '';
+        el.classList.toggle('is-ready', variant === 'ready');
+        el.classList.toggle('is-pending', variant === 'pending');
+    }
+
+    function setHomeMeta(key, html) {
+        const el = document.querySelector(`#section-home [data-home-meta="${key}"]`);
+        if (!el) {
+            return;
+        }
+        el.innerHTML = html || '';
+    }
+
+    function updateHomeDashboard() {
+        const home = document.getElementById('section-home');
+        if (!home) {
+            return;
+        }
+
+        const productsCount = Object.keys(state.datasets?.products || {}).length;
+        const matrixCount = flattenMatrixSections(state.datasets?.setup_matrix_sections || []).length;
+        const intervalsCount = Array.isArray(state.datasets?.calendar?.intervals) ? state.datasets.calendar.intervals.length : 0;
+        const holidaysCount = Array.isArray(state.datasets?.calendar?.holidays) ? state.datasets.calendar.holidays.length : 0;
+
+        const sheets = Array.isArray(state.programacaoImportSheets) ? state.programacaoImportSheets : [];
+        const importedCount = sheets.length;
+        const programadoCount = sheets.filter((sheet) => sheet?.status === 'programado').length;
+
+        const missing = [];
+        if (intervalsCount === 0) missing.push('Turnos');
+        if (productsCount === 0) missing.push('SKUs');
+        if (matrixCount === 0) missing.push('Matrizes');
+
+        if (missing.length) {
+            setHomeBadge('program', `Pendente: ${missing.join(', ')}`, 'pending');
+        } else {
+            setHomeBadge('program', 'Pronto', 'ready');
+        }
+        setHomeMeta('program', `Linhas importadas: <b>${importedCount}</b> • Programadas: <b>${programadoCount}</b>`);
+
+        setHomeBadge('calendar', intervalsCount ? 'OK' : 'Pendente', intervalsCount ? 'ready' : 'pending');
+        setHomeMeta('calendar', `Turnos: <b>${intervalsCount}</b> • Feriados: <b>${holidaysCount}</b>`);
+
+        setHomeBadge('products', productsCount ? 'OK' : 'Pendente', productsCount ? 'ready' : 'pending');
+        setHomeMeta('products', `SKUs cadastrados: <b>${productsCount}</b>`);
+
+        setHomeBadge('matrix', matrixCount ? 'OK' : 'Pendente', matrixCount ? 'ready' : 'pending');
+        setHomeMeta('matrix', `Matrizes ativas: <b>${matrixCount}</b>`);
+
+        setHomeBadge('history', '', '');
+        setHomeMeta('history', 'Exibindo: <b>últimas 2 por linha</b>');
     }
 
     function buildMatrixSections(rows) {
@@ -642,6 +701,7 @@
         if (!entries.length) { 
             programacaoImportSheets.innerHTML = '<p class="muted">Nenhuma aba importada ainda.</p>'; 
             updateProgramacaoStickyActions();
+            updateHomeDashboard();
             return; 
         } 
 
@@ -1318,6 +1378,7 @@ function applyProgramacaoSheet(index) {
         }); 
 
         updateProgramacaoStickyActions();
+        updateHomeDashboard();
     } 
 
     function renderMatrixLineNav(lines) {
@@ -2140,11 +2201,12 @@ function applyProgramacaoSheet(index) {
         }
     }
 
-    function renderAllDatasetTables() {
-        renderCalendar();
-        renderProducts();
-        renderMatrix();
-    }
+    function renderAllDatasetTables() { 
+        renderCalendar(); 
+        renderProducts(); 
+        renderMatrix(); 
+        updateHomeDashboard();
+    } 
 
     addIntervalButton.addEventListener('click', () => {
         state.datasets.calendar.intervals.push(normalizeInterval({}));
@@ -2660,6 +2722,13 @@ function applyProgramacaoSheet(index) {
             if (rendered) {
                 markProgramacaoAsProgramado();
             }
+
+            // Atualiza o histórico sem precisar de F5 (apenas UI).
+            try {
+                await loadHistoryProgramacoes();
+            } catch (error) {
+                console.warn('Falha ao atualizar histórico automaticamente.', error);
+            }
             activateSection('section-program');
         } catch (error) {
             resultSummary.innerHTML = '';
@@ -2683,13 +2752,21 @@ function applyProgramacaoSheet(index) {
         }
         activateSection(DEFAULT_SECTION);
         resetResultArea(false);
-        setupProgramacoesHandlers();
-        loadProgramacoes();
-        loadHistoryProgramacoes();
-        fixBrokenUtfText();
-    });
+        setupProgramacoesHandlers(); 
+        loadProgramacoes(); 
+        loadHistoryProgramacoes(); 
+        fixBrokenUtfText(); 
+        updateHomeDashboard();
 
-    }
+        document.querySelectorAll('#section-home [data-home-action="import"]').forEach((button) => {
+            button.addEventListener('click', () => {
+                activateSection('section-program');
+                importProgramacaoButton?.click();
+            });
+        });
+    }); 
+ 
+    } 
 
         function fixBrokenUtfText() {
         const replacements = [
@@ -2703,7 +2780,7 @@ function applyProgramacaoSheet(index) {
             },
             {
                 selector: '.home-card[data-target="section-program"] span',
-                text: 'Monte a sequência e calcule a produção.',
+                text: 'Importe a planilha, ajuste dias/turnos e calcule.',
             },
         ];
 

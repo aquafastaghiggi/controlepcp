@@ -61,31 +61,72 @@ $datasets = $databaseData->all();
                     <div class="panel-heading panel-heading-stack">
                         <div>
                             <h1>Painel inicial</h1>
-                            <p>Escolha um modulo para comecar. O sistema abre apenas a area selecionada.</p>
+                            <p>Escolha uma acao para programar e calcular a producao.</p>
+                        </div>
+                        <div class="home-actions-bar">
+                            <button type="button" class="ghost-button home-quick" data-target="section-program">Nova programacao</button>
+                            <button type="button" class="ghost-button home-quick" data-home-action="import">Importar Excel</button>
+                            <button type="button" class="ghost-button home-quick" data-target="section-programacoes">Ver historico</button>
                         </div>
                     </div>
 
-                    <div class="home-grid">
-                        <button type="button" class="home-card" data-target="section-calendar">
-                            <strong>Hor&aacute;rios de Trabalho</strong>
-                            <span>Configure dias uteis, turnos e feriados.</span>
-                        </button>
-                        <button type="button" class="home-card" data-target="section-products">
-                            <strong>SKU (Produtos)</strong>
-                            <span>Cadastre descricao, linha, taxa e unidade.</span>
-                        </button>
-                        <button type="button" class="home-card" data-target="section-matrix">
-                            <strong>Matrizes</strong>
-                            <span>Defina o setup entre origem e destino.</span>
-                        </button>
-                        <button type="button" class="home-card" data-target="section-program">
-                            <strong>Programação de PCP</strong>
-                            <span>Monte a sequÃªncia e calcule a produÃ§Ã£o.</span>
-                        </button>
-                        <button type="button" class="home-card" data-target="section-programacoes">
-                            <strong>Histórico de Programações</strong>
-                            <span>Consulte, crie, edite ou delete programações.</span>
-                        </button>
+                    <div class="home-dashboard">
+                        <div class="home-group">
+                        <div class="home-group-title">Opera&ccedil;&atilde;o</div>
+                            <div class="home-grid home-grid--operation">
+                                <button type="button" class="home-card home-card--primary" data-target="section-program">
+                                    <div class="home-card-top">
+                                        <strong>Programação de PCP</strong>
+                                        <span class="home-card-badge" data-home-badge="program"></span>
+                                    </div>
+                                    <span>Importe a planilha, ajuste dias/turnos e calcule.</span>
+                                    <div class="home-card-meta" data-home-meta="program"></div>
+                                    <div class="home-card-cta">Abrir programa&ccedil;&atilde;o</div>
+                                </button>
+                                <button type="button" class="home-card" data-target="section-programacoes">
+                                    <div class="home-card-top">
+                                        <strong>Hist&oacute;rico de Programa&ccedil;&otilde;es</strong>
+                                        <span class="home-card-badge" data-home-badge="history"></span>
+                                    </div>
+                                    <span>Reimprima e compare programa&ccedil;&otilde;es por efici&ecirc;ncia.</span>
+                                    <div class="home-card-meta" data-home-meta="history"></div>
+                                    <div class="home-card-cta">Abrir hist&oacute;rico</div>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="home-group">
+                        <div class="home-group-title">Par&acirc;metros do c&aacute;lculo</div>
+                            <div class="home-grid home-grid--params">
+                                <button type="button" class="home-card" data-target="section-calendar">
+                                    <div class="home-card-top">
+                                        <strong>Hor&aacute;rios de Trabalho</strong>
+                                        <span class="home-card-badge" data-home-badge="calendar"></span>
+                                    </div>
+                                    <span>Turnos, dias &uacute;teis e feriados.</span>
+                                    <div class="home-card-meta" data-home-meta="calendar"></div>
+                                    <div class="home-card-cta">Configurar</div>
+                                </button>
+                                <button type="button" class="home-card" data-target="section-products">
+                                    <div class="home-card-top">
+                                        <strong>SKU (Produtos)</strong>
+                                        <span class="home-card-badge" data-home-badge="products"></span>
+                                    </div>
+                                    <span>Cadastre SKUs, taxas e unidade.</span>
+                                    <div class="home-card-meta" data-home-meta="products"></div>
+                                    <div class="home-card-cta">Gerenciar</div>
+                                </button>
+                                <button type="button" class="home-card" data-target="section-matrix">
+                                    <div class="home-card-top">
+                                        <strong>Matrizes</strong>
+                                        <span class="home-card-badge" data-home-badge="matrix"></span>
+                                    </div>
+                                    <span>Defina setups entre origem e destino.</span>
+                                    <div class="home-card-meta" data-home-meta="matrix"></div>
+                                    <div class="home-card-cta">Gerenciar</div>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </section>
 

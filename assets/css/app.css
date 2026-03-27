@@ -677,6 +677,113 @@ select {
     }
 }
 
+/* Painel inicial (PCP): foco em Operação x Parâmetros (apenas UI). */
+#section-home .home-actions-bar {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+#section-home .home-actions-bar .home-quick {
+    padding: 8px 12px;
+    border-radius: 12px;
+    font-weight: 700;
+}
+
+#section-home .home-dashboard {
+    display: grid;
+    gap: 18px;
+}
+
+#section-home .home-group-title {
+    font-weight: 800;
+    color: #0f172a;
+    margin: 2px 0 10px;
+}
+
+#section-home .home-grid {
+    gap: 14px;
+}
+
+#section-home .home-card {
+    justify-content: flex-start;
+    gap: 10px;
+}
+
+#section-home .home-card-top {
+    width: 100%;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+#section-home .home-card-meta {
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    font-size: 12px;
+    color: #475569;
+}
+
+#section-home .home-card-cta {
+    margin-top: auto;
+    font-weight: 800;
+    font-size: 12px;
+    color: #1b2a61;
+    background: rgba(22, 42, 166, 0.08);
+    border: 1px solid rgba(22, 42, 166, 0.14);
+    border-radius: 999px;
+    padding: 6px 10px;
+    align-self: flex-start;
+}
+
+#section-home .home-card-badge {
+    font-size: 11px;
+    font-weight: 800;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: #e5e7eb;
+    color: #0f172a;
+    white-space: nowrap;
+}
+
+#section-home .home-card-badge:empty {
+    display: none;
+}
+
+#section-home .home-card-badge.is-ready {
+    background: rgba(34, 197, 94, 0.18);
+    color: #166534;
+}
+
+#section-home .home-card-badge.is-pending {
+    background: rgba(245, 158, 11, 0.18);
+    color: #92400e;
+}
+
+#section-home .home-card--primary {
+    border-color: rgba(22, 42, 166, 0.18);
+}
+
+/* Painel inicial: ocultar badge "OK" (manter "Pendente"). */
+#section-home .home-card-badge.is-ready {
+    display: none !important;
+}
+
+/* Programação PCP: ocultar botão "Adicionar item" (mantém no DOM). */
+#section-program #add-row {
+    display: none !important;
+}
+
+/* Painel inicial: ocultar somente as métricas/badge do card "Programação de PCP" (mantém no DOM/JS). */
+#section-home [data-home-badge="program"],
+#section-home [data-home-meta="program"] {
+    display: none !important;
+}
+
 .programacao-resumo {
     flex-basis: 100%;
     background: #f1f5f9;

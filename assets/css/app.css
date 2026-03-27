@@ -50,6 +50,12 @@ body::before {
     margin-bottom: 20px;
 }
 
+/* Header (logo + Painel Inicial) um pouco mais baixo, sem mexer em lógica */
+header.hero > .hero-copy {
+    padding: 14px 18px;
+    gap: 12px;
+}
+
 .hero-copy, .hero-note, .panel {
     backdrop-filter: blur(8px);
     background: var(--panel);
@@ -182,7 +188,9 @@ input, select {
 }
 
 .entry-table-wrap {
-    max-height: 420px;
+    /* Evita scrollbar interna na tabela de programação (usa scroll da página). */
+    max-height: none;
+    overflow: visible;
 }
 
 /* Compactar levemente apenas a tabela de programacao (abaixo dos cards). */

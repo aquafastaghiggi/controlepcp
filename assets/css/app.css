@@ -623,6 +623,60 @@ select {
     display: none;
 }
 
+/* UI experimental (reversível): ações fixas para evitar scroll até "Calcular programação". */
+.programacao-sticky-actions {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.12);
+    backdrop-filter: blur(6px);
+}
+
+.programacao-sticky-info {
+    font-size: 12px;
+    font-weight: 700;
+    color: #0f172a;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.programacao-sticky-active,
+.programacao-sticky-count {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 360px;
+}
+
+.programacao-sticky-buttons {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+@media (max-width: 800px) {
+    .programacao-sticky-actions {
+        left: 12px;
+        right: 12px;
+        bottom: 12px;
+        justify-content: space-between;
+    }
+
+    .programacao-sticky-active,
+    .programacao-sticky-count {
+        max-width: 220px;
+    }
+}
+
 .programacao-resumo {
     flex-basis: 100%;
     background: #f1f5f9;

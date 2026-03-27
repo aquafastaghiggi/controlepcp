@@ -74,9 +74,93 @@
     const entryTableWrap = document.querySelector('.entry-table-wrap');
     const matrixTableWrap = document.querySelector('.matrix-wrap');
 
-    const productionEfficiencyField = productionEfficiencyInput?.closest('label.field') || null;
-    if (productionEfficiencyField) {
-        productionEfficiencyField.classList.add('is-hidden');
+    const productionEfficiencyField = productionEfficiencyInput?.closest('label.field') || null; 
+    if (productionEfficiencyField) { 
+        productionEfficiencyField.classList.add('is-hidden'); 
+    } 
+
+    // UI experimental (reversível): ações fixas para evitar scroll até o rodapé.
+    const ENABLE_PROGRAMACAO_STICKY_ACTIONS = true;
+    let programacaoStickyActionsEl = null;
+
+    function ensureProgramacaoStickyActions() {
+        if (!ENABLE_PROGRAMACAO_STICKY_ACTIONS) {
+            return null;
+        }
+        if (programacaoStickyActionsEl) {
+            return programacaoStickyActionsEl;
+        }
+        if (!form || !calculateButton) {
+            return null;
+        }
+
+        const el = document.createElement('div');
+        el.className = 'programacao-sticky-actions is-hidden';
+        el.innerHTML = ''
+            + '<div class="programacao-sticky-info">'
+                + '<span class="programacao-sticky-active"></span>'
+                + '<span class="programacao-sticky-count"></span>'
+            + '</div>'
+            + '<div class="programacao-sticky-buttons">'
+                + '<button type="button" class="ghost-button programacao-sticky-clear">Limpar</button>'
+                + '<button type="button" class="primary-button programacao-sticky-calc">Calcular</button>'
+            + '</div>';
+
+        document.body.appendChild(el);
+
+        el.querySelector('.programacao-sticky-calc')?.addEventListener('click', () => {
+            if (typeof form.requestSubmit === 'function') {
+                form.requestSubmit(calculateButton);
+                return;
+            }
+            calculateButton.click();
+        });
+
+        el.querySelector('.programacao-sticky-clear')?.addEventListener('click', () => {
+            clearButton?.click();
+        });
+
+        programacaoStickyActionsEl = el;
+        return el;
+    }
+
+    function updateProgramacaoStickyActions() {
+        const el = ensureProgramacaoStickyActions();
+        if (!el) {
+            return;
+        }
+
+        const isProgramSectionActive = state.activeSection === 'section-program';
+        const sheets = Array.isArray(state.programacaoImportSheets) ? state.programacaoImportSheets : [];
+
+        if (!isProgramSectionActive || !sheets.length) {
+            el.classList.add('is-hidden');
+            return;
+        }
+
+        const activeIndex = Number.isFinite(state.activeProgramacaoSheetIndex) ? state.activeProgramacaoSheetIndex : null;
+        const activeSheet = activeIndex !== null ? (sheets[activeIndex] || null) : null;
+        const activeLabel = activeSheet
+            ? (activeSheet.lineLabel || activeSheet.lineCode || activeSheet.sheetName || `Linha ${activeIndex + 1}`)
+            : '-';
+
+        const programadoCount = sheets.filter((sheet) => sheet?.status === 'programado').length;
+        el.classList.remove('is-hidden');
+
+        const activeEl = el.querySelector('.programacao-sticky-active');
+        if (activeEl) {
+            activeEl.textContent = `Linha ativa: ${activeLabel}`;
+        }
+
+        const countEl = el.querySelector('.programacao-sticky-count');
+        if (countEl) {
+            countEl.textContent = `Linhas programadas: ${programadoCount}/${sheets.length}`;
+        }
+
+        const calcEl = el.querySelector('.programacao-sticky-calc');
+        if (calcEl) {
+            calcEl.disabled = programadoCount === 0;
+        }
     }
 
     const defaultDatasets = JSON.parse(JSON.stringify(bootstrap.datasets || {}));
@@ -554,11 +638,12 @@
             return;
         }
 
-        const entries = Array.isArray(sheets) ? sheets : [];
-        if (!entries.length) {
-            programacaoImportSheets.innerHTML = '<p class="muted">Nenhuma aba importada ainda.</p>';
-            return;
-        }
+        const entries = Array.isArray(sheets) ? sheets : []; 
+        if (!entries.length) { 
+            programacaoImportSheets.innerHTML = '<p class="muted">Nenhuma aba importada ainda.</p>'; 
+            updateProgramacaoStickyActions();
+            return; 
+        } 
 
         const programadoCount = entries.filter((sheet) => sheet.status === 'programado').length;
 
@@ -878,8 +963,8 @@
             });
         });
 
-        programacaoImportSheets.querySelectorAll('[data-programacao-order]').forEach((checkbox) => {
-            checkbox.addEventListener('change', () => {
+        programacaoImportSheets.querySelectorAll('[data-programacao-order]').forEach((checkbox) => { 
+            checkbox.addEventListener('change', () => { 
                 const sheetIndex = Number(checkbox.dataset.programacaoSheetIndex);
                 const date = String(checkbox.dataset.programacaoDate || '');
                 const order = Number(checkbox.dataset.programacaoOrder);
@@ -1150,14 +1235,15 @@ function applyProgramacaoSheet(index) {
             };
         }).filter((item) => item.sku);
 
-        const sortedRows = parsedRows.sort((left, right) => (left.sequence || 0) - (right.sequence || 0));
-        state.form.items = sortedRows.length ? sortedRows : [{}];
-        state.activeProgramacaoSheetIndex = index;
-        syncActiveProgramacaoSheetHighlight();
-        state.form.numero_op = '';
-        if (numeroOpInput) {
-            numeroOpInput.value = '';
-        }
+        const sortedRows = parsedRows.sort((left, right) => (left.sequence || 0) - (right.sequence || 0)); 
+        state.form.items = sortedRows.length ? sortedRows : [{}]; 
+        state.activeProgramacaoSheetIndex = index; 
+        syncActiveProgramacaoSheetHighlight(); 
+        updateProgramacaoStickyActions();
+        state.form.numero_op = ''; 
+        if (numeroOpInput) { 
+            numeroOpInput.value = ''; 
+        } 
         renderProgram();
         enableCalculateMode();
         const label = sheet.lineLabel || sheet.lineCode || sheet.sheetName || `Linha ${index + 1}`;
@@ -1228,9 +1314,11 @@ function applyProgramacaoSheet(index) {
                 const nextPage = direction === 'prev' ? currentPage - 1 : currentPage + 1;
                 state.matrixPageByLine[activeLine] = Math.min(totalPages, Math.max(1, nextPage));
                 renderMatrix();
-            });
-        });
-    }
+            }); 
+        }); 
+
+        updateProgramacaoStickyActions();
+    } 
 
     function renderMatrixLineNav(lines) {
         if (!matrixLineNav) {
@@ -1418,18 +1506,20 @@ function applyProgramacaoSheet(index) {
         resultPanel.classList.toggle('is-hidden', !visible);
     }
 
-    function activateSection(sectionId) {
-        const targetId = document.getElementById(sectionId) ? sectionId : DEFAULT_SECTION;
-        state.activeSection = targetId;
+    function activateSection(sectionId) { 
+        const targetId = document.getElementById(sectionId) ? sectionId : DEFAULT_SECTION; 
+        state.activeSection = targetId; 
 
         document.querySelectorAll('.app-section').forEach((section) => {
             section.classList.toggle('is-active', section.id === targetId);
         });
 
-        document.querySelectorAll('.nav-shortcut, .home-card').forEach((button) => {
-            button.classList.toggle('is-current', button.dataset.target === targetId);
-        });
-    }
+        document.querySelectorAll('.nav-shortcut, .home-card').forEach((button) => { 
+            button.classList.toggle('is-current', button.dataset.target === targetId); 
+        }); 
+
+        updateProgramacaoStickyActions();
+    } 
 
     function intervalDaySelector(index, selectedDays) {
         return `
@@ -2983,6 +3073,29 @@ async function loadHistoryProgramacoes() {
     const payload = await response.json();
     const rawHistory = payload?.data ?? payload ?? [];
     const lista = Array.isArray(rawHistory) ? rawHistory : [];
+    const HISTORY_PER_LINE_LIMIT = 2;
+
+    const parseSqlDateTimeToMs = (value) => {
+      if (!value) return 0;
+      const text = String(value).trim();
+      if (!text) return 0;
+      const normalized = text.includes('T') ? text : text.replace(' ', 'T');
+      const date = new Date(normalized);
+      const ms = date.getTime();
+      return Number.isFinite(ms) ? ms : 0;
+    };
+
+    const formatEfficiencyDisplay = (value) => {
+      if (value === null || value === undefined) return '-';
+      const raw = String(value).replace('%', '').trim();
+      if (!raw) return '-';
+      const parsed = Number(raw.replace(',', '.'));
+      if (Number.isFinite(parsed)) {
+        const normalized = Number.isInteger(parsed) ? String(parsed) : parsed.toFixed(2);
+        return `${normalized}%`;
+      }
+      return `${escapeHtml(raw)}%`;
+    };
 
     if (!lista.length) {
       historyList.innerHTML = '';
@@ -2996,10 +3109,34 @@ async function loadHistoryProgramacoes() {
 
     historyList.innerHTML = '';
 
+    // Mostra somente as últimas N programações por linha (com base na data da programação).
+    const itemsByLine = new Map();
     lista.forEach((item) => {
-            const linha = formatLinhaLabel(item.linha_excel_dominante || item.lin_nome || item.lin_codigo) || 'Linha não informada';
+      const key = String(item?.linha_excel_dominante || item?.lin_codigo || item?.lin_nome || '').trim() || 'SEM_LINHA';
+      const list = itemsByLine.get(key) || [];
+      list.push(item);
+      itemsByLine.set(key, list);
+    });
+
+    const limited = [];
+    for (const [, items] of itemsByLine.entries()) {
+      items.sort((a, b) => (
+        parseSqlDateTimeToMs(b?.programacao_criada_em || b?.prg_criado_em || '') -
+        parseSqlDateTimeToMs(a?.programacao_criada_em || a?.prg_criado_em || '')
+      ));
+      limited.push(...items.slice(0, HISTORY_PER_LINE_LIMIT));
+    }
+
+    limited.sort((a, b) => (
+      parseSqlDateTimeToMs(b?.programacao_criada_em || b?.prg_criado_em || '') -
+      parseSqlDateTimeToMs(a?.programacao_criada_em || a?.prg_criado_em || '')
+    ));
+
+    limited.forEach((item) => {
+      const linha = formatLinhaLabel(item.linha_excel_dominante || item.lin_nome || item.lin_codigo) || 'Linha não informada';
       let inicio = item.inicio_base_cronograma || item.prg_base_inicio || item.prg_criado_em || '-';
-      let programacaoCriadaEm = item.programacao_criada_em || '-';
+      let programacaoCriadaEm = item.programacao_criada_em || item.prg_criado_em || '-';
+      const eficiencia = formatEfficiencyDisplay(item.prg_eficiencia);
 
       if (inicio && inicio !== '-') {
         const [data, hora] = inicio.split(' ');
@@ -3028,7 +3165,8 @@ async function loadHistoryProgramacoes() {
       div.innerHTML = `
         <strong>${linha}</strong><br>
         Início: ${inicio}<br>
-        Data da Programa&ccedil;&atilde;o: ${programacaoCriadaEm}
+        Data da Programa&ccedil;&atilde;o: ${programacaoCriadaEm}<br>
+        Eficiência: ${eficiencia}
       `;
 
       div.style.cursor = 'pointer';
@@ -3263,99 +3401,176 @@ async function openHistoryPreview(prgId) {
       <head>
         <meta charset="UTF-8">
         <title>Histórico de Programação - ${escapeHtml(lineLabel)}</title>
-        <style>
-          @page {
-            size: A4 landscape;
-            margin: 10mm;
-          }
+        <style> 
+          @page { 
+            size: A4 landscape; 
+            margin: 10mm; 
+          } 
+          
+          * { 
+            box-sizing: border-box; 
+          } 
+ 
+          body { 
+            font-family: system-ui, -apple-system, "Segoe UI", Arial, sans-serif; 
+            font-size: 12px; 
+            color: #0f172a; 
+            margin: 0; 
+            padding: 0; 
+          } 
+ 
+          h1 { 
+            font-size: 20px; 
+            margin: 0 0 6px 0; 
+          } 
+          
+          h2 { 
+            font-size: 14px; 
+            margin: 0 0 10px 0; 
+          } 
+          
+          h3 { 
+            margin: 0 0 10px 0; 
+          } 
+ 
+          .preview-actions { 
+            margin-bottom: 8px; 
+            display: flex; 
+            justify-content: flex-end; 
+          } 
+ 
+          .preview-actions button { 
+            padding: 6px 12px; 
+            font-size: 12px; 
+            cursor: pointer; 
+            border: 1px solid #cbd5e1; 
+            background: #fff; 
+            border-radius: 10px; 
+          } 
+          
+          .preview-actions button:hover { 
+            background: #f8fafc; 
+          } 
+ 
+          .preview-header { 
+            margin-bottom: 12px; 
+            padding-bottom: 8px; 
+            border-bottom: 1px solid #e2e8f0; 
+          } 
+ 
+          .preview-subtitle { 
+            font-size: 13px; 
+            color: #475569; 
+            margin-bottom: 8px; 
+          } 
+ 
+          .preview-meta, 
+          .report-header-meta { 
+            display: flex; 
+            flex-wrap: wrap; 
+            gap: 14px; 
+            font-size: 12px; 
+            padding: 6px 10px; 
+            border: 1px solid #e2e8f0; 
+            border-radius: 12px; 
+            background: #f8fafc; 
+          } 
+ 
+          .preview-meta span { 
+            display: inline-flex; 
+            gap: 4px; 
+          } 
+          
+          .report-header-meta span { 
+            display: inline-flex; 
+            gap: 6px; 
+            white-space: nowrap; 
+          } 
+ 
+          table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin-bottom: 16px; 
+          } 
+ 
+          th, td { 
+            border: 1px solid #e5e7eb; 
+            padding: 2px 6px; 
+            font-size: 11px; 
+            line-height: 1.05; 
+            vertical-align: middle; 
+          } 
+ 
+          td { 
+            white-space: normal; 
+          } 
+ 
+          th { 
+            background: #f1f5f9; 
+            text-align: left; 
+          } 
+          
+          /* Alinhamento por coluna sem mudar a estrutura. */ 
+          th:nth-child(2), td:nth-child(2), 
+          th:nth-child(5), td:nth-child(5), 
+          th:nth-child(6), td:nth-child(6) { 
+            text-align: right; 
+          } 
+          
+          th:nth-child(7), td:nth-child(7) { 
+            text-align: center; 
+            white-space: nowrap; 
+          } 
+          
+          th:nth-child(1), td:nth-child(1), 
+          th:nth-child(3), td:nth-child(3), 
+          th:nth-child(8), td:nth-child(8), 
+          th:nth-child(9), td:nth-child(9) { 
+            white-space: nowrap; 
+          } 
+          
+          tbody tr:nth-child(even):not(.setup-row) { 
+            background: #fafafa; 
+          } 
+ 
+          .setup-row { 
+            background: #f3f4f6; 
+            color: #334155; 
+            font-style: italic; 
+          } 
+ 
+          .empty-cell { 
+            text-align: center; 
+            font-style: italic; 
+          } 
+ 
+          .preview-section { 
+            margin-bottom: 18px; 
+          } 
+ 
+          @media print { 
+            .no-print { 
+              display: none; 
+            } 
 
-          body {
-            font-family: Arial, sans-serif;
-            font-size: 12px;
-            color: #111;
-            margin: 0;
-            padding: 12mm;
-          }
-
-          h1, h2, h3 {
-            margin: 0 0 10px 0;
-          }
-
-          .preview-actions {
-            margin-bottom: 12px;
-          }
-
-          .preview-actions button {
-            padding: 8px 16px;
-            font-size: 12px;
-            cursor: pointer;
-          }
-
-          .preview-header {
-            margin-bottom: 20px;
-          }
-
-          .preview-subtitle {
-            font-size: 14px;
-            color: #555;
-            margin-bottom: 12px;
-          }
-
-          .preview-meta {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 16px;
-            font-size: 12px;
-          }
-
-          .preview-meta span {
-            display: inline-flex;
-            gap: 4px;
-          }
-
-          table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 16px;
-          }
-
-          th, td {
-            border: 1px solid #ccc;
-            padding: 4px 6px;
-            font-size: 11px;
-            line-height: 1.2;
-            vertical-align: middle;
-          }
-
-          td {
-            padding: 3px 6px;
-            white-space: normal;
-          }
-
-          th {
-            background: #f0f0f0;
-            text-align: left;
-          }
-
-          .setup-row {
-            background: #f5f5f5;
-          }
-
-          .empty-cell {
-            text-align: center;
-            font-style: italic;
-          }
-
-          .preview-section {
-            margin-bottom: 28px;
-          }
-
-          @media print {
-            .no-print {
-              display: none;
-            }
-          }
-        </style>
+            body { 
+              -webkit-print-color-adjust: exact; 
+              print-color-adjust: exact; 
+            } 
+            
+            th, td { 
+              border-color: #d1d5db; 
+            } 
+            
+            thead { 
+              display: table-header-group; 
+            } 
+            
+            tr { 
+              page-break-inside: avoid; 
+            } 
+          } 
+        </style> 
       </head>
       <body>
         <div class="preview-actions no-print">

@@ -3298,16 +3298,23 @@ async function openHistoryPreview(prgId) {
         return "-";
       }
 
-      const parsed = Number(String(value));
+      const raw = String(value).trim();
+      const ptNumberMatch = raw.match(/^\d{1,3}(\.\d{3})+(,\d+)?$/);
+      const normalizedRaw = ptNumberMatch
+        ? raw.replace(/\./g, '').replace(',', '.')
+        : raw;
+
+      const parsed = Number(normalizedRaw);
       if (!Number.isFinite(parsed)) {
         return escapeHtml(value);
       }
 
-      const normalized = Number.isInteger(parsed)
-        ? String(parsed)
-        : String(parsed).replace(/\.0+$/, '');
+      const hasDecimals = !Number.isInteger(parsed);
+      const formatted = new Intl.NumberFormat('pt-BR', {
+        maximumFractionDigits: hasDecimals ? 3 : 0,
+      }).format(parsed);
 
-      return escapeHtml(normalized);
+      return escapeHtml(formatted);
     };
 
     const formatDatePt = (value) => {
@@ -3393,6 +3400,19 @@ async function openHistoryPreview(prgId) {
       return String(horaValue).slice(0, 5);
     }
 
+    function formatDuracaoMinutos(minutosValue) {
+      const minutosNumero = Number(minutosValue);
+      if (!Number.isFinite(minutosNumero)) {
+        return safeCell(minutosValue);
+      }
+
+      const totalMinutos = Math.max(0, Math.round(minutosNumero));
+      const horas = Math.floor(totalMinutos / 60);
+      const minutos = totalMinutos % 60;
+
+      return `${String(horas).padStart(2, '0')}:${String(minutos).padStart(2, '0')}`;
+    }
+
     const inicioBaseFormatado = firstItem
       ? `${formatDateBR(firstItem.sch_data_inicio)} ${formatHora(firstItem.sch_hora_inicio)}`
       : '';
@@ -3430,7 +3450,7 @@ async function openHistoryPreview(prgId) {
         const descricao = safeCell(item.sch_descricao, '');
         const descricaoStyle = isSetup ? ' style="padding-left:20px; text-align:right;"' : '';
         const quantidade = formatQuantityDisplay(item.sch_quantidade);
-        const duracao = safeCell(item.sch_duracao_minutos);
+        const duracao = formatDuracaoMinutos(item.sch_duracao_minutos);
         const dataInicio = formatDatePt(item.sch_data_inicio);
         const horaInicio = formatTimeShort(item.sch_hora_inicio);
 
@@ -3673,7 +3693,7 @@ async function openHistoryPreview(prgId) {
                 <th>SKU</th>
                 <th>Descrição</th>
                 <th>Quantidade</th>
-                <th>Duração (min)</th>
+                <th>Duração (hh:mm)</th>
                 <th>Data</th>
                 <th>Início</th>
                 <th>Fim</th>

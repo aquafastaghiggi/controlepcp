@@ -189,8 +189,7 @@ input, select {
 
 .entry-table-wrap {
     /* Evita scrollbar interna na tabela de programação (usa scroll da página). */
-    max-height: none;
-    overflow: visible;
+    max-height: none !important;
 }
 
 /* Compactar levemente apenas a tabela de programacao (abaixo dos cards). */

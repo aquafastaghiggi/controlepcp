@@ -1,0 +1,266 @@
+<?php declare(strict_types=1);
+
+require __DIR__ . '/../src/bootstrap.php';
+
+use App\Auth\Auth;
+
+Auth::startSession();
+
+// Esta API Ã© exclusiva do sandbox.
+if ((getenv('APP_ENV') ?: '') !== 'sandbox') {
+    http_response_code(404);
+    exit;
+}
+
+Auth::requireAdmin();
+
+header('Content-Type: application/json; charset=utf-8');
+
+$storageDir = __DIR__ . '/../.tmp';
+$storagePath = $storageDir . '/release-center.json';
+
+if (!is_dir($storageDir)) {
+    @mkdir($storageDir, 0777, true);
+}
+
+$defaultState = [
+    'schema' => 1,
+    'env' => 'sandbox',
+    'publish_checklist' => [
+        'login_ok' => false,
+        'import_excel_ok' => false,
+        'calcular_ok' => false,
+        'historico_ok' => false,
+        'impressao_ok' => false,
+    ],
+    'publish_checklist_updated_at' => null,
+    'publish_checklist_updated_by' => null,
+    'items' => [],
+    'releases' => [],
+    'updated_at' => date('c'),
+];
+
+$readState = static function () use ($storagePath, $defaultState): array {
+    $raw = @file_get_contents($storagePath);
+    if (!$raw) {
+        return $defaultState;
+    }
+
+    $decoded = json_decode($raw, true);
+    if (!is_array($decoded)) {
+        return $defaultState;
+    }
+
+    $decoded['schema'] = (int) ($decoded['schema'] ?? 1);
+    $decoded['env'] = (string) ($decoded['env'] ?? 'sandbox');
+    $decoded['publish_checklist'] = is_array($decoded['publish_checklist'] ?? null)
+        ? $decoded['publish_checklist']
+        : $defaultState['publish_checklist'];
+    $decoded['publish_checklist_updated_at'] = $decoded['publish_checklist_updated_at'] ?? null;
+    $decoded['publish_checklist_updated_by'] = $decoded['publish_checklist_updated_by'] ?? null;
+    $decoded['items'] = is_array($decoded['items'] ?? null) ? $decoded['items'] : [];
+    $decoded['releases'] = is_array($decoded['releases'] ?? null) ? $decoded['releases'] : [];
+    $decoded['updated_at'] = (string) ($decoded['updated_at'] ?? date('c'));
+    return $decoded;
+};
+
+$writeState = static function (array $state) use ($storagePath): void {
+    $state['updated_at'] = date('c');
+    $json = json_encode(
+        $state,
+        JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+    );
+    if ($json === false) {
+        throw new RuntimeException('Falha ao serializar estado da Central de PublicaÃ§Ã£o.');
+    }
+
+    // Escrita atÃ´mica simples (LOCK_EX) para evitar corrupÃ§Ã£o em acessos rÃ¡pidos.
+    if (@file_put_contents($storagePath, $json, LOCK_EX) === false) {
+        throw new RuntimeException('Falha ao gravar estado da Central de PublicaÃ§Ã£o.');
+    }
+};
+
+$method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
+
+if ($method === 'GET') {
+    echo json_encode($readState(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
+if ($method !== 'POST') {
+    http_response_code(405);
+    echo json_encode(['error' => 'MÃ©todo nÃ£o permitido.']);
+    exit;
+}
+
+$contentType = strtolower((string) ($_SERVER['CONTENT_TYPE'] ?? ''));
+$payload = [];
+
+if (str_contains($contentType, 'application/json')) {
+    $raw = (string) file_get_contents('php://input');
+    $decoded = json_decode($raw, true);
+    if (is_array($decoded)) {
+        $payload = $decoded;
+    }
+} else {
+    $payload = $_POST;
+}
+
+try {
+    Auth::requireCsrf($payload['csrf_token'] ?? null);
+} catch (Throwable $e) {
+    http_response_code(403);
+    echo json_encode(['error' => 'CSRF invÃ¡lido.']);
+    exit;
+}
+
+$action = (string) ($payload['action'] ?? '');
+$state = $readState();
+$items = $state['items'] ?? [];
+$user = Auth::user();
+$username = (string) ($user['username'] ?? '');
+
+try {
+    if ($action === 'create_item') {
+        $title = trim((string) ($payload['title'] ?? ''));
+        if ($title === '') {
+            throw new RuntimeException('Informe um tÃ­tulo.');
+        }
+
+        $max = 0;
+        foreach ($items as $it) {
+            $id = (int) ($it['id'] ?? 0);
+            if ($id > $max) {
+                $max = $id;
+            }
+        }
+
+        $newId = $max + 1;
+        $now = date('c');
+        $items[] = [
+            'id' => $newId,
+            'title' => $title,
+            'status' => 'testing',
+            'created_at' => $now,
+            'updated_at' => $now,
+            'approved_at' => null,
+            'approved_by' => null,
+            'note' => '',
+        ];
+
+        $state['items'] = $items;
+        $writeState($state);
+
+        echo json_encode(['ok' => true, 'state' => $state], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
+    }
+
+    if ($action === 'set_status') {
+        $id = (int) ($payload['id'] ?? 0);
+        $status = strtolower(trim((string) ($payload['status'] ?? '')));
+        $allowed = ['testing', 'approved'];
+
+        if ($id <= 0) {
+            throw new RuntimeException('ID invÃ¡lido.');
+        }
+        if (!in_array($status, $allowed, true)) {
+            throw new RuntimeException('Status invÃ¡lido.');
+        }
+
+        $now = date('c');
+        $found = false;
+        foreach ($items as &$it) {
+            if ((int) ($it['id'] ?? 0) !== $id) {
+                continue;
+            }
+            $found = true;
+            $it['status'] = $status;
+            $it['updated_at'] = $now;
+            if ($status === 'approved') {
+                $it['approved_at'] = $now;
+                $it['approved_by'] = $username ?: 'admin';
+            } else {
+                $it['approved_at'] = null;
+                $it['approved_by'] = null;
+            }
+            break;
+        }
+        unset($it);
+
+        if (!$found) {
+            throw new RuntimeException('Item nÃ£o encontrado.');
+        }
+
+        $state['items'] = $items;
+        $writeState($state);
+
+        echo json_encode(['ok' => true, 'state' => $state], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
+    }
+
+    if ($action === 'set_note') {
+        $id = (int) ($payload['id'] ?? 0);
+        $note = (string) ($payload['note'] ?? '');
+        if ($id <= 0) {
+            throw new RuntimeException('ID invÃ¡lido.');
+        }
+
+        $now = date('c');
+        $found = false;
+        foreach ($items as &$it) {
+            if ((int) ($it['id'] ?? 0) !== $id) {
+                continue;
+            }
+            $found = true;
+            $it['note'] = $note;
+            $it['updated_at'] = $now;
+            break;
+        }
+        unset($it);
+
+        if (!$found) {
+            throw new RuntimeException('Item nÃ£o encontrado.');
+        }
+
+        $state['items'] = $items;
+        $writeState($state);
+
+        echo json_encode(['ok' => true, 'state' => $state], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
+    }
+
+    if ($action === 'set_publish_check') {
+        $key = (string) ($payload['key'] ?? '');
+        $valueRaw = $payload['value'] ?? null;
+
+        $allowedKeys = array_keys($defaultState['publish_checklist']);
+        if (!in_array($key, $allowedKeys, true)) {
+            throw new RuntimeException('Checklist invÃ¡lido.');
+        }
+
+        $value = false;
+        if (is_bool($valueRaw)) {
+            $value = $valueRaw;
+        } else {
+            $value = (string) $valueRaw === '1' || strtolower((string) $valueRaw) === 'true';
+        }
+
+        $state['publish_checklist'] = is_array($state['publish_checklist'] ?? null)
+            ? $state['publish_checklist']
+            : $defaultState['publish_checklist'];
+
+        $state['publish_checklist'][$key] = $value;
+        $state['publish_checklist_updated_at'] = date('c');
+        $state['publish_checklist_updated_by'] = $username ?: 'admin';
+
+        $writeState($state);
+        echo json_encode(['ok' => true, 'state' => $state], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
+    }
+
+    throw new RuntimeException('AÃ§Ã£o invÃ¡lida.');
+} catch (Throwable $e) {
+    http_response_code(400);
+    echo json_encode(['error' => $e->getMessage()], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+}

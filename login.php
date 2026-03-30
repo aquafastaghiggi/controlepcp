@@ -74,6 +74,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 }
 
 $appCssVersion = @filemtime(__DIR__ . '/assets/css/app.css') ?: 'dev';
+$isSandbox = (getenv('APP_ENV') ?: '') === 'sandbox';
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -97,7 +98,7 @@ $appCssVersion = @filemtime(__DIR__ . '/assets/css/app.css') ?: 'dev';
         .auth-actions { display:flex; justify-content:flex-end; gap: 10px; margin-top: 8px; }
     </style>
 </head>
-<body>
+<body<?= $isSandbox ? ' data-app-env="sandbox"' : '' ?>>
     <div class="app-shell">
         <div class="auth-wrap">
             <section class="panel auth-panel">

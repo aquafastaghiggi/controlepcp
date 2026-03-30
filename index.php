@@ -10,6 +10,30 @@ Auth::requireLogin();
 
 $databaseData = new DatabaseData();
 $datasets = $databaseData->all();
+
+$isSandbox = (getenv('APP_ENV') ?: '') === 'sandbox';
+$showReleaseCenter = $isSandbox && Auth::isAdmin();
+$releaseCenterState = null;
+
+if ($showReleaseCenter) {
+    $releaseCenterPath = __DIR__ . '/.tmp/release-center.json';
+    $rawReleaseCenter = @file_get_contents($releaseCenterPath) ?: '';
+    $decodedReleaseCenter = json_decode($rawReleaseCenter, true);
+
+    $releaseCenterState = is_array($decodedReleaseCenter)
+        ? $decodedReleaseCenter
+        : ['schema' => 1, 'env' => 'sandbox', 'items' => [], 'releases' => []];
+
+    if (!isset($releaseCenterState['publish_checklist']) || !is_array($releaseCenterState['publish_checklist'])) {
+        $releaseCenterState['publish_checklist'] = [
+            'login_ok' => false,
+            'import_excel_ok' => false,
+            'calcular_ok' => false,
+            'historico_ok' => false,
+            'impressao_ok' => false,
+        ];
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -30,13 +54,16 @@ $datasets = $databaseData->all();
         .history-empty { text-align: center; padding: 20px; }
     </style>
 </head>
-<body>
+<body<?= $isSandbox ? ' data-app-env="sandbox"' : '' ?>>
     <div class="app-shell">
         <header class="hero">
             <div class="hero-copy">
                 <img src="/controlepcp/logo.jpg" alt="Aqua Fast" class="hero-logo">
                 <nav class="top-nav" aria-label="Navegacao principal">
                     <button type="button" class="nav-shortcut" data-target="section-home">Painel Inicial</button>
+                    <?php if ($showReleaseCenter): ?>
+                        <button type="button" class="nav-shortcut" data-target="section-release-center">Publicação</button>
+                    <?php endif; ?>
                     <?php if (Auth::isAdmin()): ?>
                         <a class="nav-link" href="users.php">Usuários</a>
                     <?php endif; ?>
@@ -75,6 +102,9 @@ $datasets = $databaseData->all();
                             <button type="button" class="ghost-button home-quick" data-target="section-program">Nova programacao</button>
                             <button type="button" class="ghost-button home-quick" data-home-action="import">Importar Excel</button>
                             <button type="button" class="ghost-button home-quick" data-target="section-programacoes">Ver historico</button>
+                            <?php if ($showReleaseCenter): ?>
+                                <button type="button" class="ghost-button home-quick" data-target="section-release-center">Central de publicação</button>
+                            <?php endif; ?>
                         </div>
                     </div>
 
@@ -100,6 +130,17 @@ $datasets = $databaseData->all();
                                     <div class="home-card-meta" data-home-meta="history"></div>
                                     <div class="home-card-cta">Abrir hist&oacute;rico</div>
                                 </button>
+                                <?php if ($showReleaseCenter): ?>
+                                    <button type="button" class="home-card home-card--sandbox" data-target="section-release-center">
+                                        <div class="home-card-top">
+                                            <strong>Central de Publicação</strong>
+                                            <span class="home-card-badge" data-home-badge="release"></span>
+                                        </div>
+                                        <span>Backlog, aprovações e publicação para produção.</span>
+                                        <div class="home-card-meta" data-home-meta="release"></div>
+                                        <div class="home-card-cta">Abrir central</div>
+                                    </button>
+                                <?php endif; ?>
                             </div>
                         </div>
 
@@ -374,6 +415,23 @@ $datasets = $databaseData->all();
                         <div id="history-empty" class="muted">Nenhuma programação encontrada.</div>
                     </div>
                 </section>
+
+                <?php if ($showReleaseCenter): ?>
+                    <section class="panel app-section" id="section-release-center">
+                        <div class="panel-heading">
+                            <div>
+                                <h2>Central de Publicação</h2>
+                                <p>Backlog e aprovações (somente sandbox).</p>
+                            </div>
+                        </div>
+                        <div class="release-center" id="release-center-root"></div>
+                        <input type="hidden" id="release-center-csrf" value="<?= htmlspecialchars(Auth::csrfToken(), ENT_QUOTES) ?>">
+                        <script id="release-center-data" type="application/json"><?= json_encode(
+                            $releaseCenterState,
+                            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
+                        ) ?></script>
+                    </section>
+                <?php endif; ?>
             </section>
         </main>
     </div>

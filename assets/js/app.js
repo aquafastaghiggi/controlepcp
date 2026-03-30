@@ -616,6 +616,22 @@
         setHomeMeta('matrix', `Matrizes ativas: <b>${matrixCount}</b>`);
 
         setHomeBadge('history', '', '');
+
+        // Central de Publicacao (sandbox): resumo no card do Painel Inicial.
+        const releaseDataEl = document.getElementById('release-center-data');
+        if (releaseDataEl) {
+            try {
+                const data = JSON.parse(releaseDataEl.textContent || '{}');
+                const items = Array.isArray(data?.items) ? data.items : [];
+                const releases = Array.isArray(data?.releases) ? data.releases : [];
+                const approved = items.filter((item) => String(item?.status || '').toLowerCase() === 'approved').length;
+                setHomeBadge('release', 'SANDBOX', 'ready');
+                setHomeMeta('release', `Backlog: <b>${items.length}</b> &bull; Aprovados: <b>${approved}</b> &bull; Releases: <b>${releases.length}</b>`);
+            } catch {
+                setHomeBadge('release', 'SANDBOX', 'ready');
+                setHomeMeta('release', 'Backlog: <b>0</b>');
+            }
+        }
         setHomeMeta('history', 'Exibindo: <b>últimas 2 por linha</b>');
     }
 
@@ -1300,6 +1316,15 @@ function applyProgramacaoSheet(index) {
         state.activeProgramacaoSheetIndex = index; 
         syncActiveProgramacaoSheetHighlight(); 
         updateProgramacaoStickyActions();
+
+        // Central de Publicacao (sandbox): carrega e renderiza ao entrar na tela.
+        if (targetId === 'section-release-center' && typeof window.loadReleaseCenter === 'function') {
+            window.loadReleaseCenter().catch((error) => {
+                console.warn('Falha ao carregar Central de Publicacao.', error);
+            });
+        } else if (targetId === 'section-release-center' && typeof window.renderReleaseCenter === 'function') {
+            window.renderReleaseCenter();
+        }
         state.form.numero_op = ''; 
         if (numeroOpInput) { 
             numeroOpInput.value = ''; 
@@ -3315,6 +3340,235 @@ function escapeHtml(text) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
 }
+
+function readReleaseCenterData() {
+  if (window.__releaseCenterData && typeof window.__releaseCenterData === 'object') {
+    return window.__releaseCenterData;
+  }
+  const el = document.getElementById('release-center-data');
+  if (!el) return null;
+  try {
+    return JSON.parse(el.textContent || '{}');
+  } catch {
+    return null;
+  }
+}
+
+function getReleaseCenterCsrf() {
+  const el = document.getElementById('release-center-csrf');
+  return el ? String(el.value || '') : '';
+}
+
+async function releaseCenterRequest(body) {
+  const response = await fetch('/controlepcp/api/release_center.php', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    cache: 'no-store',
+    body: JSON.stringify({ ...(body || {}), csrf_token: getReleaseCenterCsrf() }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const message = payload?.error || 'Falha na Central de Publicacao.';
+    throw new Error(message);
+  }
+  return payload;
+}
+
+async function loadReleaseCenter() {
+  const response = await fetch(`/controlepcp/api/release_center.php?_=${Date.now()}`, { cache: 'no-store' });
+  const payload = await response.json().catch(() => null);
+  if (payload && typeof payload === 'object') {
+    window.__releaseCenterData = payload;
+  }
+  renderReleaseCenter();
+}
+
+function renderReleaseCenter() {
+  const root = document.getElementById('release-center-root');
+  if (!root) return;
+
+  const data = readReleaseCenterData() || {};
+  const checklist = (data && typeof data === 'object' && data.publish_checklist && typeof data.publish_checklist === 'object')
+    ? data.publish_checklist
+    : {};
+  const items = Array.isArray(data?.items) ? data.items : [];
+  const releases = Array.isArray(data?.releases) ? data.releases : [];
+  const lastRelease = releases.length ? releases[releases.length - 1] : null;
+  const approved = items.filter((item) => String(item?.status || '').toLowerCase() === 'approved').length;
+  const inTest = items.filter((item) => String(item?.status || '').toLowerCase() === 'testing').length;
+
+  const checklistDef = [
+    { key: 'login_ok', label: 'Login OK' },
+    { key: 'import_excel_ok', label: 'Importar Excel OK' },
+    { key: 'calcular_ok', label: 'Calcular OK' },
+    { key: 'historico_ok', label: 'Histórico OK' },
+    { key: 'impressao_ok', label: 'Impressão OK' },
+  ];
+
+  const checklistDone = checklistDef.every((c) => checklist?.[c.key] === true);
+
+  const statusInfo = (status) => {
+    const value = String(status || '').toLowerCase();
+    if (value === 'approved') return { label: 'Aprovado', cls: 'rc-status rc-status--approved' };
+    if (value === 'testing') return { label: 'Em teste', cls: 'rc-status rc-status--testing' };
+    if (value === 'published') return { label: 'Publicado', cls: 'rc-status rc-status--published' };
+    return { label: status ? String(status) : 'Novo', cls: 'rc-status' };
+  };
+
+  const backlogHtml = items.length
+    ? `
+      <div class="rc-table-wrap">
+        <table class="rc-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Título</th>
+              <th>Status</th>
+              <th>Aprovado por</th>
+              <th>Observação</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${items.map((item) => {
+              const info = statusInfo(item?.status);
+              return `
+                <tr>
+                  <td class="rc-mono">${escapeHtml(item?.id || '-')}</td>
+                  <td>${escapeHtml(item?.title || item?.titulo || '-')}</td>
+                  <td><span class="${info.cls}">${escapeHtml(info.label)}</span></td>
+                  <td>${escapeHtml(item?.approved_by || '-')}<div class="rc-sub">${escapeHtml(item?.approved_at || '-') }</div></td>
+                  <td>
+                    <input class="rc-input" type="text" value="${escapeHtml(item?.note || '')}" data-rc-note="${escapeHtml(item?.id)}" placeholder="Anotação (opcional)">
+                  </td>
+                  <td class="rc-actions">
+                    ${(() => {
+                      const st = String(item?.status || '').toLowerCase();
+                      if (st === 'approved') {
+                        return `<button type="button" class="ghost-button rc-btn" data-rc-status="testing" data-rc-id="${escapeHtml(item?.id)}">Voltar</button>`;
+                      }
+                      if (st === 'testing') {
+                        return `<button type="button" class="primary-button rc-btn" data-rc-status="approved" data-rc-id="${escapeHtml(item?.id)}">Aprovar</button>`;
+                      }
+                      return '';
+                    })()}
+                  </td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    `
+    : `<div class="muted">Nenhum item no backlog ainda.</div>`;
+
+  root.innerHTML = `
+    <div class="rc-grid">
+      <div class="rc-card">
+        <div class="rc-title">Resumo</div>
+        <div class="rc-meta">Backlog: <b>${items.length}</b> &bull; Em teste: <b>${inTest}</b> &bull; Aprovados: <b>${approved}</b></div>
+        <div class="rc-meta">Releases registradas: <b>${releases.length}</b></div>
+        <div class="rc-meta">Último evento: <b>${lastRelease ? escapeHtml(lastRelease.id || '-') : '-'}</b> ${lastRelease?.action ? `<span class="rc-sub">(${escapeHtml(lastRelease.action)})</span>` : ''}</div>
+        <div class="rc-divider"></div>
+        <div class="rc-title">Checklist (obrigatório p/ publicar)</div>
+        <div class="rc-checklist">
+          ${checklistDef.map((c) => `
+            <label class="rc-check">
+              <input type="checkbox" data-rc-check="${escapeHtml(c.key)}" ${checklist?.[c.key] ? 'checked' : ''}>
+              <span>${escapeHtml(c.label)}</span>
+            </label>
+          `).join('')}
+        </div>
+        <div class="rc-meta">Status: <span class="${checklistDone ? 'rc-ready' : 'rc-pending'}">${checklistDone ? 'Pronto para publicar' : 'Pendente'}</span></div>
+        <div class="rc-toolbar">
+          <button type="button" class="primary-button rc-btn" data-rc-action="new">Novo item</button>
+          <button type="button" class="ghost-button rc-btn" data-rc-action="refresh">Recarregar</button>
+        </div>
+        <div class="rc-help">
+          <div><b>Publicar para produção:</b></div>
+          <div class="rc-mono rc-code">powershell -ExecutionPolicy Bypass -File tools\\publish.ps1 -AllApproved -Message \"minha release\"</div>
+          <div class="rc-help">Requisito: checklist acima precisa estar completo (ou usar -SkipChecklist).</div>
+          <div class="rc-help">O script faz backup automático da produção e registra a release aqui.</div>
+        </div>
+        <div class="rc-help">
+          <div><b>Rollback (restaurar último backup):</b></div>
+          <div class="rc-mono rc-code">powershell -ExecutionPolicy Bypass -File tools\\rollback.ps1 -Latest -Message \"rollback\"</div>
+        </div>
+        <div class="rc-help">
+          Etapas seguintes: adicionar aprovações/ações aqui (Etapa 2) e publicar via script com backup/rollback (Etapas 3 e 4).
+        </div>
+      </div>
+      <div class="rc-card">
+        <div class="rc-title">Backlog</div>
+        ${backlogHtml}
+      </div>
+    </div>
+  `;
+
+  root.querySelector('[data-rc-action="refresh"]')?.addEventListener('click', () => {
+    loadReleaseCenter();
+  });
+
+  root.querySelector('[data-rc-action="new"]')?.addEventListener('click', async () => {
+    const title = window.prompt('Título do item (o que será publicado)?');
+    if (!title) return;
+    try {
+      const result = await releaseCenterRequest({ action: 'create_item', title });
+      window.__releaseCenterData = result?.state || window.__releaseCenterData;
+      renderReleaseCenter();
+    } catch (e) {
+      console.warn(e);
+      alert(e.message || 'Falha ao criar item.');
+    }
+  });
+
+  root.querySelectorAll('[data-rc-status][data-rc-id]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.rcId;
+      const status = btn.dataset.rcStatus;
+      try {
+        const result = await releaseCenterRequest({ action: 'set_status', id, status });
+        window.__releaseCenterData = result?.state || window.__releaseCenterData;
+        renderReleaseCenter();
+      } catch (e) {
+        console.warn(e);
+        alert(e.message || 'Falha ao alterar status.');
+      }
+    });
+  });
+
+  root.querySelectorAll('[data-rc-note]').forEach((input) => {
+    input.addEventListener('change', async () => {
+      const id = input.dataset.rcNote;
+      const note = input.value || '';
+      try {
+        const result = await releaseCenterRequest({ action: 'set_note', id, note });
+        window.__releaseCenterData = result?.state || window.__releaseCenterData;
+      } catch (e) {
+        console.warn(e);
+        alert(e.message || 'Falha ao salvar anotação.');
+      }
+    });
+  });
+
+  root.querySelectorAll('[data-rc-check]').forEach((input) => {
+    input.addEventListener('change', async () => {
+      const key = input.dataset.rcCheck;
+      const value = !!input.checked;
+      try {
+        const result = await releaseCenterRequest({ action: 'set_publish_check', key, value });
+        window.__releaseCenterData = result?.state || window.__releaseCenterData;
+        renderReleaseCenter();
+      } catch (e) {
+        console.warn(e);
+        alert(e.message || 'Falha ao salvar checklist.');
+      }
+    });
+  });
+}
+
+window.renderReleaseCenter = renderReleaseCenter;
+window.loadReleaseCenter = loadReleaseCenter;
 
 async function openHistoryPreview(prgId) {
   if (!prgId) return;

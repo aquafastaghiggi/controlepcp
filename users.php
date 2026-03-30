@@ -40,6 +40,7 @@ $users = $repo->listUsers();
 $me = Auth::user();
 
 $appCssVersion = @filemtime(__DIR__ . '/assets/css/app.css') ?: 'dev';
+$isSandbox = (getenv('APP_ENV') ?: '') === 'sandbox';
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -63,7 +64,7 @@ $appCssVersion = @filemtime(__DIR__ . '/assets/css/app.css') ?: 'dev';
         @media (max-width: 980px) { .users-layout { grid-template-columns: 1fr; } }
     </style>
 </head>
-<body>
+<body<?= $isSandbox ? ' data-app-env="sandbox"' : '' ?>>
     <div class="app-shell">
         <header class="hero">
             <div class="hero-copy">

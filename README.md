@@ -45,6 +45,12 @@ Componentes principais:
 - `HTML/CSS` para a camada visual
 - `XAMPP` como ambiente local atual
 
+## Sandbox e publicacao
+
+Padrao de trabalho (sandbox -> aprovacao -> publicacao com backup/rollback):
+
+- `docs/SANDBOX_E_PUBLICACAO.md`
+
 ## Estrutura de pastas
 
 ```text

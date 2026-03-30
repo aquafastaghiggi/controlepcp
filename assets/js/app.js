@@ -620,19 +620,21 @@
         setHomeMeta('performance', 'Previsto: <b>Gantt</b> &bull; Realizado: <b>API</b>');
 
         // Central de Publicacao (sandbox): resumo no card do Painel Inicial.
-        const releaseDataEl = document.getElementById('release-center-data');
-        if (releaseDataEl) {
-            try {
-                const data = JSON.parse(releaseDataEl.textContent || '{}');
-                const items = Array.isArray(data?.items) ? data.items : [];
-                const releases = Array.isArray(data?.releases) ? data.releases : [];
-                const approved = items.filter((item) => String(item?.status || '').toLowerCase() === 'approved').length;
-                setHomeBadge('release', 'SANDBOX', 'ready');
-                setHomeMeta('release', `Backlog: <b>${items.length}</b> &bull; Aprovados: <b>${approved}</b> &bull; Releases: <b>${releases.length}</b>`);
-            } catch {
-                setHomeBadge('release', 'SANDBOX', 'ready');
-                setHomeMeta('release', 'Backlog: <b>0</b>');
-            }
+        const releaseState = (window.__releaseCenterData && typeof window.__releaseCenterData === 'object')
+            ? window.__releaseCenterData
+            : (() => {
+                const releaseDataEl = document.getElementById('release-center-data');
+                if (!releaseDataEl) return null;
+                try { return JSON.parse(releaseDataEl.textContent || '{}'); } catch { return null; }
+            })();
+
+        if (releaseState) {
+            const items = Array.isArray(releaseState?.items) ? releaseState.items : [];
+            const releases = Array.isArray(releaseState?.releases) ? releaseState.releases : [];
+            const approved = items.filter((item) => String(item?.status || '').toLowerCase() === 'approved').length;
+            const inTest = items.filter((item) => String(item?.status || '').toLowerCase() === 'testing').length;
+            setHomeBadge('release', 'SANDBOX', 'ready');
+            setHomeMeta('release', `Backlog: <b>${items.length}</b> &bull; Em teste: <b>${inTest}</b> &bull; Aprovados: <b>${approved}</b> &bull; Releases: <b>${releases.length}</b>`);
         }
         setHomeMeta('history', 'Exibindo: <b>últimas 2 por linha</b>');
     }
@@ -4247,6 +4249,18 @@ function renderReleaseCenter() {
   const approved = items.filter((item) => String(item?.status || '').toLowerCase() === 'approved').length;
   const inTest = items.filter((item) => String(item?.status || '').toLowerCase() === 'testing').length;
   const published = items.filter((item) => String(item?.status || '').toLowerCase() === 'published').length;
+
+  // Atualiza o card do Painel Inicial (sandbox) com o estado mais recente (sem precisar F5).
+  const homeBadgeEl = document.querySelector('#section-home [data-home-badge="release"]');
+  const homeMetaEl = document.querySelector('#section-home [data-home-meta="release"]');
+  if (homeBadgeEl) {
+    homeBadgeEl.textContent = 'SANDBOX';
+    homeBadgeEl.classList.add('is-ready');
+    homeBadgeEl.classList.remove('is-pending');
+  }
+  if (homeMetaEl) {
+    homeMetaEl.innerHTML = `Backlog: <b>${items.length}</b> &bull; Em teste: <b>${inTest}</b> &bull; Aprovados: <b>${approved}</b> &bull; Releases: <b>${releases.length}</b>`;
+  }
 
   const checklistDef = [
     { key: 'login_ok', label: 'Login OK' },

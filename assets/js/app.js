@@ -3195,6 +3195,7 @@ async function loadHistoryProgramacoes() {
     historyList.innerHTML = '';
 
     // Mostra somente as últimas N programações por linha (com base na data da programação).
+    // (UI) Agrupa o histÃ³rico por linha para melhorar leitura.
     const itemsByLine = new Map();
     lista.forEach((item) => {
       const key = String(item?.linha_excel_dominante || item?.lin_codigo || item?.lin_nome || '').trim() || 'SEM_LINHA';
@@ -3212,13 +3213,43 @@ async function loadHistoryProgramacoes() {
       limited.push(...items.slice(0, HISTORY_PER_LINE_LIMIT));
     }
 
-    limited.sort((a, b) => (
-      parseSqlDateTimeToMs(b?.programacao_criada_em || b?.prg_criado_em || '') -
-      parseSqlDateTimeToMs(a?.programacao_criada_em || a?.prg_criado_em || '')
-    ));
+    const lineLabelForHistory = (item) =>
+      formatLinhaLabel(item?.linha_excel_dominante || item?.lin_nome || item?.lin_codigo) || 'Linha nÃ£o informada';
+
+    const lineNumberForHistory = (label) => {
+      const match = String(label || '').match(/(\d+)/);
+      if (!match) return Number.MAX_SAFE_INTEGER;
+      const parsed = parseInt(match[1], 10);
+      return Number.isFinite(parsed) ? parsed : Number.MAX_SAFE_INTEGER;
+    };
+
+    // Ordena por linha (01, 02, 03...) e, dentro da linha, pela data mais recente.
+    limited.sort((a, b) => {
+      const la = lineLabelForHistory(a);
+      const lb = lineLabelForHistory(b);
+      const na = lineNumberForHistory(la);
+      const nb = lineNumberForHistory(lb);
+      if (na !== nb) return na - nb;
+      if (la !== lb) return String(la).localeCompare(String(lb), 'pt-BR', { numeric: true, sensitivity: 'base' });
+      return (
+        parseSqlDateTimeToMs(b?.programacao_criada_em || b?.prg_criado_em || '') -
+        parseSqlDateTimeToMs(a?.programacao_criada_em || a?.prg_criado_em || '')
+      );
+    });
+
+    let lastLineLabel = null;
 
     limited.forEach((item) => {
       const linha = formatLinhaLabel(item.linha_excel_dominante || item.lin_nome || item.lin_codigo) || 'Linha não informada';
+      if (linha !== lastLineLabel) {
+        const header = document.createElement('div');
+        header.textContent = linha;
+        header.style.fontWeight = '700';
+        header.style.margin = '10px 0 6px';
+        historyList.appendChild(header);
+        lastLineLabel = linha;
+      }
+
       let inicio = item.inicio_base_cronograma || item.prg_base_inicio || item.prg_criado_em || '-';
       let programacaoCriadaEm = item.programacao_criada_em || item.prg_criado_em || '-';
       const eficiencia = formatEfficiencyDisplay(item.prg_eficiencia);
@@ -3248,7 +3279,6 @@ async function loadHistoryProgramacoes() {
       div.style.borderRadius = '6px';
 
       div.innerHTML = `
-        <strong>${linha}</strong><br>
         Início: ${inicio}<br>
         Data da Programa&ccedil;&atilde;o: ${programacaoCriadaEm}<br>
         Eficiência: ${eficiencia}

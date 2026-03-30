@@ -1,5 +1,6 @@
 (function () {
     const bootstrap = window.PCP_BOOTSTRAP || { datasets: {}, sampleProgram: [] };
+    window.__featureFlags = window.__featureFlags || (bootstrap.features || {});
     const DEFAULT_SECTION = 'section-home';
     const DEFAULT_INTERVAL_DAYS = [1, 2, 3, 4, 5];
     const API_TIMEOUT_MS = 8000;
@@ -616,8 +617,6 @@
         setHomeMeta('matrix', `Matrizes ativas: <b>${matrixCount}</b>`);
 
         setHomeBadge('history', '', '');
-        setHomeBadge('performance', 'Em breve', 'pending');
-        setHomeMeta('performance', 'Previsto: <b>Gantt</b> &bull; Realizado: <b>API</b>');
 
         // Central de Publicacao (sandbox): resumo no card do Painel Inicial.
         const releaseState = (window.__releaseCenterData && typeof window.__releaseCenterData === 'object')
@@ -627,6 +626,8 @@
                 if (!releaseDataEl) return null;
                 try { return JSON.parse(releaseDataEl.textContent || '{}'); } catch { return null; }
             })();
+
+        let performanceEnabled = false;
 
         if (releaseState) {
             const items = Array.isArray(releaseState?.items) ? releaseState.items : [];
@@ -643,22 +644,54 @@
                     .normalize('NFD')
                     .replace(/[\u0300-\u036f]/g, '')
             );
-            const performanceEnabled = items.some((item) => {
+            performanceEnabled = items.some((item) => {
                 const status = String(item?.status || '').toLowerCase();
                 if (status !== 'approved' && status !== 'published') return false;
                 const title = normalize(item?.title || item?.titulo || '');
                 return title.includes('desempenho') || title.includes('gantt') || title.includes('grafico');
             });
+        } else {
+            performanceEnabled = !!(window.__featureFlags && window.__featureFlags.performance);
+        }
 
-            if (performanceEnabled) {
-                setHomeBadge('performance', 'Pronto', 'ready');
-                setHomeMeta('performance', 'Previsto: <b>Gantt</b> &bull; Comparar: <b>A/B</b>');
-            } else {
-                setHomeBadge('performance', 'Em breve', 'pending');
-                setHomeMeta('performance', 'Previsto: <b>Gantt</b> &bull; Realizado: <b>API</b>');
-            }
+        const performanceCard = document.querySelector('#section-home .home-card[data-target="section-performance"]');
+        if (performanceCard) {
+            performanceCard.classList.toggle('is-hidden', !performanceEnabled);
+        }
+
+        if (performanceEnabled) {
+            setHomeBadge('performance', 'Pronto', 'ready');
+            setHomeMeta('performance', 'Previsto: <b>Gantt</b> &bull; Comparar: <b>A/B</b>');
+        } else {
+            setHomeBadge('performance', 'Em breve', 'pending');
+            setHomeMeta('performance', 'Previsto: <b>Gantt</b> &bull; Realizado: <b>API</b>');
         }
         setHomeMeta('history', 'Exibindo: <b>últimas 2 por linha</b>');
+    }
+
+    async function loadFeatureFlags(force = false) {
+        const now = Date.now();
+        const last = Number(window.__featureFlagsLoadedAt || 0);
+        if (!force && last && now - last < 15000) {
+            return;
+        }
+        if (window.__featureFlagsLoading) {
+            return;
+        }
+        window.__featureFlagsLoading = true;
+        try {
+            const response = await fetch(`/controlepcp/api/features.php?_=${Date.now()}`, { cache: 'no-store' });
+            const payload = await response.json().catch(() => null);
+            const features = payload && typeof payload === 'object' ? (payload.features || payload) : null;
+            if (features && typeof features === 'object') {
+                window.__featureFlags = features;
+            }
+            window.__featureFlagsLoadedAt = Date.now();
+        } catch {
+            // ignore
+        } finally {
+            window.__featureFlagsLoading = false;
+        }
     }
 
     function buildMatrixSections(rows) {
@@ -1622,6 +1655,21 @@ function applyProgramacaoSheet(index) {
         }); 
 
         updateProgramacaoStickyActions();
+
+        // Feature flags (produÃ§Ã£o): se o mÃ³dulo Desempenho estiver desabilitado, nÃ£o permite abrir a tela.
+        if (targetId === 'section-performance' && !(window.__releaseCenterData && typeof window.__releaseCenterData === 'object')) {
+            const enabled = !!(window.__featureFlags && window.__featureFlags.performance)
+                || !!(bootstrap?.features && bootstrap.features.performance);
+            if (!enabled) {
+                state.activeSection = DEFAULT_SECTION;
+                document.querySelectorAll('.app-section').forEach((section) => {
+                    section.classList.toggle('is-active', section.id === DEFAULT_SECTION);
+                });
+                document.querySelectorAll('.nav-shortcut, .home-card').forEach((button) => { 
+                    button.classList.toggle('is-current', button.dataset.target === DEFAULT_SECTION); 
+                });
+            }
+        }
 
         // Garantir que o Histórico esteja sempre atualizado ao entrar na tela (sem precisar F5).
         if (targetId === 'section-programacoes' && typeof window.loadHistoryProgramacoes === 'function') {
@@ -2822,6 +2870,16 @@ function applyProgramacaoSheet(index) {
         loadHistoryProgramacoes(); 
         fixBrokenUtfText(); 
         updateHomeDashboard();
+
+        // Produção: carrega feature flags periodicamente para refletir aprovar/voltar do sandbox sem precisar F5.
+        loadFeatureFlags(true).then(() => {
+            updateHomeDashboard();
+        }).catch(() => {});
+        if (!window.__featureFlagsPoll) {
+            window.__featureFlagsPoll = setInterval(() => {
+                loadFeatureFlags(false).then(() => updateHomeDashboard()).catch(() => {});
+            }, 15000);
+        }
 
         document.querySelectorAll('#section-home [data-home-action="import"]').forEach((button) => {
             button.addEventListener('click', () => {

@@ -34,6 +34,24 @@ if ($showReleaseCenter) {
         ];
     }
 }
+
+// Feature flags: usado para mostrar/ocultar mÃ³dulos no Painel Inicial (prod/sandbox).
+$features = [
+    'performance' => false,
+];
+$featureFlagsPath = __DIR__ . '/.tmp/feature-flags.json';
+$rawFeatureFlags = @file_get_contents($featureFlagsPath) ?: '';
+if ($rawFeatureFlags !== '') {
+    $decodedFeatureFlags = json_decode($rawFeatureFlags, true);
+    if (is_array($decodedFeatureFlags)) {
+        $featurePayload = is_array($decodedFeatureFlags['features'] ?? null)
+            ? $decodedFeatureFlags['features']
+            : $decodedFeatureFlags;
+        if (is_array($featurePayload)) {
+            $features['performance'] = (bool) ($featurePayload['performance'] ?? $features['performance']);
+        }
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -498,6 +516,7 @@ if ($showReleaseCenter) {
         window.PCP_BOOTSTRAP = <?= json_encode([
             'datasets' => $datasets,
             'sampleProgram' => $datasets['sample_program'] ?? [],
+            'features' => $features,
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
     </script>
     <div id="app-toast" class="app-toast" aria-live="polite" aria-atomic="true"></div>

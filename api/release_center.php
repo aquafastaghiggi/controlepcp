@@ -18,6 +18,11 @@ header('Content-Type: application/json; charset=utf-8');
 
 $storageDir = __DIR__ . '/../.tmp';
 $storagePath = $storageDir . '/release-center.json';
+$featureFlagsPath = $storageDir . '/feature-flags.json';
+
+// ProduÃ§Ã£o fica fora do sandbox (mesma mÃ¡quina). Pode sobrescrever via env se mudar estrutura.
+$prodRoot = (string) (getenv('PCP_PROD_ROOT') ?: 'C:\\xampp\\htdocs\\controlepcp');
+$prodFeatureFlagsPath = rtrim($prodRoot, "\\/") . '\\.tmp\\feature-flags.json';
 
 if (!is_dir($storageDir)) {
     @mkdir($storageDir, 0777, true);
@@ -78,6 +83,65 @@ $writeState = static function (array $state) use ($storagePath): void {
     if (@file_put_contents($storagePath, $json, LOCK_EX) === false) {
         throw new RuntimeException('Falha ao gravar estado da Central de PublicaÃ§Ã£o.');
     }
+};
+
+$normalizeTitle = static function (string $value): string {
+    $value = strtolower($value);
+    if (function_exists('iconv')) {
+        $converted = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $value);
+        if (is_string($converted) && $converted !== '') {
+            $value = $converted;
+        }
+    }
+    $value = preg_replace('/[^a-z0-9]+/', ' ', $value) ?: $value;
+    return trim($value);
+};
+
+$computeFeatureFlags = static function (array $state) use ($normalizeTitle): array {
+    $items = is_array($state['items'] ?? null) ? $state['items'] : [];
+    $performance = false;
+
+    foreach ($items as $it) {
+        $status = strtolower((string) ($it['status'] ?? ''));
+        if ($status !== 'approved' && $status !== 'published') {
+            continue;
+        }
+        $title = $normalizeTitle((string) ($it['title'] ?? $it['titulo'] ?? ''));
+        if ($title === '') {
+            continue;
+        }
+        if (str_contains($title, 'desempenho') || str_contains($title, 'gantt') || str_contains($title, 'grafico')) {
+            $performance = true;
+            break;
+        }
+    }
+
+    return [
+        'schema' => 1,
+        'updated_at' => date('c'),
+        'features' => [
+            'performance' => $performance,
+        ],
+    ];
+};
+
+$writeFeatureFlags = static function (array $featureState) use ($featureFlagsPath, $prodFeatureFlagsPath): void {
+    $json = json_encode($featureState, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if ($json === false) {
+        return;
+    }
+
+    $dir = dirname($featureFlagsPath);
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0777, true);
+    }
+    @file_put_contents($featureFlagsPath, $json, LOCK_EX);
+
+    $prodDir = dirname($prodFeatureFlagsPath);
+    if (!is_dir($prodDir)) {
+        @mkdir($prodDir, 0777, true);
+    }
+    @file_put_contents($prodFeatureFlagsPath, $json, LOCK_EX);
 };
 
 $method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
@@ -150,6 +214,7 @@ try {
 
         $state['items'] = $items;
         $writeState($state);
+        $writeFeatureFlags($computeFeatureFlags($state));
 
         echo json_encode(['ok' => true, 'state' => $state], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         exit;
@@ -193,6 +258,7 @@ try {
 
         $state['items'] = $items;
         $writeState($state);
+        $writeFeatureFlags($computeFeatureFlags($state));
 
         echo json_encode(['ok' => true, 'state' => $state], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         exit;
@@ -224,6 +290,7 @@ try {
 
         $state['items'] = $items;
         $writeState($state);
+        $writeFeatureFlags($computeFeatureFlags($state));
 
         echo json_encode(['ok' => true, 'state' => $state], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         exit;
@@ -254,6 +321,7 @@ try {
         $state['publish_checklist_updated_by'] = $username ?: 'admin';
 
         $writeState($state);
+        $writeFeatureFlags($computeFeatureFlags($state));
         echo json_encode(['ok' => true, 'state' => $state], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         exit;
     }

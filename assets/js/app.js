@@ -1671,7 +1671,8 @@ function applyProgramacaoSheet(index) {
         updateProgramacaoStickyActions();
 
         // Feature flags (produÃ§Ã£o): se o mÃ³dulo Desempenho estiver desabilitado, nÃ£o permite abrir a tela.
-        if (targetId === 'section-performance' && !(window.__releaseCenterData && typeof window.__releaseCenterData === 'object')) {
+        const isSandboxEnv = document.body?.dataset?.appEnv === 'sandbox';
+        if (targetId === 'section-performance' && !isSandboxEnv) {
             const enabled = !!(window.__featureFlags && window.__featureFlags.performance)
                 || !!(bootstrap?.features && bootstrap.features.performance);
             if (!enabled) {

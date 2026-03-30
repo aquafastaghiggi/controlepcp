@@ -4605,7 +4605,10 @@ function renderReleaseCenter() {
                     ${(() => {
                       const st = String(item?.status || '').toLowerCase();
                       if (st === 'approved') {
-                        return `<button type="button" class="ghost-button rc-btn" data-rc-status="testing" data-rc-id="${escapeHtml(item?.id)}">Voltar</button>`;
+                        return `
+                          <button type="button" class="ghost-button rc-btn" data-rc-status="testing" data-rc-id="${escapeHtml(item?.id)}">Voltar</button>
+                          <button type="button" class="primary-button rc-btn" data-rc-publish="1" data-rc-id="${escapeHtml(item?.id)}" ${checklistDone ? '' : 'disabled'} title="${checklistDone ? 'Copiar comando de publicação (PowerShell)' : 'Checklist pendente'}">Publicar</button>
+                        `;
                       }
                       if (st === 'testing') {
                         return `<button type="button" class="primary-button rc-btn" data-rc-status="approved" data-rc-id="${escapeHtml(item?.id)}">Aprovar</button>`;
@@ -4784,6 +4787,29 @@ function renderReleaseCenter() {
         showToast('Comando copiado.', 'success');
       } catch {
         window.prompt('Copie o comando:', text);
+      }
+    });
+  });
+
+  root.querySelectorAll('[data-rc-publish][data-rc-id]').forEach((btn) => {
+    btn.addEventListener('click', async (e) => {
+      const id = btn.dataset.rcId;
+      if (!id) return;
+      if (!checklistDone && !e.shiftKey) {
+        alert('Checklist pendente. Marque os itens do checklist antes de publicar.\n\nDica: segure SHIFT ao clicar em Publicar para copiar o comando com -SkipChecklist (emergencial).');
+        return;
+      }
+
+      const item = items.find((it) => String(it?.id) === String(id)) || null;
+      const rawMsg = String(item?.note || item?.title || item?.titulo || 'release').trim() || 'release';
+      const msg = rawMsg.replace(/'/g, "''");
+      const cmd = `powershell -ExecutionPolicy Bypass -File tools\\\\publish.ps1 -ItemIds ${String(id).replace(/[^\d,]/g, '')} ${e.shiftKey ? '-SkipChecklist ' : ''}-Message '${msg}'`;
+
+      try {
+        await navigator.clipboard.writeText(cmd);
+        showToast(e.shiftKey ? 'Comando (com SkipChecklist) copiado.' : 'Comando de publicação copiado.', 'success');
+      } catch {
+        window.prompt('Copie o comando:', cmd);
       }
     });
   });

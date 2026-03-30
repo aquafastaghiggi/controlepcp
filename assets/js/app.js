@@ -635,6 +635,28 @@
             const inTest = items.filter((item) => String(item?.status || '').toLowerCase() === 'testing').length;
             setHomeBadge('release', 'SANDBOX', 'ready');
             setHomeMeta('release', `Backlog: <b>${items.length}</b> &bull; Em teste: <b>${inTest}</b> &bull; Aprovados: <b>${approved}</b> &bull; Releases: <b>${releases.length}</b>`);
+
+            // "Features" controladas pela Central (somente sandbox): se voltar do aprovado, deve refletir no painel.
+            const normalize = (value) => (
+                String(value || '')
+                    .toLowerCase()
+                    .normalize('NFD')
+                    .replace(/[\u0300-\u036f]/g, '')
+            );
+            const performanceEnabled = items.some((item) => {
+                const status = String(item?.status || '').toLowerCase();
+                if (status !== 'approved' && status !== 'published') return false;
+                const title = normalize(item?.title || item?.titulo || '');
+                return title.includes('desempenho') || title.includes('gantt') || title.includes('grafico');
+            });
+
+            if (performanceEnabled) {
+                setHomeBadge('performance', 'Pronto', 'ready');
+                setHomeMeta('performance', 'Previsto: <b>Gantt</b> &bull; Comparar: <b>A/B</b>');
+            } else {
+                setHomeBadge('performance', 'Em breve', 'pending');
+                setHomeMeta('performance', 'Previsto: <b>Gantt</b> &bull; Realizado: <b>API</b>');
+            }
         }
         setHomeMeta('history', 'Exibindo: <b>últimas 2 por linha</b>');
     }
@@ -4492,6 +4514,9 @@ function renderReleaseCenter() {
       }
     });
   });
+
+  // Mantém o Painel Inicial sincronizado quando aprova/volta/checklist muda.
+  updateHomeDashboard();
 }
 
 window.renderReleaseCenter = renderReleaseCenter;

@@ -1339,28 +1339,46 @@ select {
 }
 
 .performance-zoom-title {
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 900;
     color: #0f172a;
-    margin-right: 4px;
+    margin-right: 2px;
 }
 
 .performance-zoom input[type="range"] {
-    width: min(260px, 50vw);
+    width: min(240px, 45vw);
+    min-height: 18px;
+    height: 18px;
     accent-color: #2563eb;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
 }
 
 .performance-zoom-btn {
-    padding: 6px 10px;
-    border-radius: 10px;
+    min-height: 30px;
+    padding: 0 10px;
+    border-radius: 12px;
     font-weight: 900;
     line-height: 1;
+    font-size: 12px;
 }
 
 .performance-zoom-value {
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 900;
     color: #334155;
+}
+
+#performance-zoom-out.performance-zoom-btn,
+#performance-zoom-in.performance-zoom-btn {
+    width: 32px;
+    padding: 0;
+}
+
+#performance-zoom-reset.performance-zoom-btn {
+    min-width: 54px;
 }
 
 .performance-gantt-scroll {

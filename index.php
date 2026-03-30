@@ -18,6 +18,10 @@ $releaseCenterState = null;
 if ($showReleaseCenter) {
     $releaseCenterPath = __DIR__ . '/.tmp/release-center.json';
     $rawReleaseCenter = @file_get_contents($releaseCenterPath) ?: '';
+    // `release-center.json` pode ser gravado via PowerShell (UTF-8 com BOM). Remover BOM para o json_decode funcionar.
+    if (strncmp($rawReleaseCenter, "\xEF\xBB\xBF", 3) === 0) {
+        $rawReleaseCenter = substr($rawReleaseCenter, 3);
+    }
     $decodedReleaseCenter = json_decode($rawReleaseCenter, true);
 
     $releaseCenterState = is_array($decodedReleaseCenter)
@@ -42,6 +46,10 @@ $features = [
 $featureFlagsPath = __DIR__ . '/.tmp/feature-flags.json';
 $rawFeatureFlags = @file_get_contents($featureFlagsPath) ?: '';
 if ($rawFeatureFlags !== '') {
+    // Segurança extra: se algum editor gravar com BOM, evita falha no decode.
+    if (strncmp($rawFeatureFlags, "\xEF\xBB\xBF", 3) === 0) {
+        $rawFeatureFlags = substr($rawFeatureFlags, 3);
+    }
     $decodedFeatureFlags = json_decode($rawFeatureFlags, true);
     if (is_array($decodedFeatureFlags)) {
         $featurePayload = is_array($decodedFeatureFlags['features'] ?? null)

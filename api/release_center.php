@@ -50,6 +50,10 @@ $readState = static function () use ($storagePath, $defaultState): array {
     if (!$raw) {
         return $defaultState;
     }
+    // Arquivo pode vir com UTF-8 BOM (PowerShell). Remove BOM para json_decode funcionar.
+    if (strncmp($raw, "\xEF\xBB\xBF", 3) === 0) {
+        $raw = substr($raw, 3);
+    }
 
     $decoded = json_decode($raw, true);
     if (!is_array($decoded)) {

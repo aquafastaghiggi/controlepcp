@@ -1318,15 +1318,6 @@ function applyProgramacaoSheet(index) {
         state.activeProgramacaoSheetIndex = index; 
         syncActiveProgramacaoSheetHighlight(); 
         updateProgramacaoStickyActions();
-
-        // Central de Publicacao (sandbox): carrega e renderiza ao entrar na tela.
-        if (targetId === 'section-release-center' && typeof window.loadReleaseCenter === 'function') {
-            window.loadReleaseCenter().catch((error) => {
-                console.warn('Falha ao carregar Central de Publicacao.', error);
-            });
-        } else if (targetId === 'section-release-center' && typeof window.renderReleaseCenter === 'function') {
-            window.renderReleaseCenter();
-        }
         state.form.numero_op = ''; 
         if (numeroOpInput) { 
             numeroOpInput.value = ''; 
@@ -1613,6 +1604,22 @@ function applyProgramacaoSheet(index) {
             window.loadHistoryProgramacoes().catch((error) => {
                 console.warn('Falha ao atualizar histórico ao abrir a tela.', error);
             });
+        }
+
+        // Desempenho (MVP): carrega lista do previsto ao entrar na tela.
+        if (targetId === 'section-performance' && typeof window.loadPerformance === 'function') {
+            window.loadPerformance().catch((error) => {
+                console.warn('Falha ao carregar desempenho.', error);
+            });
+        }
+
+        // Central de Publicação (sandbox): carrega e renderiza ao entrar na tela.
+        if (targetId === 'section-release-center' && typeof window.loadReleaseCenter === 'function') {
+            window.loadReleaseCenter().catch((error) => {
+                console.warn('Falha ao carregar Central de Publicação.', error);
+            });
+        } else if (targetId === 'section-release-center' && typeof window.renderReleaseCenter === 'function') {
+            window.renderReleaseCenter();
         }
     } 
 
@@ -3323,6 +3330,847 @@ async function loadHistoryProgramacoes() {
     console.error('Erro ao carregar hist�rico', error);
   }
 }
+
+// desempenho (previsto) - etapa 1
+async function loadPerformance() {
+  const lineSelect = document.getElementById('performance-line');
+  const programSelect = document.getElementById('performance-program');
+  const compareSelect = document.getElementById('performance-compare');
+  const showProdInput = document.getElementById('performance-show-prod');
+  const showSetupInput = document.getElementById('performance-show-setup');
+  const summaryEl = document.getElementById('performance-summary');
+  const openBtn = document.getElementById('performance-open');
+
+  if (!lineSelect || !programSelect || !compareSelect || !summaryEl) return;
+
+  if (!window.__performanceInit) {
+    window.__performanceInit = true;
+
+    lineSelect.addEventListener('change', () => {
+      renderPerformanceProgramOptions();
+      renderPerformanceCompareOptions();
+      renderPerformanceSummary();
+      savePerformanceUiState();
+    });
+
+    programSelect.addEventListener('change', () => {
+      renderPerformanceSummary();
+      savePerformanceUiState();
+    });
+
+    compareSelect.addEventListener('change', () => {
+      renderPerformanceSummary();
+      savePerformanceUiState();
+    });
+
+    showProdInput?.addEventListener('change', () => {
+      renderPerformanceSummary();
+      savePerformanceUiState();
+    });
+
+    showSetupInput?.addEventListener('change', () => {
+      renderPerformanceSummary();
+      savePerformanceUiState();
+    });
+
+    openBtn?.addEventListener('click', () => {
+      const id = programSelect.value;
+      if (id && typeof window.openHistoryPreview === 'function') {
+        window.openHistoryPreview(id);
+      }
+    });
+  }
+
+  summaryEl.textContent = 'Carregando programa\u00e7\u00f5es...';
+
+  try {
+    const response = await fetch(`/controlepcp/api/programacoes.php?limit=200&_=${Date.now()}`, { cache: 'no-store' });
+    const payload = await response.json();
+    const raw = payload?.data ?? payload ?? [];
+    const list = Array.isArray(raw) ? raw : [];
+
+    window.__performanceProgramList = list;
+    renderPerformanceLineOptions();
+    applyPerformanceUiState();
+    renderPerformanceProgramOptions();
+    renderPerformanceCompareOptions();
+    renderPerformanceSummary();
+    savePerformanceUiState();
+  } catch (error) {
+    console.warn('Falha ao carregar programa\u00e7\u00f5es para desempenho.', error);
+    summaryEl.textContent = 'Falha ao carregar dados do previsto.';
+  }
+}
+
+const PERFORMANCE_UI_STORAGE_KEY = 'pcp_performance_ui_v1';
+
+function readPerformanceUiState() {
+  try {
+    const raw = window.localStorage ? window.localStorage.getItem(PERFORMANCE_UI_STORAGE_KEY) : null;
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writePerformanceUiState(nextState) {
+  try {
+    if (!window.localStorage) return;
+    window.localStorage.setItem(PERFORMANCE_UI_STORAGE_KEY, JSON.stringify(nextState || {}));
+  } catch {
+    // ignore
+  }
+}
+
+function savePerformanceUiState() {
+  const lineSelect = document.getElementById('performance-line');
+  const programSelect = document.getElementById('performance-program');
+  const compareSelect = document.getElementById('performance-compare');
+  if (!lineSelect || !programSelect || !compareSelect) return;
+
+  const showProd = document.getElementById('performance-show-prod')?.checked;
+  const showSetup = document.getElementById('performance-show-setup')?.checked;
+
+  writePerformanceUiState({
+    line: String(lineSelect.value || ''),
+    program: String(programSelect.value || ''),
+    compare: String(compareSelect.value || ''),
+    showProd: showProd !== false,
+    showSetup: showSetup !== false,
+    savedAt: Date.now(),
+  });
+}
+
+function applyPerformanceUiState() {
+  const state = readPerformanceUiState();
+  if (!state) return;
+
+  const lineSelect = document.getElementById('performance-line');
+  const programSelect = document.getElementById('performance-program');
+  const compareSelect = document.getElementById('performance-compare');
+  if (!lineSelect || !programSelect || !compareSelect) return;
+
+  const prodInput = document.getElementById('performance-show-prod');
+  const setupInput = document.getElementById('performance-show-setup');
+  if (prodInput) prodInput.checked = state.showProd !== false;
+  if (setupInput) setupInput.checked = state.showSetup !== false;
+
+  const lineValue = String(state.line || '');
+  if (lineValue && Array.from(lineSelect.options || []).some((opt) => opt.value === lineValue)) {
+    lineSelect.value = lineValue;
+  }
+
+  const programValue = String(state.program || '');
+  if (programValue && Array.from(programSelect.options || []).some((opt) => opt.value === programValue)) {
+    programSelect.value = programValue;
+  }
+
+  const compareValue = String(state.compare || '');
+  if (compareValue && Array.from(compareSelect.options || []).some((opt) => opt.value === compareValue)) {
+    compareSelect.value = compareValue;
+  }
+}
+
+function performanceLineKey(item) {
+  return String(item?.linha_excel_dominante || item?.lin_codigo || item?.lin_nome || '').trim() || 'SEM_LINHA';
+}
+
+function performanceLineLabel(key) {
+  return formatLinhaLabel(key) || key || 'Linha n\u00e3o informada';
+}
+
+function performanceLineNumber(label) {
+  const match = String(label || '').match(/(\\d+)/);
+  if (!match) return Number.MAX_SAFE_INTEGER;
+  const parsed = parseInt(match[1], 10);
+  return Number.isFinite(parsed) ? parsed : Number.MAX_SAFE_INTEGER;
+}
+
+function formatSqlDateTimePt(value) {
+  if (!value) return '-';
+  const text = String(value).trim();
+  if (!text) return '-';
+  const parts = text.split(' ');
+  if (parts.length < 2) return escapeHtml(value);
+  const [date, time] = parts;
+  const d = date.split('-');
+  if (d.length !== 3) return escapeHtml(value);
+  const [y, m, day] = d;
+  const hhmm = String(time).substring(0, 5);
+  return `${day}/${m}/${y} ${hhmm}`;
+}
+
+function formatEfficiencyShort(value) {
+  if (value === null || value === undefined) return '-';
+  const raw = String(value).replace('%', '').trim();
+  if (!raw) return '-';
+  const parsed = Number(raw.replace(',', '.'));
+  if (Number.isFinite(parsed)) {
+    const normalized = Number.isInteger(parsed) ? String(parsed) : parsed.toFixed(2);
+    return `${normalized}%`;
+  }
+  return `${escapeHtml(raw)}%`;
+}
+
+function renderPerformanceLineOptions() {
+  const lineSelect = document.getElementById('performance-line');
+  if (!lineSelect) return;
+
+  const list = Array.isArray(window.__performanceProgramList) ? window.__performanceProgramList : [];
+  const keys = [...new Set(list.map(performanceLineKey))];
+
+  const options = keys
+    .map((key) => ({ key, label: performanceLineLabel(key) }))
+    .sort((a, b) => {
+      const na = performanceLineNumber(a.label);
+      const nb = performanceLineNumber(b.label);
+      if (na !== nb) return na - nb;
+      return String(a.label).localeCompare(String(b.label), 'pt-BR', { numeric: true, sensitivity: 'base' });
+    });
+
+  const current = lineSelect.value || '';
+  lineSelect.innerHTML = options.length
+    ? options.map((opt) => `<option value="${escapeHtml(opt.key)}">${escapeHtml(opt.label)}</option>`).join('')
+    : '<option value="">Sem linhas</option>';
+
+  if (current && options.some((opt) => opt.key === current)) {
+    lineSelect.value = current;
+  }
+}
+
+function renderPerformanceProgramOptions() {
+  const lineSelect = document.getElementById('performance-line');
+  const programSelect = document.getElementById('performance-program');
+  if (!lineSelect || !programSelect) return;
+
+  const list = Array.isArray(window.__performanceProgramList) ? window.__performanceProgramList : [];
+  const key = lineSelect.value || '';
+  const filtered = list.filter((item) => performanceLineKey(item) === key);
+
+  const parseMs = (value) => {
+    if (!value) return 0;
+    const text = String(value).trim();
+    if (!text) return 0;
+    const normalized = text.includes('T') ? text : text.replace(' ', 'T');
+    const date = new Date(normalized);
+    const ms = date.getTime();
+    return Number.isFinite(ms) ? ms : 0;
+  };
+
+  filtered.sort((a, b) => (
+    parseMs(b?.programacao_criada_em || b?.prg_criado_em || '') -
+    parseMs(a?.programacao_criada_em || a?.prg_criado_em || '')
+  ));
+
+  const current = programSelect.value || '';
+  if (!filtered.length) {
+    programSelect.innerHTML = '<option value="">Sem programa\u00e7\u00f5es</option>';
+    programSelect.value = '';
+    window.__performanceProgramById = {};
+    return;
+  }
+
+  const byId = {};
+  programSelect.innerHTML = filtered.map((item) => {
+    const id = String(item?.prg_id ?? '');
+    byId[id] = item;
+    const created = formatSqlDateTimePt(item?.programacao_criada_em || item?.prg_criado_em || '');
+    const base = formatSqlDateTimePt(item?.inicio_base_cronograma || item?.prg_base_inicio || '');
+    const eff = formatEfficiencyShort(item?.prg_eficiencia);
+    const label = `${created} \u2022 Ef. ${eff} \u2022 In\u00edcio ${base}`;
+    return `<option value="${escapeHtml(id)}">${escapeHtml(label)}</option>`;
+  }).join('');
+
+  window.__performanceProgramById = byId;
+  const saved = readPerformanceUiState();
+  const savedProgram = saved ? String(saved.program || '') : '';
+
+  if (current && byId[current]) {
+    programSelect.value = current;
+  } else if (savedProgram && byId[savedProgram]) {
+    programSelect.value = savedProgram;
+  }
+}
+
+function renderPerformanceCompareOptions() {
+  const lineSelect = document.getElementById('performance-line');
+  const compareSelect = document.getElementById('performance-compare');
+  if (!lineSelect || !compareSelect) return;
+
+  const list = Array.isArray(window.__performanceProgramList) ? window.__performanceProgramList : [];
+  const key = lineSelect.value || '';
+  const filtered = list.filter((item) => performanceLineKey(item) === key);
+
+  const parseMs = (value) => {
+    if (!value) return 0;
+    const text = String(value).trim();
+    if (!text) return 0;
+    const normalized = text.includes('T') ? text : text.replace(' ', 'T');
+    const date = new Date(normalized);
+    const ms = date.getTime();
+    return Number.isFinite(ms) ? ms : 0;
+  };
+
+  filtered.sort((a, b) => (
+    parseMs(b?.programacao_criada_em || b?.prg_criado_em || '') -
+    parseMs(a?.programacao_criada_em || a?.prg_criado_em || '')
+  ));
+
+  const current = compareSelect.value || '';
+  const saved = readPerformanceUiState();
+  const savedCompare = saved ? String(saved.compare || '') : '';
+  compareSelect.innerHTML = `<option value="">N\u00e3o comparar</option>` + (filtered.map((item) => {
+    const id = String(item?.prg_id ?? '');
+    const created = formatSqlDateTimePt(item?.programacao_criada_em || item?.prg_criado_em || '');
+    const base = formatSqlDateTimePt(item?.inicio_base_cronograma || item?.prg_base_inicio || '');
+    const eff = formatEfficiencyShort(item?.prg_eficiencia);
+    const label = `${created} \u2022 Ef. ${eff} \u2022 In\u00edcio ${base}`;
+    return `<option value="${escapeHtml(id)}">${escapeHtml(label)}</option>`;
+  }).join(''));
+
+  if (current && filtered.some((item) => String(item?.prg_id ?? '') === current)) {
+    compareSelect.value = current;
+  } else if (savedCompare && filtered.some((item) => String(item?.prg_id ?? '') === savedCompare)) {
+    compareSelect.value = savedCompare;
+  } else {
+    compareSelect.value = '';
+  }
+}
+
+function renderPerformanceSummary() {
+  const programSelect = document.getElementById('performance-program');
+  const compareSelect = document.getElementById('performance-compare');
+  const summaryEl = document.getElementById('performance-summary');
+  const openBtn = document.getElementById('performance-open');
+  if (!programSelect || !compareSelect || !summaryEl) return;
+
+  const id = programSelect.value || '';
+  const compareId = compareSelect.value || '';
+  const byId = window.__performanceProgramById || {};
+  const item = id ? byId[id] : null;
+
+  if (!item) {
+    summaryEl.textContent = 'Selecione uma linha e uma programa\u00e7\u00e3o.';
+    if (openBtn) openBtn.disabled = true;
+    renderPerformanceGanttEmpty();
+    return;
+  }
+
+  const linha = performanceLineLabel(performanceLineKey(item));
+  const created = formatSqlDateTimePt(item?.programacao_criada_em || item?.prg_criado_em || '');
+  const base = formatSqlDateTimePt(item?.inicio_base_cronograma || item?.prg_base_inicio || '');
+  const eff = formatEfficiencyShort(item?.prg_eficiencia);
+
+  summaryEl.innerHTML = `
+    <div><b>${escapeHtml(linha)}</b></div>
+    <div>Programa\u00e7\u00e3o: ${escapeHtml(created)}</div>
+    <div>In\u00edcio base: ${escapeHtml(base)}</div>
+    <div>Efici\u00eancia: ${escapeHtml(eff)}</div>
+  `;
+
+  if (openBtn) openBtn.disabled = false;
+
+  // etapa 2: Gantt do previsto (somente leitura)
+  loadAndRenderPerformanceGantt(id, compareId && compareId !== id ? compareId : '');
+}
+
+function renderPerformanceGanttEmpty(message = 'Selecione uma programa\u00e7\u00e3o para visualizar o Gantt.') {
+  const kpisEl = document.getElementById('performance-kpis');
+  if (kpisEl) kpisEl.innerHTML = '';
+  const dailyEl = document.getElementById('performance-daily');
+  if (dailyEl) dailyEl.innerHTML = '';
+  const blockB = document.getElementById('performance-gantt-block-b');
+  if (blockB) blockB.classList.add('is-hidden');
+
+  const ganttA = document.getElementById('performance-gantt-a');
+  const ganttB = document.getElementById('performance-gantt-b');
+  if (ganttA) ganttA.innerHTML = `<div class="performance-gantt-empty muted">${escapeHtml(message)}</div>`;
+  if (ganttB) ganttB.innerHTML = '';
+}
+
+function isSetupScheduleRow(row) {
+  return String(row?.sch_tipo || '').trim().toLowerCase() === 'setup';
+}
+
+function getPerformanceFilters() {
+  const showProd = document.getElementById('performance-show-prod')?.checked;
+  const showSetup = document.getElementById('performance-show-setup')?.checked;
+  return {
+    showProd: showProd !== false,
+    showSetup: showSetup !== false,
+  };
+}
+
+function getFilteredSchedule(detail) {
+  const schedule = Array.isArray(detail?.schedule) ? detail.schedule : [];
+  const filters = getPerformanceFilters();
+  return schedule.filter((row) => (isSetupScheduleRow(row) ? filters.showSetup : filters.showProd));
+}
+
+function parseLocalDateTime(dateValue, timeValue) {
+  if (!dateValue || !timeValue) return null;
+  const dateMatch = String(dateValue).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const timeMatch = String(timeValue).match(/^(\d{2}):(\d{2})(?::(\d{2}))?/);
+  if (!dateMatch || !timeMatch) return null;
+  const year = Number(dateMatch[1]);
+  const month = Number(dateMatch[2]) - 1;
+  const day = Number(dateMatch[3]);
+  const hour = Number(timeMatch[1]);
+  const minute = Number(timeMatch[2]);
+  const second = timeMatch[3] ? Number(timeMatch[3]) : 0;
+  const dt = new Date(year, month, day, hour, minute, second);
+  return Number.isNaN(dt.getTime()) ? null : dt;
+}
+
+function parseLocalDateTimeFromSql(value) {
+  if (!value) return null;
+  const text = String(value).trim();
+  if (!text) return null;
+  const match = text.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})(?::\d{2})?/);
+  if (!match) return null;
+  return parseLocalDateTime(match[1], match[2]);
+}
+
+function formatDateTimeShortPt(dateObj) {
+  if (!dateObj || Number.isNaN(dateObj.getTime())) return '-';
+  const d = String(dateObj.getDate()).padStart(2, '0');
+  const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const y = dateObj.getFullYear();
+  const hh = String(dateObj.getHours()).padStart(2, '0');
+  const mm = String(dateObj.getMinutes()).padStart(2, '0');
+  return `${d}/${m}/${y} ${hh}:${mm}`;
+}
+
+function formatDurationMinutesToHHMM(minutesValue) {
+  const minutesNumber = Number(minutesValue);
+  if (!Number.isFinite(minutesNumber)) return '-';
+  const total = Math.max(0, Math.round(minutesNumber));
+  const hours = Math.floor(total / 60);
+  const minutes = total % 60;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+function toDateKeyLocal(dateObj) {
+  const y = dateObj.getFullYear();
+  const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const d = String(dateObj.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function formatDateKeyPt(dateKey) {
+  const match = String(dateKey || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return escapeHtml(dateKey);
+  return `${match[3]}/${match[2]}/${match[1]}`;
+}
+
+function splitMinutesByDay(start, end) {
+  const result = [];
+  if (!start || !end) return result;
+  let cursor = new Date(start.getTime());
+  const endMs = end.getTime();
+  while (cursor.getTime() < endMs) {
+    const nextMidnight = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + 1, 0, 0, 0);
+    const segmentEnd = new Date(Math.min(nextMidnight.getTime(), endMs));
+    const minutes = Math.max(0, (segmentEnd.getTime() - cursor.getTime()) / 60000);
+    result.push({ dateKey: toDateKeyLocal(cursor), minutes, segmentStart: new Date(cursor.getTime()), segmentEnd });
+    cursor = segmentEnd;
+  }
+  return result;
+}
+
+function buildDailyBuckets(schedule) {
+  const list = Array.isArray(schedule) ? schedule : [];
+  const buckets = {};
+
+  list.forEach((row) => {
+    const isSetup = isSetupScheduleRow(row);
+    const start = parseLocalDateTime(row?.sch_data_inicio, row?.sch_hora_inicio);
+    const end = parseLocalDateTimeFromSql(row?.sch_fim_producao) || parseLocalDateTime(row?.sch_data_inicio, row?.sch_hora_fim);
+    if (!start || !end) return;
+
+    const parts = splitMinutesByDay(start, end);
+    parts.forEach((part) => {
+      const key = part.dateKey;
+      if (!buckets[key]) {
+        buckets[key] = { dateKey: key, prodMin: 0, setupMin: 0, start: null, end: null };
+      }
+      if (isSetup) buckets[key].setupMin += part.minutes;
+      else buckets[key].prodMin += part.minutes;
+
+      if (!buckets[key].start || part.segmentStart.getTime() < buckets[key].start.getTime()) buckets[key].start = part.segmentStart;
+      if (!buckets[key].end || part.segmentEnd.getTime() > buckets[key].end.getTime()) buckets[key].end = part.segmentEnd;
+    });
+  });
+
+  return Object.values(buckets).sort((a, b) => String(a.dateKey).localeCompare(String(b.dateKey)));
+}
+
+async function getPerformanceProgramDetail(programId) {
+  const cache = window.__performanceProgramDetailCache || (window.__performanceProgramDetailCache = {});
+  const key = String(programId || '');
+  if (!key) return null;
+  if (cache[key]) return cache[key];
+
+  const response = await fetch(`/controlepcp/api/programacoes.php?id=${encodeURIComponent(key)}&_=${Date.now()}`, { cache: 'no-store' });
+  const payload = await response.json();
+  const data = payload?.data || payload || null;
+  cache[key] = data;
+  return data;
+}
+
+function renderPerformanceKpis(detailA, detailB = null) {
+  const kpisEl = document.getElementById('performance-kpis');
+  if (!kpisEl) return;
+
+  const scheduleA = getFilteredSchedule(detailA);
+  const scheduleB = detailB ? getFilteredSchedule(detailB) : [];
+  if (!scheduleA.length) {
+    kpisEl.innerHTML = '';
+    return;
+  }
+
+  const toStart = (row) => parseLocalDateTime(row?.sch_data_inicio, row?.sch_hora_inicio);
+  const toEnd = (row) => (
+    parseLocalDateTimeFromSql(row?.sch_fim_producao) ||
+    parseLocalDateTime(row?.sch_data_inicio, row?.sch_hora_fim) ||
+    null
+  );
+
+  const compute = (schedule) => {
+    const starts = schedule.map(toStart).filter(Boolean);
+    const ends = schedule.map(toEnd).filter(Boolean);
+    const start = starts.length ? new Date(Math.min(...starts.map((d) => d.getTime()))) : null;
+    const end = ends.length ? new Date(Math.max(...ends.map((d) => d.getTime()))) : null;
+    const totalSetupMin = schedule
+      .filter((row) => String(row?.sch_tipo || '').trim().toLowerCase() === 'setup')
+      .reduce((sum, row) => sum + (Number(row?.sch_duracao_minutos) || 0), 0);
+    const totalProdMin = schedule
+      .filter((row) => String(row?.sch_tipo || '').trim().toLowerCase() !== 'setup')
+      .reduce((sum, row) => sum + (Number(row?.sch_duracao_minutos) || 0), 0);
+    const uniqueSeq = new Set(
+      schedule
+        .filter((row) => String(row?.sch_tipo || '').trim().toLowerCase() !== 'setup')
+        .map((row) => String(row?.sch_sequencia || '').trim())
+        .filter(Boolean)
+    );
+    const makespanMin = (start && end) ? Math.max(0, (end.getTime() - start.getTime()) / 60000) : null;
+    return { start, end, makespanMin, totalProdMin, totalSetupMin, itens: uniqueSeq.size };
+  };
+
+  const a = compute(scheduleA);
+  const b = scheduleB.length ? compute(scheduleB) : null;
+
+  const formatDelta = (deltaMin) => {
+    if (deltaMin === null || deltaMin === undefined) return '-';
+    const sign = deltaMin > 0 ? '+' : '';
+    return `${sign}${formatDurationMinutesToHHMM(deltaMin)}`;
+  };
+
+  const delta = b ? {
+    makespanMin: (a.makespanMin !== null && b.makespanMin !== null) ? (a.makespanMin - b.makespanMin) : null,
+    totalProdMin: (a.totalProdMin - b.totalProdMin),
+    totalSetupMin: (a.totalSetupMin - b.totalSetupMin),
+    itens: (a.itens - b.itens),
+  } : null;
+
+  kpisEl.innerHTML = `
+    <div class="performance-kpi">
+      <div class="performance-kpi-label">In\u00edcio (A)</div>
+      <div class="performance-kpi-value">${escapeHtml(a.start ? formatDateTimeShortPt(a.start) : '-')}</div>
+    </div>
+    <div class="performance-kpi">
+      <div class="performance-kpi-label">Fim (A)</div>
+      <div class="performance-kpi-value">${escapeHtml(a.end ? formatDateTimeShortPt(a.end) : '-')}</div>
+    </div>
+    <div class="performance-kpi">
+      <div class="performance-kpi-label">Makespan (A)</div>
+      <div class="performance-kpi-value">${escapeHtml(a.makespanMin === null ? '-' : formatDurationMinutesToHHMM(a.makespanMin))}</div>
+    </div>
+    <div class="performance-kpi">
+      <div class="performance-kpi-label">Produ\u00e7\u00e3o (A)</div>
+      <div class="performance-kpi-value">${escapeHtml(formatDurationMinutesToHHMM(a.totalProdMin))}</div>
+    </div>
+    <div class="performance-kpi">
+      <div class="performance-kpi-label">Setup (A)</div>
+      <div class="performance-kpi-value">${escapeHtml(formatDurationMinutesToHHMM(a.totalSetupMin))}</div>
+    </div>
+    <div class="performance-kpi">
+      <div class="performance-kpi-label">Itens (A)</div>
+      <div class="performance-kpi-value">${escapeHtml(String(a.itens))}</div>
+    </div>
+
+    ${b ? `
+      <div class="performance-kpi performance-kpi--compare">
+        <div class="performance-kpi-label">Makespan (B)</div>
+        <div class="performance-kpi-value">${escapeHtml(b.makespanMin === null ? '-' : formatDurationMinutesToHHMM(b.makespanMin))}</div>
+      </div>
+      <div class="performance-kpi performance-kpi--compare">
+        <div class="performance-kpi-label">Produ\u00e7\u00e3o (B)</div>
+        <div class="performance-kpi-value">${escapeHtml(formatDurationMinutesToHHMM(b.totalProdMin))}</div>
+      </div>
+      <div class="performance-kpi performance-kpi--compare">
+        <div class="performance-kpi-label">Setup (B)</div>
+        <div class="performance-kpi-value">${escapeHtml(formatDurationMinutesToHHMM(b.totalSetupMin))}</div>
+      </div>
+      <div class="performance-kpi performance-kpi--delta">
+        <div class="performance-kpi-label">\u0394 Makespan (A-B)</div>
+        <div class="performance-kpi-value">${escapeHtml(delta.makespanMin === null ? '-' : formatDelta(delta.makespanMin))}</div>
+      </div>
+      <div class="performance-kpi performance-kpi--delta">
+        <div class="performance-kpi-label">\u0394 Produ\u00e7\u00e3o (A-B)</div>
+        <div class="performance-kpi-value">${escapeHtml(formatDelta(delta.totalProdMin))}</div>
+      </div>
+      <div class="performance-kpi performance-kpi--delta">
+        <div class="performance-kpi-label">\u0394 Setup (A-B)</div>
+        <div class="performance-kpi-value">${escapeHtml(formatDelta(delta.totalSetupMin))}</div>
+      </div>
+    ` : ''}
+  `;
+}
+
+function renderPerformanceGantt(detail, options = {}) {
+  const containerId = options?.containerId || 'performance-gantt-a';
+  const ganttEl = document.getElementById(containerId);
+  if (!ganttEl) return;
+
+  const schedule = Array.isArray(options?.scheduleOverride)
+    ? options.scheduleOverride
+    : (Array.isArray(detail?.schedule) ? detail.schedule : []);
+  if (!schedule.length) {
+    ganttEl.innerHTML = '<div class="performance-gantt-empty muted">Nenhum schedule encontrado.</div>';
+    return;
+  }
+
+  const rows = schedule
+    .map((row, idx) => {
+      const typeRaw = String(row?.sch_tipo || '').trim().toLowerCase();
+      const isSetup = typeRaw === 'setup';
+      const start = parseLocalDateTime(row?.sch_data_inicio, row?.sch_hora_inicio);
+      const end = parseLocalDateTimeFromSql(row?.sch_fim_producao) || parseLocalDateTime(row?.sch_data_inicio, row?.sch_hora_fim);
+      if (!start || !end) return null;
+
+      return {
+        idx,
+        isSetup,
+        seq: String(row?.sch_sequencia ?? '').trim(),
+        sku: String(row?.sch_sku ?? '').trim(),
+        desc: String(row?.sch_descricao ?? '').trim(),
+        start,
+        end,
+        durMin: Number(row?.sch_duracao_minutos) || 0,
+      };
+    })
+    .filter(Boolean);
+
+  if (!rows.length) {
+    ganttEl.innerHTML = '<div class="performance-gantt-empty muted">Nenhum registro com datas v\u00e1lidas.</div>';
+    return;
+  }
+
+  const defaultStartMs = Math.min(...rows.map((r) => r.start.getTime()));
+  const defaultEndMs = Math.max(...rows.map((r) => r.end.getTime()));
+  const startMs = Number.isFinite(options?.rangeStartMs) ? options.rangeStartMs : defaultStartMs;
+  const endMs = Number.isFinite(options?.rangeEndMs) ? options.rangeEndMs : defaultEndMs;
+  const rangeMs = Math.max(1, endMs - startMs);
+
+  const tickCount = 5;
+  const ticks = Array.from({ length: tickCount }, (_, i) => {
+    const ratio = i / (tickCount - 1);
+    const ms = Math.round(startMs + (rangeMs * ratio));
+    return new Date(ms);
+  });
+
+  const maxRows = Number.isFinite(options?.maxRows) ? Math.max(5, Math.min(200, options.maxRows)) : 60;
+  const visibleRows = rows.slice(0, maxRows);
+  const hiddenCount = rows.length - visibleRows.length;
+
+  const tickHtml = ticks.map((t, i) => (
+    `<div class="performance-gantt-tick" style="left:${(i / (tickCount - 1)) * 100}%">${escapeHtml(formatDateTimeShortPt(t).slice(0, 16))}</div>`
+  )).join('');
+
+  const rowHtml = visibleRows.map((r) => {
+    const left = ((r.start.getTime() - startMs) / rangeMs) * 100;
+    const width = Math.max(0.6, ((r.end.getTime() - r.start.getTime()) / rangeMs) * 100);
+    const labelMain = r.isSetup ? 'Setup' : (r.seq ? `Seq ${r.seq}` : 'Produ\u00e7\u00e3o');
+    const labelSub = (!r.isSetup && r.sku) ? r.sku : (r.desc || '');
+    const title = `${labelMain}${labelSub ? ' - ' + labelSub : ''}\n${formatDateTimeShortPt(r.start)} \u2192 ${formatDateTimeShortPt(r.end)}\nDura\u00e7\u00e3o: ${formatDurationMinutesToHHMM(r.durMin)}`;
+
+    return `
+      <div class="performance-gantt-row">
+        <div class="performance-gantt-label">
+          <div class="performance-gantt-label-main">${escapeHtml(labelMain)}</div>
+          <div class="performance-gantt-label-sub">${escapeHtml(labelSub)}</div>
+        </div>
+        <div class="performance-gantt-track">
+          <div class="performance-gantt-bar ${r.isSetup ? 'is-setup' : 'is-prod'}" style="left:${left}%; width:${width}%;" title="${escapeHtml(title).replace(/\n/g, '&#10;')}"></div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  ganttEl.innerHTML = `
+    <div class="performance-gantt-axis">${tickHtml}</div>
+    <div class="performance-gantt-rows">${rowHtml}</div>
+    ${hiddenCount > 0 ? `<div class="performance-gantt-note muted">Mostrando ${visibleRows.length} de ${rows.length} registros.</div>` : ''}
+  `;
+}
+
+function loadAndRenderPerformanceGantt(programId, compareProgramId = '') {
+  const idA = String(programId || '');
+  const idB = String(compareProgramId || '');
+  if (!idA) {
+    renderPerformanceGanttEmpty();
+    return;
+  }
+
+  const blockB = document.getElementById('performance-gantt-block-b');
+  const ganttA = document.getElementById('performance-gantt-a');
+  const ganttB = document.getElementById('performance-gantt-b');
+  if (ganttA) ganttA.innerHTML = '<div class="performance-gantt-empty muted">Carregando Gantt...</div>';
+  if (ganttB) ganttB.innerHTML = '';
+  if (blockB) blockB.classList.toggle('is-hidden', !idB);
+
+  const requestId = idA + '::' + idB;
+  window.__performanceGanttLastRequest = requestId;
+
+  const pA = getPerformanceProgramDetail(idA);
+  const pB = idB ? getPerformanceProgramDetail(idB) : Promise.resolve(null);
+
+  Promise.all([pA, pB])
+    .then(([detailA, detailB]) => {
+      if (window.__performanceGanttLastRequest !== requestId) return;
+      if (!detailA) {
+        renderPerformanceGanttEmpty('Falha ao carregar detalhes da programa\u00e7\u00e3o.');
+        return;
+      }
+
+      const schedA = getFilteredSchedule(detailA);
+      const schedB = detailB ? getFilteredSchedule(detailB) : [];
+
+      const computeRange = (schedule) => {
+        const starts = schedule
+          .map((row) => parseLocalDateTime(row?.sch_data_inicio, row?.sch_hora_inicio))
+          .filter(Boolean)
+          .map((d) => d.getTime());
+        const ends = schedule
+          .map((row) => (
+            parseLocalDateTimeFromSql(row?.sch_fim_producao) ||
+            parseLocalDateTime(row?.sch_data_inicio, row?.sch_hora_fim) ||
+            null
+          ))
+          .filter(Boolean)
+          .map((d) => d.getTime());
+        if (!starts.length || !ends.length) return null;
+        return { startMs: Math.min(...starts), endMs: Math.max(...ends) };
+      };
+
+      const rangeA = computeRange(schedA);
+      const rangeB = schedB.length ? computeRange(schedB) : null;
+      const rangeStartMs = Math.min(rangeA?.startMs ?? Number.MAX_SAFE_INTEGER, rangeB?.startMs ?? Number.MAX_SAFE_INTEGER);
+      const rangeEndMs = Math.max(rangeA?.endMs ?? 0, rangeB?.endMs ?? 0);
+      const hasRange = Number.isFinite(rangeStartMs) && Number.isFinite(rangeEndMs) && rangeEndMs > 0 && rangeStartMs < Number.MAX_SAFE_INTEGER;
+
+      renderPerformanceKpis(detailA, detailB);
+      renderPerformanceDaily(detailA, detailB);
+      renderPerformanceGantt(detailA, {
+        containerId: 'performance-gantt-a',
+        scheduleOverride: schedA,
+        rangeStartMs: hasRange ? rangeStartMs : undefined,
+        rangeEndMs: hasRange ? rangeEndMs : undefined,
+      });
+
+      if (idB && detailB) {
+        if (blockB) blockB.classList.remove('is-hidden');
+        renderPerformanceGantt(detailB, {
+          containerId: 'performance-gantt-b',
+          scheduleOverride: schedB,
+          rangeStartMs: hasRange ? rangeStartMs : undefined,
+          rangeEndMs: hasRange ? rangeEndMs : undefined,
+        });
+      } else if (blockB) {
+        blockB.classList.add('is-hidden');
+      }
+    })
+    .catch((error) => {
+      if (window.__performanceGanttLastRequest !== requestId) return;
+      console.warn('Falha ao carregar Gantt do previsto.', error);
+      renderPerformanceGanttEmpty('Falha ao carregar Gantt do previsto.');
+    });
+}
+
+function renderPerformanceDaily(detailA, detailB = null) {
+  const dailyEl = document.getElementById('performance-daily');
+  if (!dailyEl) return;
+
+  const aRows = buildDailyBuckets(getFilteredSchedule(detailA));
+  const bRows = detailB ? buildDailyBuckets(getFilteredSchedule(detailB)) : [];
+  const byB = {};
+  bRows.forEach((row) => { byB[row.dateKey] = row; });
+
+  const allKeys = [...new Set([...aRows.map((r) => r.dateKey), ...bRows.map((r) => r.dateKey)])]
+    .sort((x, y) => String(x).localeCompare(String(y)));
+
+  if (!allKeys.length) {
+    dailyEl.innerHTML = '';
+    return;
+  }
+
+  const formatWindow = (row) => {
+    if (!row?.start || !row?.end) return '-';
+    const s = `${String(row.start.getHours()).padStart(2, '0')}:${String(row.start.getMinutes()).padStart(2, '0')}`;
+    const e = `${String(row.end.getHours()).padStart(2, '0')}:${String(row.end.getMinutes()).padStart(2, '0')}`;
+    return `${s}–${e}`;
+  };
+
+  const rowHtml = allKeys.map((key) => {
+    const a = aRows.find((r) => r.dateKey === key) || { prodMin: 0, setupMin: 0, start: null, end: null };
+    const b = byB[key] || null;
+    const totalA = (a.prodMin || 0) + (a.setupMin || 0);
+    const totalB = b ? (b.prodMin || 0) + (b.setupMin || 0) : 0;
+    const delta = b ? (totalA - totalB) : null;
+    const deltaText = delta === null ? '-' : `${delta > 0 ? '+' : ''}${formatDurationMinutesToHHMM(delta)}`;
+
+    return `
+      <tr>
+        <td>${formatDateKeyPt(key)}</td>
+        <td>${escapeHtml(formatWindow(a))}</td>
+        <td>${escapeHtml(formatDurationMinutesToHHMM(a.prodMin))}</td>
+        <td>${escapeHtml(formatDurationMinutesToHHMM(a.setupMin))}</td>
+        <td><b>${escapeHtml(formatDurationMinutesToHHMM(totalA))}</b></td>
+        ${b ? `
+          <td>${escapeHtml(formatDurationMinutesToHHMM(totalB))}</td>
+          <td class="performance-daily-delta">${escapeHtml(deltaText)}</td>
+        ` : ''}
+      </tr>
+    `;
+  }).join('');
+
+  dailyEl.innerHTML = `
+    <div class="performance-daily-title">Resumo por dia (previsto)</div>
+    <div class="performance-daily-wrap">
+      <table class="performance-daily-table">
+        <thead>
+          <tr>
+            <th>Data</th>
+            <th>Janela (A)</th>
+            <th>Prod (A)</th>
+            <th>Setup (A)</th>
+            <th>Total (A)</th>
+            ${bRows.length ? '<th>Total (B)</th><th>Δ Total</th>' : ''}
+          </tr>
+        </thead>
+        <tbody>
+          ${rowHtml}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+window.loadPerformance = loadPerformance;
 
 function formatLinhaLabel(valor) {
   if (!valor) return '';

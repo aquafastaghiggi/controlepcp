@@ -429,14 +429,49 @@ if ($showReleaseCenter) {
                     <div class="panel-heading panel-heading-stack">
                         <div>
                             <h2>Desempenho</h2>
-                            <p>Vis&atilde;o gerencial de previsto vs realizado (em constru&ccedil;&atilde;o).</p>
+                            <p>Vis&atilde;o gerencial de previsto vs realizado.</p>
                         </div>
                     </div>
-                    <div class="muted" style="padding: 10px 2px;">
-                        Esta tela vai concentrar indicadores e um gr&aacute;fico tipo Gantt para leitura r&aacute;pida.
-                        <br>
-                        Por enquanto: navega&ccedil;&atilde;o criada. Pr&oacute;xima etapa: selecionar uma programa&ccedil;&atilde;o (previsto) e exibir KPIs.
+                    <div class="performance-controls">
+                        <label class="performance-field">
+                            <span>Linha</span>
+                            <select id="performance-line"></select>
+                        </label>
+                        <label class="performance-field">
+                            <span>Programa&ccedil;&atilde;o (previsto)</span>
+                            <select id="performance-program"></select>
+                        </label>
+                        <label class="performance-field">
+                            <span>Comparar com (opcional)</span>
+                            <select id="performance-compare"></select>
+                        </label>
+                        <button type="button" class="ghost-button" id="performance-open">Abrir detalhes</button>
                     </div>
+                    <div class="performance-options">
+                        <label class="performance-option">
+                            <input type="checkbox" id="performance-show-prod" checked>
+                            <span>Produ&ccedil;&atilde;o</span>
+                        </label>
+                        <label class="performance-option">
+                            <input type="checkbox" id="performance-show-setup" checked>
+                            <span>Setup</span>
+                        </label>
+                    </div>
+                    <div id="performance-summary" class="performance-summary muted"></div>
+                    <div id="performance-kpis" class="performance-kpis"></div>
+                    <div id="performance-gantt" class="performance-gantt">
+                        <div class="performance-gantt-block">
+                            <div class="performance-gantt-title">Previsto A</div>
+                            <div id="performance-gantt-a">
+                                <div class="performance-gantt-empty muted">Selecione uma programa&ccedil;&atilde;o para visualizar o Gantt.</div>
+                            </div>
+                        </div>
+                        <div class="performance-gantt-block is-hidden" id="performance-gantt-block-b">
+                            <div class="performance-gantt-title">Previsto B</div>
+                            <div id="performance-gantt-b"></div>
+                        </div>
+                    </div>
+                    <div id="performance-daily" class="performance-daily"></div>
                 </section>
 
                 <?php if ($showReleaseCenter): ?>

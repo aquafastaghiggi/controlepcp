@@ -4246,6 +4246,7 @@ function renderReleaseCenter() {
   const lastRelease = releases.length ? releases[releases.length - 1] : null;
   const approved = items.filter((item) => String(item?.status || '').toLowerCase() === 'approved').length;
   const inTest = items.filter((item) => String(item?.status || '').toLowerCase() === 'testing').length;
+  const published = items.filter((item) => String(item?.status || '').toLowerCase() === 'published').length;
 
   const checklistDef = [
     { key: 'login_ok', label: 'Login OK' },
@@ -4312,11 +4313,45 @@ function renderReleaseCenter() {
     `
     : `<div class="muted">Nenhum item no backlog ainda.</div>`;
 
+  const publishCommand = 'powershell -ExecutionPolicy Bypass -File tools\\\\publish.ps1 -AllApproved -Message \"minha release\"';
+  const rollbackCommand = 'powershell -ExecutionPolicy Bypass -File tools\\\\rollback.ps1 -Latest -Message \"rollback\"';
+
+  const releasesHtml = releases.length
+    ? `
+      <div class="rc-table-wrap">
+        <table class="rc-release-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Ação</th>
+              <th>Quando</th>
+              <th>Quem</th>
+              <th>Mensagem</th>
+              <th>Backup/Origem</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${releases.slice(-10).reverse().map((rel) => `
+              <tr>
+                <td class="rc-mono">${escapeHtml(rel?.id || '-')}</td>
+                <td>${escapeHtml(rel?.action || '-')}</td>
+                <td>${escapeHtml(rel?.published_at || rel?.restored_at || '-')}</td>
+                <td>${escapeHtml(rel?.published_by || rel?.restored_by || '-')}</td>
+                <td>${escapeHtml(rel?.message || '-')}</td>
+                <td class="rc-mono">${escapeHtml(rel?.backup_dir || rel?.restore_from || '-')}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `
+    : `<div class="muted">Nenhuma release registrada ainda.</div>`;
+
   root.innerHTML = `
     <div class="rc-grid">
       <div class="rc-card">
         <div class="rc-title">Resumo</div>
-        <div class="rc-meta">Backlog: <b>${items.length}</b> &bull; Em teste: <b>${inTest}</b> &bull; Aprovados: <b>${approved}</b></div>
+        <div class="rc-meta">Itens: <b>${items.length}</b> &bull; Em teste: <b>${inTest}</b> &bull; Aprovados: <b>${approved}</b> &bull; Publicados: <b>${published}</b></div>
         <div class="rc-meta">Releases registradas: <b>${releases.length}</b></div>
         <div class="rc-meta">Último evento: <b>${lastRelease ? escapeHtml(lastRelease.id || '-') : '-'}</b> ${lastRelease?.action ? `<span class="rc-sub">(${escapeHtml(lastRelease.action)})</span>` : ''}</div>
         <div class="rc-divider"></div>
@@ -4334,23 +4369,38 @@ function renderReleaseCenter() {
           <button type="button" class="primary-button rc-btn" data-rc-action="new">Novo item</button>
           <button type="button" class="ghost-button rc-btn" data-rc-action="refresh">Recarregar</button>
         </div>
+        <div class="rc-divider"></div>
+        <div class="rc-title">Como publicar</div>
+        <ol class="rc-steps">
+          <li>Clique em <b>Novo item</b> e descreva o que mudou.</li>
+          <li>Teste no <b>sandbox</b> (incluindo importar Excel, calcular, histórico e impressão).</li>
+          <li>No item do backlog, clique em <b>Aprovar</b> (ele precisa ficar como “Aprovado”).</li>
+          <li>Marque o checklist acima e rode o comando abaixo no <b>PowerShell</b> do servidor.</li>
+        </ol>
         <div class="rc-help">
           <div><b>Publicar para produção:</b></div>
-          <div class="rc-mono rc-code">powershell -ExecutionPolicy Bypass -File tools\\publish.ps1 -AllApproved -Message \"minha release\"</div>
+          <div class="rc-command">
+            <div class="rc-mono rc-code">${escapeHtml(publishCommand)}</div>
+            <button type="button" class="ghost-button rc-btn rc-copy" data-rc-copy-text="${escapeHtml(publishCommand)}">Copiar</button>
+          </div>
           <div class="rc-help">Requisito: checklist acima precisa estar completo (ou usar -SkipChecklist).</div>
           <div class="rc-help">O script faz backup automático da produção e registra a release aqui.</div>
         </div>
         <div class="rc-help">
           <div><b>Rollback (restaurar último backup):</b></div>
-          <div class="rc-mono rc-code">powershell -ExecutionPolicy Bypass -File tools\\rollback.ps1 -Latest -Message \"rollback\"</div>
-        </div>
-        <div class="rc-help">
-          Etapas seguintes: adicionar aprovações/ações aqui (Etapa 2) e publicar via script com backup/rollback (Etapas 3 e 4).
+          <div class="rc-command">
+            <div class="rc-mono rc-code">${escapeHtml(rollbackCommand)}</div>
+            <button type="button" class="ghost-button rc-btn rc-copy" data-rc-copy-text="${escapeHtml(rollbackCommand)}">Copiar</button>
+          </div>
         </div>
       </div>
       <div class="rc-card">
-        <div class="rc-title">Backlog</div>
+        <div class="rc-title">Backlog / Itens</div>
         ${backlogHtml}
+      </div>
+      <div class="rc-card rc-card--full">
+        <div class="rc-title">Releases (últimas 10)</div>
+        ${releasesHtml}
       </div>
     </div>
   `;
@@ -4412,6 +4462,19 @@ function renderReleaseCenter() {
       } catch (e) {
         console.warn(e);
         alert(e.message || 'Falha ao salvar checklist.');
+      }
+    });
+  });
+
+  root.querySelectorAll('[data-rc-copy-text]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const text = btn.dataset.rcCopyText || '';
+      if (!text) return;
+      try {
+        await navigator.clipboard.writeText(text);
+        showToast('Comando copiado.', 'success');
+      } catch {
+        window.prompt('Copie o comando:', text);
       }
     });
   });

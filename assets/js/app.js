@@ -4127,6 +4127,11 @@ function renderPerformanceGantt(detail, options = {}) {
   const ganttEl = document.getElementById(containerId);
   if (!ganttEl) return;
 
+  window.__performanceGanttState = window.__performanceGanttState || {
+    selectedByContainer: {},
+    rowsByContainer: {},
+  };
+
   const schedule = Array.isArray(options?.scheduleOverride)
     ? options.scheduleOverride
     : (Array.isArray(detail?.schedule) ? detail.schedule : []);
@@ -4161,6 +4166,8 @@ function renderPerformanceGantt(detail, options = {}) {
     return;
   }
 
+  window.__performanceGanttState.rowsByContainer[containerId] = rows;
+
   const defaultStartMs = Math.min(...rows.map((r) => r.start.getTime()));
   const defaultEndMs = Math.max(...rows.map((r) => r.end.getTime()));
   const startMs = Number.isFinite(options?.rangeStartMs) ? options.rangeStartMs : defaultStartMs;
@@ -4182,25 +4189,32 @@ function renderPerformanceGantt(detail, options = {}) {
     `<div class="performance-gantt-tick" style="left:${(i / (tickCount - 1)) * 100}%">${escapeHtml(formatDateTimeShortPt(t).slice(0, 16))}</div>`
   )).join('');
 
+  const selectedIdx = window.__performanceGanttState.selectedByContainer[containerId];
+
   const rowHtml = visibleRows.map((r) => {
     const left = ((r.start.getTime() - startMs) / rangeMs) * 100;
     const width = Math.max(0.6, ((r.end.getTime() - r.start.getTime()) / rangeMs) * 100);
     const labelMain = r.isSetup ? 'Setup' : (r.seq ? `Seq ${r.seq}` : 'Produ\u00e7\u00e3o');
     const labelSub = (!r.isSetup && r.sku) ? r.sku : (r.desc || '');
     const title = `${labelMain}${labelSub ? ' - ' + labelSub : ''}\n${formatDateTimeShortPt(r.start)} \u2192 ${formatDateTimeShortPt(r.end)}\nDura\u00e7\u00e3o: ${formatDurationMinutesToHHMM(r.durMin)}`;
+    const selected = selectedIdx !== undefined && selectedIdx !== null && String(selectedIdx) === String(r.idx);
 
     return `
-      <div class="performance-gantt-row">
+      <div class="performance-gantt-row ${selected ? 'is-selected' : ''}" tabindex="0" role="button" aria-selected="${selected ? 'true' : 'false'}" data-gantt-row="${escapeHtml(String(r.idx))}" data-gantt-container="${escapeHtml(containerId)}">
         <div class="performance-gantt-label">
           <div class="performance-gantt-label-main">${escapeHtml(labelMain)}</div>
           <div class="performance-gantt-label-sub">${escapeHtml(labelSub)}</div>
         </div>
         <div class="performance-gantt-track">
-          <div class="performance-gantt-bar ${r.isSetup ? 'is-setup' : 'is-prod'}" style="left:${left}%; width:${width}%;" title="${escapeHtml(title).replace(/\n/g, '&#10;')}"></div>
+          <div class="performance-gantt-bar ${r.isSetup ? 'is-setup' : 'is-prod'} ${selected ? 'is-selected' : ''}" data-gantt-bar="1" data-gantt-idx="${escapeHtml(String(r.idx))}" data-gantt-container="${escapeHtml(containerId)}" style="left:${left}%; width:${width}%;" title="${escapeHtml(title).replace(/\n/g, '&#10;')}"></div>
         </div>
       </div>
     `;
   }).join('');
+
+  const selectedRow = selectedIdx !== undefined && selectedIdx !== null
+    ? rows.find((r) => String(r.idx) === String(selectedIdx))
+    : null;
 
   ganttEl.innerHTML = `
     <div class="performance-gantt-scroll">
@@ -4210,8 +4224,95 @@ function renderPerformanceGantt(detail, options = {}) {
       </div>
       <div class="performance-gantt-rows">${rowHtml}</div>
     </div>
+    <div class="performance-gantt-detail" data-gantt-detail="${escapeHtml(containerId)}">${buildPerformanceGanttDetailHtml(selectedRow)}</div>
     ${hiddenCount > 0 ? `<div class="performance-gantt-note muted">Mostrando ${visibleRows.length} de ${rows.length} registros.</div>` : ''}
   `;
+
+  ensurePerformanceGanttInteractions(containerId);
+}
+
+function buildPerformanceGanttDetailHtml(row) {
+  if (!row) {
+    return '<div class="performance-gantt-detail-empty muted">Clique em uma barra para ver detalhes.</div>';
+  }
+  const tipo = row.isSetup ? 'Setup' : 'Produ\u00e7\u00e3o';
+  const titulo = row.isSetup ? 'Setup' : (row.seq ? `Seq ${row.seq}` : 'Produ\u00e7\u00e3o');
+  const sub = (!row.isSetup && row.sku) ? row.sku : (row.desc || '-');
+  return `
+    <div class="performance-gantt-detail-grid">
+      <div><span>Tipo</span><b>${escapeHtml(tipo)}</b></div>
+      <div><span>Item</span><b>${escapeHtml(titulo)}</b></div>
+      <div><span>SKU/Desc</span><b title="${escapeHtml(sub)}">${escapeHtml(sub)}</b></div>
+      <div><span>In\u00edcio</span><b>${escapeHtml(formatDateTimeShortPt(row.start))}</b></div>
+      <div><span>Fim</span><b>${escapeHtml(formatDateTimeShortPt(row.end))}</b></div>
+      <div><span>Dura\u00e7\u00e3o</span><b>${escapeHtml(formatDurationMinutesToHHMM(row.durMin))}</b></div>
+    </div>
+    <div class="performance-gantt-detail-hint muted">Dica: use o scroll (ou Ctrl+scroll) para navegar/zoom.</div>
+  `;
+}
+
+function ensurePerformanceGanttInteractions(containerId) {
+  const root = document.getElementById(containerId);
+  if (!root) return;
+  if (root.dataset.ganttInteractive === '1') return;
+  root.dataset.ganttInteractive = '1';
+
+  root.addEventListener('click', (e) => {
+    const bar = e.target?.closest?.('.performance-gantt-bar[data-gantt-idx]');
+    if (bar && root.contains(bar)) {
+      setPerformanceGanttSelection(containerId, bar.getAttribute('data-gantt-idx'));
+      return;
+    }
+
+    const row = e.target?.closest?.('.performance-gantt-row[data-gantt-row]');
+    if (row && root.contains(row)) {
+      setPerformanceGanttSelection(containerId, row.getAttribute('data-gantt-row'));
+    }
+  });
+
+  root.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const row = e.target?.closest?.('.performance-gantt-row[data-gantt-row]');
+    if (!row || !root.contains(row)) return;
+    e.preventDefault();
+    setPerformanceGanttSelection(containerId, row.getAttribute('data-gantt-row'));
+  });
+}
+
+function setPerformanceGanttSelection(containerId, idx) {
+  const state = window.__performanceGanttState;
+  if (!state || !containerId) return;
+  const next = idx === null || idx === undefined || idx === '' ? null : String(idx);
+  const current = state.selectedByContainer[containerId];
+  const toggled = current !== null && current !== undefined && String(current) === String(next);
+
+  const finalValue = toggled ? null : next;
+  state.selectedByContainer[containerId] = finalValue;
+
+  const root = document.getElementById(containerId);
+  if (!root) return;
+
+  root.querySelectorAll('.performance-gantt-bar.is-selected').forEach((el) => el.classList.remove('is-selected'));
+  root.querySelectorAll('.performance-gantt-row.is-selected').forEach((el) => {
+    el.classList.remove('is-selected');
+    el.setAttribute('aria-selected', 'false');
+  });
+
+  const row = finalValue ? (state.rowsByContainer?.[containerId] || []).find((r) => String(r.idx) === String(finalValue)) : null;
+  if (finalValue) {
+    const bar = root.querySelector(`.performance-gantt-bar[data-gantt-idx="${String(finalValue).replace(/"/g, '\\"')}"]`);
+    const rowEl = root.querySelector(`.performance-gantt-row[data-gantt-row="${String(finalValue).replace(/"/g, '\\"')}"]`);
+    if (bar) bar.classList.add('is-selected');
+    if (rowEl) {
+      rowEl.classList.add('is-selected');
+      rowEl.setAttribute('aria-selected', 'true');
+    }
+  }
+
+  const detailEl = root.querySelector('.performance-gantt-detail');
+  if (detailEl) {
+    detailEl.innerHTML = buildPerformanceGanttDetailHtml(row);
+  }
 }
 
 function loadAndRenderPerformanceGantt(programId, compareProgramId = '') {

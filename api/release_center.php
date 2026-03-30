@@ -129,13 +129,44 @@ $computeFeatureFlags = static function (array $state) use ($normalizeTitle): arr
     ];
 };
 
-$runGit = static function (string $cwd, array $args): string {
-    $cmd = 'git -C ' . escapeshellarg($cwd) . ' ' . implode(' ', array_map('escapeshellarg', $args));
+$findGitExecutable = static function (): string {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    $candidates = [
+        getenv('GIT_PATH'),
+        'git',
+        'C:\\Program Files\\Git\\cmd\\git.exe',
+        'C:\\Program Files\\Git\\bin\\git.exe',
+    ];
+
+    foreach ($candidates as $candidate) {
+        $candidate = (string) ($candidate ?? '');
+        if ($candidate === '') {
+            continue;
+        }
+
+        $output = [];
+        $code = 0;
+        @exec(escapeshellarg($candidate) . ' --version', $output, $code);
+        if ($code === 0) {
+            return $cached = $candidate;
+        }
+    }
+
+    throw new RuntimeException('Git não está acessível no servidor sandbox.');
+};
+
+$runGit = static function (string $cwd, array $args) use ($findGitExecutable): string {
+    $gitExec = $findGitExecutable();
+    $cmd = escapeshellarg($gitExec) . ' -C ' . escapeshellarg($cwd) . ' ' . implode(' ', array_map('escapeshellarg', $args));
     $output = [];
     $code = 0;
     @exec($cmd, $output, $code);
     if ($code !== 0) {
-        throw new RuntimeException('Falha ao executar git para gerar item automaticamente.');
+        throw new RuntimeException('Falha ao executar git para gerar item automaticamente. ' . trim(implode("\n", $output)));
     }
     return trim(implode("\n", $output));
 };

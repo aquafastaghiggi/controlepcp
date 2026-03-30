@@ -644,12 +644,21 @@
                     .normalize('NFD')
                     .replace(/[\u0300-\u036f]/g, '')
             );
-            performanceEnabled = items.some((item) => {
-                const status = String(item?.status || '').toLowerCase();
-                if (status !== 'approved' && status !== 'published') return false;
+            const isPerformanceItem = (item) => {
                 const title = normalize(item?.title || item?.titulo || '');
                 return title.includes('desempenho') || title.includes('gantt') || title.includes('grafico');
+            };
+
+            // No sandbox, o módulo deve aparecer também em "Em teste" (para validar antes de aprovar).
+            performanceEnabled = items.some((item) => isPerformanceItem(item));
+            const perfItem = items.find((item) => {
+                const status = String(item?.status || '').toLowerCase();
+                return (status === 'approved' || status === 'published') && isPerformanceItem(item);
+            }) || items.find((item) => {
+                const status = String(item?.status || '').toLowerCase();
+                return status === 'testing' && isPerformanceItem(item);
             });
+            window.__performanceReleaseStatus = perfItem ? String(perfItem?.status || '').toLowerCase() : '';
         } else {
             performanceEnabled = !!(window.__featureFlags && window.__featureFlags.performance);
         }
@@ -660,7 +669,12 @@
         }
 
         if (performanceEnabled) {
-            setHomeBadge('performance', 'Pronto', 'ready');
+            const status = String(window.__performanceReleaseStatus || '').toLowerCase();
+            if (status === 'testing') {
+                setHomeBadge('performance', 'Em teste', 'pending');
+            } else {
+                setHomeBadge('performance', 'Pronto', 'ready');
+            }
             setHomeMeta('performance', 'Previsto: <b>Gantt</b> &bull; Comparar: <b>A/B</b>');
         } else {
             setHomeBadge('performance', 'Em breve', 'pending');

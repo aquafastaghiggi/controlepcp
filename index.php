@@ -130,6 +130,15 @@ if ($showReleaseCenter) {
                                     <div class="home-card-meta" data-home-meta="history"></div>
                                     <div class="home-card-cta">Abrir hist&oacute;rico</div>
                                 </button>
+                                <button type="button" class="home-card" data-target="section-performance">
+                                    <div class="home-card-top">
+                                        <strong>Desempenho</strong>
+                                        <span class="home-card-badge" data-home-badge="performance"></span>
+                                    </div>
+                                    <span>Previsto vs realizado (gr&aacute;ficos e Gantt).</span>
+                                    <div class="home-card-meta" data-home-meta="performance"></div>
+                                    <div class="home-card-cta">Abrir desempenho</div>
+                                </button>
                                 <?php if ($showReleaseCenter): ?>
                                     <button type="button" class="home-card home-card--sandbox" data-target="section-release-center">
                                         <div class="home-card-top">
@@ -413,6 +422,20 @@ if ($showReleaseCenter) {
 
                     <div id="history-list" class="history-list">
                         <div id="history-empty" class="muted">Nenhuma programação encontrada.</div>
+                    </div>
+                </section>
+
+                <section class="panel app-section" id="section-performance">
+                    <div class="panel-heading panel-heading-stack">
+                        <div>
+                            <h2>Desempenho</h2>
+                            <p>Vis&atilde;o gerencial de previsto vs realizado (em constru&ccedil;&atilde;o).</p>
+                        </div>
+                    </div>
+                    <div class="muted" style="padding: 10px 2px;">
+                        Esta tela vai concentrar indicadores e um gr&aacute;fico tipo Gantt para leitura r&aacute;pida.
+                        <br>
+                        Por enquanto: navega&ccedil;&atilde;o criada. Pr&oacute;xima etapa: selecionar uma programa&ccedil;&atilde;o (previsto) e exibir KPIs.
                     </div>
                 </section>
 

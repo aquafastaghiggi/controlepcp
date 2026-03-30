@@ -616,6 +616,8 @@
         setHomeMeta('matrix', `Matrizes ativas: <b>${matrixCount}</b>`);
 
         setHomeBadge('history', '', '');
+        setHomeBadge('performance', 'Em breve', 'pending');
+        setHomeMeta('performance', 'Previsto: <b>Gantt</b> &bull; Realizado: <b>API</b>');
 
         // Central de Publicacao (sandbox): resumo no card do Painel Inicial.
         const releaseDataEl = document.getElementById('release-center-data');

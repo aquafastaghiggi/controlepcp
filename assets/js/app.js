@@ -682,6 +682,8 @@
         }
         setHomeMeta('history', 'Exibindo: <b>últimas 2 por linha</b>');
     }
+    // Expor para outras partes do arquivo (Central de Publicação fica fora do escopo deste bloco).
+    window.updateHomeDashboard = updateHomeDashboard;
 
     async function loadFeatureFlags(force = false) {
         const now = Date.now();
@@ -4589,7 +4591,9 @@ function renderReleaseCenter() {
   });
 
   // Mantém o Painel Inicial sincronizado quando aprova/volta/checklist muda.
-  updateHomeDashboard();
+  if (typeof window.updateHomeDashboard === 'function') {
+    window.updateHomeDashboard();
+  }
 }
 
 window.renderReleaseCenter = renderReleaseCenter;

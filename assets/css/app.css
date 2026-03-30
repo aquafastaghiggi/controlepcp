@@ -1123,6 +1123,12 @@ select {
     margin-top: 10px;
 }
 
+.rc-toolbar--top {
+    margin-top: 0;
+    margin-bottom: 10px;
+    justify-content: flex-end;
+}
+
 .rc-actions {
     text-align: right;
 }

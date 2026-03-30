@@ -129,6 +129,50 @@ $computeFeatureFlags = static function (array $state) use ($normalizeTitle): arr
     ];
 };
 
+$runGit = static function (string $cwd, array $args): string {
+    $cmd = 'git -C ' . escapeshellarg($cwd) . ' ' . implode(' ', array_map('escapeshellarg', $args));
+    $output = [];
+    $code = 0;
+    @exec($cmd, $output, $code);
+    if ($code !== 0) {
+        throw new RuntimeException('Falha ao executar git para gerar item automaticamente.');
+    }
+    return trim(implode("\n", $output));
+};
+
+$createItem = static function (array $items, string $title, string $username, string $note, array $extra = []): array {
+    $max = 0;
+    foreach ($items as $it) {
+        $id = (int) ($it['id'] ?? 0);
+        if ($id > $max) {
+            $max = $id;
+        }
+    }
+
+    $newId = $max + 1;
+    $now = date('c');
+    $item = [
+        'id' => $newId,
+        'title' => $title,
+        'status' => 'testing',
+        'created_at' => $now,
+        'updated_at' => $now,
+        'approved_at' => null,
+        'approved_by' => null,
+        'note' => $note,
+        'created_by' => $username ?: 'admin',
+    ];
+
+    foreach ($extra as $k => $v) {
+        if (!array_key_exists($k, $item)) {
+            $item[$k] = $v;
+        }
+    }
+
+    $items[] = $item;
+    return $items;
+};
+
 $writeFeatureFlags = static function (array $featureState) use ($featureFlagsPath, $prodFeatureFlagsPath): void {
     $json = json_encode($featureState, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     if ($json === false) {
@@ -195,26 +239,111 @@ try {
             throw new RuntimeException('Informe um tÃ­tulo.');
         }
 
-        $max = 0;
-        foreach ($items as $it) {
-            $id = (int) ($it['id'] ?? 0);
-            if ($id > $max) {
-                $max = $id;
-            }
+        $items = $createItem($items, $title, $username, '');
+
+        $state['items'] = $items;
+        $writeState($state);
+        $writeFeatureFlags($computeFeatureFlags($state));
+
+        echo json_encode(['ok' => true, 'state' => $state], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
+    }
+
+    if ($action === 'create_item_from_git') {
+        $repoRoot = realpath(__DIR__ . '/..');
+        if (!is_string($repoRoot) || $repoRoot === '') {
+            throw new RuntimeException('Pasta do sandbox nÃ£o encontrada para gerar item.');
         }
 
-        $newId = $max + 1;
-        $now = date('c');
-        $items[] = [
-            'id' => $newId,
-            'title' => $title,
-            'status' => 'testing',
-            'created_at' => $now,
-            'updated_at' => $now,
-            'approved_at' => null,
-            'approved_by' => null,
-            'note' => '',
-        ];
+        $inside = $runGit($repoRoot, ['rev-parse', '--is-inside-work-tree']);
+        if (strtolower($inside) !== 'true') {
+            throw new RuntimeException('RepositÃ³rio git nÃ£o encontrado no sandbox.');
+        }
+
+        $headFull = $runGit($repoRoot, ['rev-parse', 'HEAD']);
+        $headShort = $runGit($repoRoot, ['rev-parse', '--short=8', 'HEAD']);
+        $subject = $runGit($repoRoot, ['log', '-1', '--pretty=%s']);
+
+        $base = '';
+        $releases = is_array($state['releases'] ?? null) ? $state['releases'] : [];
+        for ($i = count($releases) - 1; $i >= 0; $i--) {
+            $rel = is_array($releases[$i] ?? null) ? $releases[$i] : null;
+            if (!$rel) {
+                continue;
+            }
+            $actionRel = strtolower((string) ($rel['action'] ?? ''));
+            if ($actionRel !== 'publish') {
+                continue;
+            }
+
+            $base = (string) ($rel['git_head'] ?? $rel['git_head_after'] ?? '');
+            if ($base !== '') {
+                break;
+            }
+
+            $publishedAt = (string) ($rel['published_at'] ?? '');
+            if ($publishedAt !== '') {
+                try {
+                    $base = $runGit($repoRoot, ['log', '-1', '--before=' . $publishedAt, '--pretty=%H']);
+                } catch (Throwable) {
+                    $base = '';
+                }
+            }
+            break;
+        }
+
+        $range = '';
+        if ($base !== '' && $base !== $headFull) {
+            $range = $base . '..' . $headFull;
+        }
+
+        if ($range !== '') {
+            $commitLines = $runGit($repoRoot, ['log', '--oneline', $range]);
+            $fileLines = $runGit($repoRoot, ['diff', '--name-status', $range]);
+        } else {
+            $commitLines = $runGit($repoRoot, ['log', '-1', '--oneline']);
+            $fileLines = $runGit($repoRoot, ['show', '--name-status', '--pretty=format:', '-1']);
+        }
+
+        $title = trim($subject) !== '' ? trim($subject) : ('AtualizaÃ§Ã£o ' . date('d/m/Y H:i'));
+        if (function_exists('mb_strlen') && function_exists('mb_substr')) {
+            if (mb_strlen($title) > 90) {
+                $title = mb_substr($title, 0, 90) . '...';
+            }
+        } elseif (strlen($title) > 90) {
+            $title = substr($title, 0, 90) . '...';
+        }
+
+        $noteParts = [];
+        $noteParts[] = "HEAD: $headShort";
+        if ($base !== '') {
+            $noteParts[] = 'Base: ' . substr($base, 0, 8);
+        }
+        $noteParts[] = '';
+        $noteParts[] = 'Commits:';
+        foreach (preg_split("/\r\n|\n|\r/", trim((string) $commitLines)) as $line) {
+            $line = trim((string) $line);
+            if ($line === '') {
+                continue;
+            }
+            $noteParts[] = '- ' . $line;
+        }
+        $noteParts[] = '';
+        $noteParts[] = 'Arquivos:';
+        foreach (preg_split("/\r\n|\n|\r/", trim((string) $fileLines)) as $line) {
+            $line = trim((string) $line);
+            if ($line === '') {
+                continue;
+            }
+            $noteParts[] = '- ' . $line;
+        }
+
+        $note = implode("\n", $noteParts);
+
+        $items = $createItem($items, $title, $username, $note, [
+            'git_head' => $headFull,
+            'git_base' => $base !== '' ? $base : null,
+        ]);
 
         $state['items'] = $items;
         $writeState($state);

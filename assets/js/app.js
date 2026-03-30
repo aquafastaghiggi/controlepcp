@@ -4599,7 +4599,7 @@ function renderReleaseCenter() {
                   <td><span class="${info.cls}">${escapeHtml(info.label)}</span></td>
                   <td>${escapeHtml(item?.approved_by || '-')}<div class="rc-sub">${escapeHtml(item?.approved_at || '-') }</div></td>
                   <td>
-                    <input class="rc-input" type="text" value="${escapeHtml(item?.note || '')}" data-rc-note="${escapeHtml(item?.id)}" placeholder="Anotação (opcional)">
+                    <textarea class="rc-input rc-input--note" rows="3" data-rc-note="${escapeHtml(item?.id)}" placeholder="Anotação (opcional)">${escapeHtml(item?.note || '')}</textarea>
                   </td>
                   <td class="rc-actions">
                     ${(() => {
@@ -4681,13 +4681,13 @@ function renderReleaseCenter() {
         </div>
         <div class="rc-meta">Status: <span class="${checklistDone ? 'rc-ready' : 'rc-pending'}">${checklistDone ? 'Pronto para publicar' : 'Pendente'}</span></div>
         <div class="rc-toolbar">
-          <button type="button" class="primary-button rc-btn" data-rc-action="new">Novo item</button>
+          <button type="button" class="primary-button rc-btn" data-rc-action="new">Gerar item</button>
           <button type="button" class="ghost-button rc-btn" data-rc-action="refresh">Recarregar</button>
         </div>
         <div class="rc-divider"></div>
         <div class="rc-title">Como publicar</div>
         <ol class="rc-steps">
-          <li>Clique em <b>Novo item</b> e descreva o que mudou.</li>
+          <li>Clique em <b>Gerar item</b> para criar automaticamente a alteração.</li>
           <li>Teste no <b>sandbox</b> (incluindo importar Excel, calcular, histórico e impressão).</li>
           <li>No item do backlog, clique em <b>Aprovar</b> (ele precisa ficar como “Aprovado”).</li>
           <li>Marque o checklist acima e rode o comando abaixo no <b>PowerShell</b> do servidor.</li>
@@ -4712,7 +4712,7 @@ function renderReleaseCenter() {
       <div class="rc-card">
         <div class="rc-title">Backlog / Itens</div>
         <div class="rc-toolbar rc-toolbar--top">
-          <button type="button" class="primary-button rc-btn" data-rc-action="new">Novo item</button>
+          <button type="button" class="primary-button rc-btn" data-rc-action="new">Gerar item</button>
           <button type="button" class="ghost-button rc-btn" data-rc-action="refresh">Recarregar</button>
         </div>
         ${backlogHtml}
@@ -4732,15 +4732,16 @@ function renderReleaseCenter() {
 
   root.querySelectorAll('[data-rc-action="new"]').forEach((btn) => {
     btn.addEventListener('click', async () => {
-      const title = window.prompt('Título do item (o que será publicado)?');
-      if (!title) return;
+      const title = '';
+      // (auto) não pedir título; item vem do git
       try {
-        const result = await releaseCenterRequest({ action: 'create_item', title });
+        const result = await releaseCenterRequest({ action: 'create_item_from_git' });
         window.__releaseCenterData = result?.state || window.__releaseCenterData;
         renderReleaseCenter();
+        showToast('Item criado automaticamente.', 'success');
       } catch (e) {
         console.warn(e);
-        alert(e.message || 'Falha ao criar item.');
+        alert(e.message || 'Falha ao gerar item automaticamente.');
       }
     });
   });

@@ -1143,6 +1143,12 @@ select {
     font-size: 13px;
 }
 
+.rc-input--note {
+    min-height: 66px;
+    resize: vertical;
+    line-height: 1.25;
+}
+
 .rc-btn {
     padding: 6px 10px;
     font-size: 12px;

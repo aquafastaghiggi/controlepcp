@@ -280,7 +280,9 @@ final class WorkCalendar
                 $end = $nextDay->setTime($endHour, $endMinute);
 
                 // Regra B: trecho após 00:00 só existe se o dia seguinte for válido para a mesma ordem.
-                if (!$this->isIntervalAllowedForDay($interval, $nextDay) || !$this->isOrderAllowedForDay($orderNumber, $nextDay)) {
+                // Regra B (ajustada): turno overnight pertence ao dia em que iniciou (bloqueia domingo/feriado).
+                $nextDayNumber = (int) $nextDay->format('N');
+                if ($nextDayNumber === 7 || !$this->isCalendarOpenForDay($nextDay)) {
                     $end = $nextDayStart;
                 }
             }

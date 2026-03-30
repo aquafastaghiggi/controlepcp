@@ -483,6 +483,14 @@ if ($rawFeatureFlags !== '') {
                             <span>Setup</span>
                         </label>
                     </div>
+                    <div class="performance-zoom" id="performance-zoom-controls">
+                        <span class="performance-zoom-title">Zoom</span>
+                        <button type="button" class="ghost-button performance-zoom-btn" id="performance-zoom-out" aria-label="Diminuir zoom">-</button>
+                        <input type="range" id="performance-zoom" min="60" max="240" step="10" value="100" aria-label="Zoom do Gantt">
+                        <button type="button" class="ghost-button performance-zoom-btn" id="performance-zoom-in" aria-label="Aumentar zoom">+</button>
+                        <button type="button" class="ghost-button performance-zoom-btn" id="performance-zoom-reset">100%</button>
+                        <span class="performance-zoom-value" id="performance-zoom-value">100%</span>
+                    </div>
                     <div id="performance-summary" class="performance-summary muted"></div>
                     <div id="performance-kpis" class="performance-kpis"></div>
                     <div id="performance-gantt" class="performance-gantt">

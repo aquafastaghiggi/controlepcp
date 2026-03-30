@@ -1318,6 +1318,7 @@ select {
 }
 
 .performance-gantt {
+    --performance-gantt-zoom: 1;
     margin-top: 10px;
     padding: 10px 12px;
     background: rgba(255, 255, 255, 0.78);
@@ -1327,6 +1328,64 @@ select {
 
 .performance-gantt-block + .performance-gantt-block {
     margin-top: 14px;
+}
+
+.performance-zoom {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.performance-zoom-title {
+    font-size: 12px;
+    font-weight: 900;
+    color: #0f172a;
+    margin-right: 4px;
+}
+
+.performance-zoom input[type="range"] {
+    width: min(260px, 50vw);
+    accent-color: #2563eb;
+}
+
+.performance-zoom-btn {
+    padding: 6px 10px;
+    border-radius: 10px;
+    font-weight: 900;
+    line-height: 1;
+}
+
+.performance-zoom-value {
+    font-size: 12px;
+    font-weight: 900;
+    color: #334155;
+}
+
+.performance-gantt-scroll {
+    max-height: 380px;
+    overflow: auto;
+    padding-right: 6px;
+}
+
+.performance-gantt-axis-row {
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    gap: 10px;
+    align-items: center;
+    position: sticky;
+    top: 0;
+    z-index: 6;
+    background: rgba(255, 255, 255, 0.94);
+    padding: 4px 0 10px;
+}
+
+.performance-gantt-axis-label {
+    position: sticky;
+    left: 0;
+    z-index: 7;
+    background: inherit;
 }
 
 .performance-gantt-title {
@@ -1339,8 +1398,12 @@ select {
 .performance-gantt-axis {
     position: relative;
     height: 26px;
-    margin-bottom: 10px;
     border-bottom: 1px solid rgba(148, 163, 184, 0.22);
+}
+
+.performance-gantt-axis-track {
+    width: calc(100% * var(--performance-gantt-zoom));
+    min-width: calc(100% * var(--performance-gantt-zoom));
 }
 
 .performance-gantt-tick {
@@ -1361,20 +1424,25 @@ select {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    max-height: 380px;
-    overflow: auto;
-    padding-right: 6px;
+    padding-bottom: 6px;
 }
 
 .performance-gantt-row {
     display: grid;
-    grid-template-columns: 220px 1fr;
+    grid-template-columns: 220px minmax(0, 1fr);
     gap: 10px;
     align-items: center;
+    min-width: 0;
 }
 
 .performance-gantt-label {
     min-width: 0;
+    position: sticky;
+    left: 0;
+    z-index: 5;
+    background: rgba(255, 255, 255, 0.94);
+    padding-right: 6px;
+    border-radius: 8px;
 }
 
 .performance-gantt-label-main {
@@ -1401,6 +1469,8 @@ select {
     background: rgba(226, 232, 240, 0.75);
     border: 1px solid rgba(148, 163, 184, 0.22);
     overflow: hidden;
+    width: calc(100% * var(--performance-gantt-zoom));
+    min-width: calc(100% * var(--performance-gantt-zoom));
 }
 
 .performance-gantt-bar {

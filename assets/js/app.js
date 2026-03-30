@@ -3478,8 +3478,38 @@ async function loadPerformance() {
         window.openHistoryPreview(id);
       }
     });
+
+    const zoomSlider = document.getElementById('performance-zoom');
+    const zoomOut = document.getElementById('performance-zoom-out');
+    const zoomIn = document.getElementById('performance-zoom-in');
+    const zoomReset = document.getElementById('performance-zoom-reset');
+    const ganttRoot = document.getElementById('performance-gantt');
+
+    const step = 0.1;
+    const bumpZoom = (dir) => {
+      const current = readPerformanceGanttZoom();
+      applyPerformanceGanttZoom(current + (dir * step));
+    };
+
+    zoomSlider?.addEventListener('input', () => {
+      const raw = parseFloat(zoomSlider.value || '100');
+      const next = Number.isFinite(raw) ? raw / 100 : 1;
+      applyPerformanceGanttZoom(next);
+    });
+    zoomOut?.addEventListener('click', () => bumpZoom(-1));
+    zoomIn?.addEventListener('click', () => bumpZoom(1));
+    zoomReset?.addEventListener('click', () => applyPerformanceGanttZoom(1));
+
+    // Ctrl + roda do mouse (apenas no Gantt) para zoom.
+    ganttRoot?.addEventListener('wheel', (e) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      const dir = e.deltaY > 0 ? -1 : 1;
+      bumpZoom(dir);
+    }, { passive: false });
   }
 
+  applyPerformanceGanttZoom(readPerformanceGanttZoom(), { skipStore: true });
   summaryEl.textContent = 'Carregando programa\u00e7\u00f5es...';
 
   try {
@@ -3502,6 +3532,68 @@ async function loadPerformance() {
 }
 
 const PERFORMANCE_UI_STORAGE_KEY = 'pcp_performance_ui_v1';
+const PERFORMANCE_GANTT_ZOOM_STORAGE_KEY = 'pcp_performance_gantt_zoom_v1';
+
+function clampPerformanceGanttZoom(value) {
+  const parsed = Number(value);
+  const zoom = Number.isFinite(parsed) ? parsed : 1;
+  return Math.max(0.6, Math.min(2.4, zoom));
+}
+
+function readPerformanceGanttZoom() {
+  try {
+    const raw = window.localStorage ? window.localStorage.getItem(PERFORMANCE_GANTT_ZOOM_STORAGE_KEY) : null;
+    if (!raw) return 1;
+    return clampPerformanceGanttZoom(parseFloat(raw));
+  } catch {
+    return 1;
+  }
+}
+
+function writePerformanceGanttZoom(zoom) {
+  try {
+    if (window.localStorage) {
+      window.localStorage.setItem(PERFORMANCE_GANTT_ZOOM_STORAGE_KEY, String(clampPerformanceGanttZoom(zoom)));
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function applyPerformanceGanttZoom(zoom, options = {}) {
+  const root = document.getElementById('performance-gantt');
+  if (!root) return;
+
+  const clamped = clampPerformanceGanttZoom(zoom);
+
+  const scrollEls = Array.from(root.querySelectorAll('.performance-gantt-scroll'));
+  const scrollRatios = scrollEls.map((el) => {
+    const max = Math.max(1, el.scrollWidth - el.clientWidth);
+    return {
+      el,
+      ratio: max > 0 ? (el.scrollLeft / max) : 0,
+    };
+  });
+
+  root.style.setProperty('--performance-gantt-zoom', String(clamped));
+
+  const slider = document.getElementById('performance-zoom');
+  const valueEl = document.getElementById('performance-zoom-value');
+  const pct = Math.round(clamped * 100);
+  if (slider) slider.value = String(pct);
+  if (valueEl) valueEl.textContent = `${pct}%`;
+
+  if (!options?.skipStore) {
+    writePerformanceGanttZoom(clamped);
+  }
+
+  window.requestAnimationFrame(() => {
+    scrollRatios.forEach(({ el, ratio }) => {
+      const max = Math.max(0, el.scrollWidth - el.clientWidth);
+      el.scrollLeft = Math.round(max * ratio);
+    });
+  });
+}
 
 function readPerformanceUiState() {
   try {
@@ -4111,8 +4203,13 @@ function renderPerformanceGantt(detail, options = {}) {
   }).join('');
 
   ganttEl.innerHTML = `
-    <div class="performance-gantt-axis">${tickHtml}</div>
-    <div class="performance-gantt-rows">${rowHtml}</div>
+    <div class="performance-gantt-scroll">
+      <div class="performance-gantt-axis-row">
+        <div class="performance-gantt-axis-label"></div>
+        <div class="performance-gantt-axis performance-gantt-axis-track">${tickHtml}</div>
+      </div>
+      <div class="performance-gantt-rows">${rowHtml}</div>
+    </div>
     ${hiddenCount > 0 ? `<div class="performance-gantt-note muted">Mostrando ${visibleRows.length} de ${rows.length} registros.</div>` : ''}
   `;
 }

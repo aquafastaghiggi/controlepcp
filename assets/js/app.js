@@ -34,6 +34,22 @@
     const resetDataButton = document.getElementById('reset-data');
     const navLinks = document.querySelectorAll('[data-target]');
 
+    // Garantia de navegaÃ§Ã£o: se algum erro ocorrer em outra parte do JS,
+    // os cards/botÃµes com `data-target` ainda conseguem trocar de seÃ§Ã£o.
+    navLinks.forEach((button) => {
+        if (button?.dataset?.navBound === '1') {
+            return;
+        }
+        button.dataset.navBound = '1';
+        button.addEventListener('click', () => {
+            try {
+                activateSection(button.dataset.target);
+            } catch (error) {
+                console.warn('Falha ao navegar.', error);
+            }
+        });
+    });
+
     const baseStartInput = form.querySelector('[name="base_start"]');
     const queryDateTimeInput = form.querySelector('[name="query_datetime"]');
     const productionEfficiencyInput = form.querySelector('[name="production_efficiency"]');
@@ -239,6 +255,7 @@
         showMatrixValid: false,
         showMatrixIssues: false,
     };
+    window.__controlepcpState = state;
     let toastTimer = null;
 
     function showToast(message, variant = 'success') {
@@ -1519,7 +1536,7 @@ function applyProgramacaoSheet(index) {
     }
 
 
-    function normalizeCatalogValue(value) {
+function normalizeCatalogValue(value) {
         return String(value || '')
             .normalize('NFD')
             .replace(/[\u0300-\u036f]/g, '')
@@ -2794,6 +2811,10 @@ function applyProgramacaoSheet(index) {
     });
 
     navLinks.forEach((button) => {
+        if (button?.dataset?.navBound === '1') {
+            return;
+        }
+        button.dataset.navBound = '1';
         button.addEventListener('click', () => {
             activateSection(button.dataset.target);
         });
@@ -3430,6 +3451,10 @@ async function loadHistoryProgramacoes() {
   }
 }
 
+function getAppState() {
+    return window.__controlepcpState || null;
+}
+
 // desempenho (previsto) - etapa 1
 async function loadPerformance() {
   const lineSelect = document.getElementById('performance-line');
@@ -3935,6 +3960,35 @@ function formatDateTimeShortPt(dateObj) {
   return `${d}/${m}/${y} ${hh}:${mm}`;
 }
 
+function formatDateShortPt(dateObj) {
+  if (!dateObj || Number.isNaN(dateObj.getTime())) return '-';
+  const d = String(dateObj.getDate()).padStart(2, '0');
+  const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+  return `${d}/${m}`;
+}
+
+function formatWeekDayShortPt(dateObj) {
+  if (!dateObj || Number.isNaN(dateObj.getTime())) return '-';
+  const weekDays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+  return weekDays[dateObj.getDay()] || '-';
+}
+
+function formatTimeOnlyPt(dateObj) {
+  if (!dateObj || Number.isNaN(dateObj.getTime())) return '-';
+  const hh = String(dateObj.getHours()).padStart(2, '0');
+  const mm = String(dateObj.getMinutes()).padStart(2, '0');
+  return `${hh}:${mm}`;
+}
+
+function collectScheduleTickDates(schedule = []) {
+  return schedule
+    .map((row) => parseLocalDateTime(row?.sch_data_inicio, row?.sch_hora_inicio))
+    .filter(Boolean)
+    .map((date) => new Date(date.getTime()))
+    .sort((a, b) => a.getTime() - b.getTime())
+    .filter((date, idx, arr) => idx === 0 || date.getTime() !== arr[idx - 1].getTime());
+}
+
 function formatDurationMinutesToHHMM(minutesValue) {
   const minutesNumber = Number(minutesValue);
   if (!Number.isFinite(minutesNumber)) return '-';
@@ -4122,6 +4176,64 @@ function renderPerformanceKpis(detailA, detailB = null) {
   `;
 }
 
+function buildPerformanceOpMap(detail) {
+  const map = new Map();
+  const itens = Array.isArray(detail?.itens) ? detail.itens : [];
+  itens.forEach((it) => {
+    const seqKey = String(it?.prg_sequencia ?? it?.prg_itens_sequencia ?? it?.prg_seq ?? '').trim();
+    const op = String(it?.prg_itens_op ?? it?.op ?? '').trim();
+    if (seqKey && op) {
+      map.set(seqKey, op);
+    }
+  });
+
+  return map;
+}
+
+function buildPerformanceSkuNameMap(detail) {
+  const map = new Map();
+  const itens = Array.isArray(detail?.itens) ? detail.itens : [];
+  if (!itens.length) {
+    return map;
+  }
+
+  itens.forEach((it) => {
+    const seqKey = String(it?.prg_sequencia ?? it?.prg_itens_sequencia ?? it?.prg_seq ?? '').trim();
+    const skuCode = String(it?.prg_sku || it?.sku || '').trim();
+    if (!seqKey || !skuCode) {
+      return;
+    }
+
+    const product = resolveProductBySkuCode(skuCode);
+    const name = String(product?.description || product?.name || '').trim();
+    if (name) {
+      map.set(seqKey, name);
+    }
+  });
+
+  return map;
+}
+
+function resolveProductBySkuCode(skuCode) {
+  const catalog = (getAppState()?.datasets?.products) || {};
+  if (catalog[skuCode]) {
+    return catalog[skuCode];
+  }
+
+  const normalizedTarget = normalizeCatalogValue(skuCode);
+  if (!normalizedTarget) {
+    return null;
+  }
+
+  for (const [sku, product] of Object.entries(catalog)) {
+    if (normalizeCatalogValue(sku) === normalizedTarget) {
+      return product;
+    }
+  }
+
+  return null;
+}
+
 function renderPerformanceGantt(detail, options = {}) {
   const containerId = options?.containerId || 'performance-gantt-a';
   const ganttEl = document.getElementById(containerId);
@@ -4140,6 +4252,8 @@ function renderPerformanceGantt(detail, options = {}) {
     return;
   }
 
+  const opMap = options.opMap || new Map();
+  const skuNameMap = options.skuNameMap || new Map();
   const rows = schedule
     .map((row, idx) => {
       const typeRaw = String(row?.sch_tipo || '').trim().toLowerCase();
@@ -4148,17 +4262,24 @@ function renderPerformanceGantt(detail, options = {}) {
       const end = parseLocalDateTimeFromSql(row?.sch_fim_producao) || parseLocalDateTime(row?.sch_data_inicio, row?.sch_hora_fim);
       if (!start || !end) return null;
 
-      return {
-        idx,
-        isSetup,
-        seq: String(row?.sch_sequencia ?? '').trim(),
-        sku: String(row?.sch_sku ?? '').trim(),
-        desc: String(row?.sch_descricao ?? '').trim(),
-        start,
-        end,
-        durMin: Number(row?.sch_duracao_minutos) || 0,
-      };
-    })
+        const seqKey = String(row?.sch_sequencia ?? '').trim();
+        return {
+          idx,
+          isSetup,
+          seq: String(row?.sch_sequencia ?? '').trim(),
+          sku: String(row?.sch_sku ?? '').trim(),
+          desc: String(row?.sch_descricao ?? '').trim(),
+          start,
+          end,
+          durMin: Number(row?.sch_duracao_minutos) || 0,
+          op: !isSetup && String(row?.sch_sequencia ?? '').trim()
+            ? opMap.get(String(row.sch_sequencia || '').trim()) || ''
+            : '',
+          skuName: !isSetup && seqKey
+            ? skuNameMap.get(seqKey) || ''
+            : '',
+        };
+      })
     .filter(Boolean);
 
   if (!rows.length) {
@@ -4175,27 +4296,45 @@ function renderPerformanceGantt(detail, options = {}) {
   const rangeMs = Math.max(1, endMs - startMs);
 
   const tickCount = 5;
-  const ticks = Array.from({ length: tickCount }, (_, i) => {
-    const ratio = i / (tickCount - 1);
-    const ms = Math.round(startMs + (rangeMs * ratio));
-    return new Date(ms);
-  });
+  const tickDates = Array.isArray(options?.tickDates) && options.tickDates.length
+    ? options.tickDates
+    : Array.from({ length: tickCount }, (_, i) => {
+      const ratio = i / (tickCount - 1);
+      const ms = Math.round(startMs + (rangeMs * ratio));
+      return new Date(ms);
+    });
 
   const maxRows = Number.isFinite(options?.maxRows) ? Math.max(5, Math.min(200, options.maxRows)) : 60;
   const visibleRows = rows.slice(0, maxRows);
   const hiddenCount = rows.length - visibleRows.length;
 
-  const tickHtml = ticks.map((t, i) => (
-    `<div class="performance-gantt-tick" style="left:${(i / (tickCount - 1)) * 100}%">${escapeHtml(formatDateTimeShortPt(t).slice(0, 16))}</div>`
-  )).join('');
+  const tickCountForPosition = Math.max(1, tickDates.length - 1);
+  if (tickDates.length > 8 && readPerformanceGanttZoom() < 2.4) {
+    applyPerformanceGanttZoom(2.4);
+  }
+
+  const tickHtml = tickDates.map((t, i) => {
+    const dateLabel = formatDateShortPt(t);
+    const weekdayLabel = formatWeekDayShortPt(t);
+    const timeLabel = formatTimeOnlyPt(t);
+    const position = tickCountForPosition ? (i / tickCountForPosition) * 100 : 0;
+    return `
+      <div class="performance-gantt-tick" style="left:${position}%">
+        <div class="performance-gantt-tick-date">${escapeHtml(dateLabel)}</div>
+        <div class="performance-gantt-tick-weekday">${escapeHtml(weekdayLabel)}</div>
+        <div class="performance-gantt-tick-time">${escapeHtml(timeLabel)}</div>
+      </div>
+    `;
+  }).join('');
 
   const selectedIdx = window.__performanceGanttState.selectedByContainer[containerId];
 
   const rowHtml = visibleRows.map((r) => {
     const left = ((r.start.getTime() - startMs) / rangeMs) * 100;
     const width = Math.max(0.6, ((r.end.getTime() - r.start.getTime()) / rangeMs) * 100);
-    const labelMain = r.isSetup ? 'Setup' : (r.seq ? `Seq ${r.seq}` : 'Produ\u00e7\u00e3o');
-    const labelSub = (!r.isSetup && r.sku) ? r.sku : (r.desc || '');
+    const seqLabel = r.seq ? `${r.seq}` : 'Produ\u00e7\u00e3o';
+    const labelMain = r.isSetup ? 'Setup' : `${seqLabel}${r.skuName ? '-' + r.skuName : ''}`;
+    const labelSub = '';
     const title = `${labelMain}${labelSub ? ' - ' + labelSub : ''}\n${formatDateTimeShortPt(r.start)} \u2192 ${formatDateTimeShortPt(r.end)}\nDura\u00e7\u00e3o: ${formatDurationMinutesToHHMM(r.durMin)}`;
     const selected = selectedIdx !== undefined && selectedIdx !== null && String(selectedIdx) === String(r.idx);
 
@@ -4235,12 +4374,14 @@ function buildPerformanceGanttDetailHtml(row) {
   if (!row) {
     return '<div class="performance-gantt-detail-empty muted">Clique em uma barra para ver detalhes.</div>';
   }
-  const tipo = row.isSetup ? 'Setup' : 'Produ\u00e7\u00e3o';
+  const tipoLabel = row.isSetup ? 'Setup' : 'OP';
+  const tipoValue = row.isSetup ? 'Setup' : (row.op || '-');
   const titulo = row.isSetup ? 'Setup' : (row.seq ? `Seq ${row.seq}` : 'Produ\u00e7\u00e3o');
-  const sub = (!row.isSetup && row.sku) ? row.sku : (row.desc || '-');
+  const skuDetail = row.sku ? `${row.sku}${row.skuName ? ' - ' + row.skuName : ''}` : '';
+  const sub = skuDetail || (row.desc || '-');
   return `
     <div class="performance-gantt-detail-grid">
-      <div><span>Tipo</span><b>${escapeHtml(tipo)}</b></div>
+      <div><span>${escapeHtml(tipoLabel)}</span><b>${escapeHtml(tipoValue)}</b></div>
       <div><span>Item</span><b>${escapeHtml(titulo)}</b></div>
       <div><span>SKU/Desc</span><b title="${escapeHtml(sub)}">${escapeHtml(sub)}</b></div>
       <div><span>In\u00edcio</span><b>${escapeHtml(formatDateTimeShortPt(row.start))}</b></div>
@@ -4346,6 +4487,10 @@ function loadAndRenderPerformanceGantt(programId, compareProgramId = '') {
 
       const schedA = getFilteredSchedule(detailA);
       const schedB = detailB ? getFilteredSchedule(detailB) : [];
+      const opMapA = buildPerformanceOpMap(detailA);
+      const opMapB = detailB ? buildPerformanceOpMap(detailB) : new Map();
+      const skuNameMapA = buildPerformanceSkuNameMap(detailA);
+      const skuNameMapB = detailB ? buildPerformanceSkuNameMap(detailB) : new Map();
 
       const computeRange = (schedule) => {
         const starts = schedule
@@ -4372,11 +4517,15 @@ function loadAndRenderPerformanceGantt(programId, compareProgramId = '') {
 
       renderPerformanceKpis(detailA, detailB);
       renderPerformanceDaily(detailA, detailB);
+      const scheduleTicksA = collectScheduleTickDates(detailA?.schedule);
       renderPerformanceGantt(detailA, {
         containerId: 'performance-gantt-a',
         scheduleOverride: schedA,
         rangeStartMs: hasRange ? rangeStartMs : undefined,
         rangeEndMs: hasRange ? rangeEndMs : undefined,
+        opMap: opMapA,
+        skuNameMap: skuNameMapA,
+        tickDates: scheduleTicksA,
       });
 
       if (idB && detailB) {
@@ -4386,6 +4535,9 @@ function loadAndRenderPerformanceGantt(programId, compareProgramId = '') {
           scheduleOverride: schedB,
           rangeStartMs: hasRange ? rangeStartMs : undefined,
           rangeEndMs: hasRange ? rangeEndMs : undefined,
+          opMap: opMapB,
+          skuNameMap: skuNameMapB,
+        tickDates: collectScheduleTickDates(detailB?.schedule),
         });
       } else if (blockB) {
         blockB.classList.add('is-hidden');
@@ -4599,7 +4751,7 @@ function renderReleaseCenter() {
                   <td><span class="${info.cls}">${escapeHtml(info.label)}</span></td>
                   <td>${escapeHtml(item?.approved_by || '-')}<div class="rc-sub">${escapeHtml(item?.approved_at || '-') }</div></td>
                   <td>
-                    <input class="rc-input" type="text" value="${escapeHtml(item?.note || '')}" data-rc-note="${escapeHtml(item?.id)}" placeholder="Anotação (opcional)">
+                    <textarea class="rc-input rc-input--note" rows="3" data-rc-note="${escapeHtml(item?.id)}" placeholder="Anotação (opcional)">${escapeHtml(item?.note || '')}</textarea>
                   </td>
                   <td class="rc-actions">
                     ${(() => {
@@ -4681,13 +4833,13 @@ function renderReleaseCenter() {
         </div>
         <div class="rc-meta">Status: <span class="${checklistDone ? 'rc-ready' : 'rc-pending'}">${checklistDone ? 'Pronto para publicar' : 'Pendente'}</span></div>
         <div class="rc-toolbar">
-          <button type="button" class="primary-button rc-btn" data-rc-action="new">Novo item</button>
+          <button type="button" class="primary-button rc-btn" data-rc-action="new">Gerar item</button>
           <button type="button" class="ghost-button rc-btn" data-rc-action="refresh">Recarregar</button>
         </div>
         <div class="rc-divider"></div>
         <div class="rc-title">Como publicar</div>
         <ol class="rc-steps">
-          <li>Clique em <b>Novo item</b> e descreva o que mudou.</li>
+          <li>Clique em <b>Gerar item</b> para criar automaticamente a alteração.</li>
           <li>Teste no <b>sandbox</b> (incluindo importar Excel, calcular, histórico e impressão).</li>
           <li>No item do backlog, clique em <b>Aprovar</b> (ele precisa ficar como “Aprovado”).</li>
           <li>Marque o checklist acima e rode o comando abaixo no <b>PowerShell</b> do servidor.</li>
@@ -4712,7 +4864,7 @@ function renderReleaseCenter() {
       <div class="rc-card">
         <div class="rc-title">Backlog / Itens</div>
         <div class="rc-toolbar rc-toolbar--top">
-          <button type="button" class="primary-button rc-btn" data-rc-action="new">Novo item</button>
+          <button type="button" class="primary-button rc-btn" data-rc-action="new">Gerar item</button>
           <button type="button" class="ghost-button rc-btn" data-rc-action="refresh">Recarregar</button>
         </div>
         ${backlogHtml}
@@ -4732,15 +4884,16 @@ function renderReleaseCenter() {
 
   root.querySelectorAll('[data-rc-action="new"]').forEach((btn) => {
     btn.addEventListener('click', async () => {
-      const title = window.prompt('Título do item (o que será publicado)?');
-      if (!title) return;
+      const title = '';
+      // (auto) não pedir título; item vem do git
       try {
-        const result = await releaseCenterRequest({ action: 'create_item', title });
+        const result = await releaseCenterRequest({ action: 'create_item_from_git' });
         window.__releaseCenterData = result?.state || window.__releaseCenterData;
         renderReleaseCenter();
+        showToast('Item criado automaticamente.', 'success');
       } catch (e) {
         console.warn(e);
-        alert(e.message || 'Falha ao criar item.');
+        alert(e.message || 'Falha ao gerar item automaticamente.');
       }
     });
   });
@@ -5006,8 +5159,9 @@ async function openHistoryPreview(prgId) {
         const tipoRaw = String(item.sch_tipo || '').trim().toLowerCase();
         const isSetup = tipoRaw === 'setup';
         const seqKey = String(item.sch_sequencia || '').trim();
+        const op = !isSetup && seqKey ? (opBySeq.get(seqKey) || '') : '';
         // Mantém o comportamento do setup (campo vazio); apenas troca "produção" por OP.
-        const tipo = isSetup ? '' : safeCell(opBySeq.get(seqKey) || '', '-');
+        const tipo = isSetup ? '' : safeCell(op, '-');
         const seq = safeCell(item.sch_sequencia);
         const sku = safeCell(item.sch_sku);
         const descricao = safeCell(item.sch_descricao, '');
@@ -5152,6 +5306,34 @@ async function openHistoryPreview(prgId) {
             border-collapse: collapse; 
             margin-bottom: 16px; 
           } 
+
+          .history-preview-table-wrapper {
+            overflow-x: auto;
+            position: relative;
+          }
+
+          .history-preview-table {
+            width: 100%;
+            border-collapse: collapse;
+            white-space: nowrap;
+          }
+
+          .history-preview-table th,
+          .history-preview-table td {
+            padding: 2px 6px;
+            border: 1px solid #e5e7eb;
+            font-size: 11px;
+            line-height: 1.05;
+            vertical-align: middle;
+          }
+
+          .history-preview-table th:first-child,
+          .history-preview-table td:first-child {
+            position: sticky;
+            left: 0;
+            background: #fff;
+            z-index: 3;
+          }
  
           th, td { 
             border: 1px solid #e5e7eb; 
@@ -5248,7 +5430,8 @@ async function openHistoryPreview(prgId) {
 
         <section class="preview-section">
           <h2>Cronograma calculado</h2>
-          <table>
+          <div class="history-preview-table-wrapper">
+            <table class="history-preview-table">
             <thead>
               <tr>
                 <th>OP</th>
@@ -5265,7 +5448,8 @@ async function openHistoryPreview(prgId) {
             <tbody>
               ${scheduleRows}
             </tbody>
-          </table>
+            </table>
+          </div>
         </section>
       </body>
       </html>

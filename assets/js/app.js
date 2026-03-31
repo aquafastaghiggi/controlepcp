@@ -4613,6 +4613,9 @@ function renderReleaseCenter() {
                       if (st === 'testing') {
                         return `<button type="button" class="primary-button rc-btn" data-rc-status="approved" data-rc-id="${escapeHtml(item?.id)}">Aprovar</button>`;
                       }
+                      if (st === 'published') {
+                        return `<button type="button" class="ghost-button rc-btn" data-rc-publish="1" data-rc-id="${escapeHtml(item?.id)}" ${checklistDone ? '' : 'disabled'} title="${checklistDone ? 'Copiar comando de publicação (PowerShell)' : 'Checklist pendente'}">Re-publicar</button>`;
+                      }
                       return '';
                     })()}
                   </td>
@@ -4708,6 +4711,10 @@ function renderReleaseCenter() {
       </div>
       <div class="rc-card">
         <div class="rc-title">Backlog / Itens</div>
+        <div class="rc-toolbar rc-toolbar--top">
+          <button type="button" class="primary-button rc-btn" data-rc-action="new">Novo item</button>
+          <button type="button" class="ghost-button rc-btn" data-rc-action="refresh">Recarregar</button>
+        </div>
         ${backlogHtml}
       </div>
       <div class="rc-card rc-card--full">
@@ -4717,21 +4724,25 @@ function renderReleaseCenter() {
     </div>
   `;
 
-  root.querySelector('[data-rc-action="refresh"]')?.addEventListener('click', () => {
-    loadReleaseCenter();
+  root.querySelectorAll('[data-rc-action="refresh"]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      loadReleaseCenter();
+    });
   });
 
-  root.querySelector('[data-rc-action="new"]')?.addEventListener('click', async () => {
-    const title = window.prompt('Título do item (o que será publicado)?');
-    if (!title) return;
-    try {
-      const result = await releaseCenterRequest({ action: 'create_item', title });
-      window.__releaseCenterData = result?.state || window.__releaseCenterData;
-      renderReleaseCenter();
-    } catch (e) {
-      console.warn(e);
-      alert(e.message || 'Falha ao criar item.');
-    }
+  root.querySelectorAll('[data-rc-action="new"]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const title = window.prompt('Título do item (o que será publicado)?');
+      if (!title) return;
+      try {
+        const result = await releaseCenterRequest({ action: 'create_item', title });
+        window.__releaseCenterData = result?.state || window.__releaseCenterData;
+        renderReleaseCenter();
+      } catch (e) {
+        console.warn(e);
+        alert(e.message || 'Falha ao criar item.');
+      }
+    });
   });
 
   root.querySelectorAll('[data-rc-status][data-rc-id]').forEach((btn) => {
@@ -4832,6 +4843,15 @@ async function openHistoryPreview(prgId) {
     const data = payload?.data || payload || {};
     const itens = Array.isArray(data?.itens) ? data.itens : [];
     const schedule = Array.isArray(data?.schedule) ? data.schedule : [];
+
+    const opBySeq = new Map();
+    itens.forEach((it) => {
+      const seqKey = String(it?.prg_sequencia ?? it?.prg_itens_sequencia ?? it?.prg_seq ?? '').trim();
+      const op = String(it?.prg_itens_op ?? it?.op ?? '').trim();
+      if (seqKey) {
+        opBySeq.set(seqKey, op);
+      }
+    });
 
     const safeCell = (value, fallback = '-') => {
       const text = escapeHtml(value ?? '');
@@ -4985,11 +5005,9 @@ async function openHistoryPreview(prgId) {
       ? schedule.map((item) => {
         const tipoRaw = String(item.sch_tipo || '').trim().toLowerCase();
         const isSetup = tipoRaw === 'setup';
-        const tipo = isSetup
-          ? ''
-          : tipoRaw
-            ? escapeHtml(item.sch_tipo)
-            : 'produção';
+        const seqKey = String(item.sch_sequencia || '').trim();
+        // Mantém o comportamento do setup (campo vazio); apenas troca "produção" por OP.
+        const tipo = isSetup ? '' : safeCell(opBySeq.get(seqKey) || '', '-');
         const seq = safeCell(item.sch_sequencia);
         const sku = safeCell(item.sch_sku);
         const descricao = safeCell(item.sch_descricao, '');
@@ -5233,7 +5251,7 @@ async function openHistoryPreview(prgId) {
           <table>
             <thead>
               <tr>
-                <th>Tipo</th>
+                <th>OP</th>
                 <th>Seq</th>
                 <th>SKU</th>
                 <th>Descrição</th>

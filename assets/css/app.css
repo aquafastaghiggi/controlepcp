@@ -1123,6 +1123,12 @@ select {
     margin-top: 10px;
 }
 
+.rc-toolbar--top {
+    margin-top: 0;
+    margin-bottom: 10px;
+    justify-content: flex-end;
+}
+
 .rc-actions {
     text-align: right;
 }
@@ -1249,26 +1255,31 @@ select {
 .performance-options {
     display: flex;
     flex-wrap: wrap;
-    gap: 12px;
-    margin-top: 10px;
+    gap: 8px;
+    margin-top: 8px;
     align-items: center;
 }
 
 .performance-option {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    font-size: 12px;
+    gap: 5px;
+    font-size: 11px;
     font-weight: 800;
     color: #0f172a;
-    padding: 6px 10px;
+    min-height: 30px;
+    padding: 0 10px;
     border-radius: 999px;
     border: 1px solid rgba(148, 163, 184, 0.28);
     background: rgba(241, 245, 249, 0.65);
+    line-height: 1;
+    cursor: pointer;
 }
 
 .performance-option input {
     margin: 0;
+    width: 14px;
+    height: 14px;
 }
 
 .performance-summary {
@@ -1339,28 +1350,46 @@ select {
 }
 
 .performance-zoom-title {
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 900;
     color: #0f172a;
-    margin-right: 4px;
+    margin-right: 2px;
 }
 
 .performance-zoom input[type="range"] {
-    width: min(260px, 50vw);
+    width: min(240px, 45vw);
+    min-height: 18px;
+    height: 18px;
     accent-color: #2563eb;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
 }
 
 .performance-zoom-btn {
-    padding: 6px 10px;
-    border-radius: 10px;
+    min-height: 30px;
+    padding: 0 10px;
+    border-radius: 12px;
     font-weight: 900;
     line-height: 1;
+    font-size: 12px;
 }
 
 .performance-zoom-value {
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 900;
     color: #334155;
+}
+
+#performance-zoom-out.performance-zoom-btn,
+#performance-zoom-in.performance-zoom-btn {
+    width: 32px;
+    padding: 0;
+}
+
+#performance-zoom-reset.performance-zoom-btn {
+    min-width: 54px;
 }
 
 .performance-gantt-scroll {

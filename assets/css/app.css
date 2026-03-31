@@ -1336,6 +1336,7 @@ select {
 
 .performance-gantt {
     --performance-gantt-zoom: 1;
+    --performance-gantt-label-width: 232px;
     margin-top: 10px;
     padding: 10px 12px;
     background: rgba(255, 255, 255, 0.78);
@@ -1406,8 +1407,8 @@ select {
 
 .performance-gantt-axis-row {
     display: grid;
-    grid-template-columns: 220px minmax(0, 1fr);
-    gap: 10px;
+    grid-template-columns: var(--performance-gantt-label-width) minmax(0, 1fr);
+    gap: 2px;
     align-items: center;
     position: sticky;
     top: 0;
@@ -1430,16 +1431,99 @@ select {
     margin-bottom: 8px;
 }
 
+.performance-gantt-meta {
+    font-size: 11px;
+    margin-bottom: 8px;
+}
+
+.performance-gantt-shift-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+
+.performance-gantt-shift-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 900;
+    color: rgba(15, 23, 42, 0.86);
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: rgba(37, 99, 235, 0.08);
+    border: 1px solid rgba(37, 99, 235, 0.18);
+    white-space: nowrap;
+}
+
 .performance-gantt-axis {
     position: relative;
     height: 56px;
     border-bottom: 1px solid rgba(148, 163, 184, 0.22);
 }
 
+.performance-gantt-shifts {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+}
+
+.performance-gantt-shift-boundaries {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+}
+
+.performance-gantt-shift-boundary {
+    position: absolute;
+    top: 100%;
+    width: 1px;
+    height: var(--performance-gantt-guide-height, 520px);
+    transform: translateX(-50%);
+    border-left: 1px dotted rgba(59, 130, 246, 0.35);
+}
+
+.performance-gantt-shift {
+    position: absolute;
+    top: 4px;
+    height: 20px;
+    border-radius: 10px;
+    background: rgba(37, 99, 235, 0.06);
+    border: 1px dashed rgba(37, 99, 235, 0.22);
+    overflow: hidden;
+}
+
+.performance-gantt-shift-tag {
+    position: absolute;
+    left: 6px;
+    top: 3px;
+    font-size: 10px;
+    font-weight: 900;
+    color: rgba(15, 23, 42, 0.75);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    max-width: calc(100% - 10px);
+}
+
 .performance-gantt-axis-track {
     width: calc(100% * var(--performance-gantt-zoom));
     min-width: calc(100% * var(--performance-gantt-zoom));
     min-height: 48px;
+}
+
+.performance-gantt-tick-line {
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    width: 1px;
+    height: var(--performance-gantt-guide-height, 520px);
+    transform: translateX(-50%);
+    border-left: 1px dashed rgba(148, 163, 184, 0.6);
+    pointer-events: none;
 }
 
 .performance-gantt-tick {
@@ -1454,6 +1538,7 @@ select {
     border-radius: 8px;
     background: rgba(241, 245, 249, 0.9);
     border: 1px solid rgba(148, 163, 184, 0.22);
+    z-index: 2;
 }
 
 .performance-gantt-tick-date {
@@ -1481,8 +1566,8 @@ select {
 
 .performance-gantt-row {
     display: grid;
-    grid-template-columns: 220px minmax(0, 1fr);
-    gap: 10px;
+    grid-template-columns: var(--performance-gantt-label-width) minmax(0, 1fr);
+    gap: 2px;
     align-items: center;
     min-width: 0;
     cursor: pointer;
@@ -1508,25 +1593,33 @@ select {
     left: 0;
     z-index: 5;
     background: rgba(255, 255, 255, 0.94);
-    padding-right: 6px;
+    padding-right: 0;
     border-radius: 8px;
+    width: var(--performance-gantt-label-width);
+    min-width: var(--performance-gantt-label-width);
+    max-width: var(--performance-gantt-label-width);
+    word-break: break-word;
+    overflow-wrap: break-word;
+    overflow: hidden;
 }
 
 .performance-gantt-label-main {
     font-size: 11px;
     font-weight: 900;
     color: #0f172a;
-    white-space: nowrap;
+    white-space: normal;
     overflow: hidden;
-    text-overflow: ellipsis;
+    text-overflow: clip;
+    word-break: break-word;
+    line-height: 1.3;
 }
 
 .performance-gantt-label-sub {
     font-size: 10px;
     color: #475569;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
 }
 
 .performance-gantt-track {
@@ -1547,6 +1640,33 @@ select {
     border-radius: 999px;
     box-shadow: 0 6px 12px rgba(15, 23, 42, 0.1);
     cursor: pointer;
+    overflow: visible;
+    min-width: 4px;
+}
+
+.performance-gantt-bar::before,
+.performance-gantt-bar::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    transform: translateY(-50%);
+    background: rgba(255, 255, 255, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.9);
+    box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.15);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 120ms ease;
+}
+
+.performance-gantt-bar::before {
+    left: -1px;
+}
+
+.performance-gantt-bar::after {
+    right: -1px;
 }
 
 .performance-gantt-bar.is-selected {
@@ -1559,6 +1679,14 @@ select {
 
 .performance-gantt-bar.is-setup {
     background: linear-gradient(90deg, rgba(245, 158, 11, 0.95), rgba(234, 88, 12, 0.95));
+    min-width: 6px;
+}
+
+.performance-gantt-bar:hover::before,
+.performance-gantt-bar:hover::after,
+.performance-gantt-row.is-selected .performance-gantt-bar::before,
+.performance-gantt-row.is-selected .performance-gantt-bar::after {
+    opacity: 1;
 }
 
 .performance-gantt-note {

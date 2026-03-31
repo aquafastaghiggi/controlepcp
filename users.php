@@ -48,8 +48,8 @@ $isSandbox = (getenv('APP_ENV') ?: '') === 'sandbox';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Usuários - Controle PCP</title>
-    <link rel="stylesheet" href="/controlepcp/assets/css/app.css?v=<?= urlencode((string) $appCssVersion) ?>">
-    <link rel="stylesheet" href="/controlepcp/assets/css/theme.css?v=11">
+    <link rel="stylesheet" href="assets/css/app.css?v=<?= urlencode((string) $appCssVersion) ?>">
+    <link rel="stylesheet" href="assets/css/theme.css?v=<?= urlencode((string) (@filemtime(__DIR__ . '/assets/css/theme.css') ?: 'dev')) ?>">
     <style>
         .users-layout { display:grid; grid-template-columns: 1.2fr 0.8fr; gap: 20px; }
         .users-table { width: 100%; border-collapse: collapse; }

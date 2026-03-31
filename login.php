@@ -82,8 +82,8 @@ $isSandbox = (getenv('APP_ENV') ?: '') === 'sandbox';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - Controle PCP</title>
-    <link rel="stylesheet" href="/controlepcp/assets/css/app.css?v=<?= urlencode((string) $appCssVersion) ?>">
-    <link rel="stylesheet" href="/controlepcp/assets/css/theme.css?v=11">
+    <link rel="stylesheet" href="assets/css/app.css?v=<?= urlencode((string) $appCssVersion) ?>">
+    <link rel="stylesheet" href="assets/css/theme.css?v=<?= urlencode((string) (@filemtime(__DIR__ . '/assets/css/theme.css') ?: 'dev')) ?>">
     <style>
         .auth-wrap { min-height: calc(100vh - 48px); display:flex; align-items:center; justify-content:center; }
         .auth-panel { width: min(520px, calc(100% - 32px)); }

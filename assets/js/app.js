@@ -4416,7 +4416,30 @@ function renderPerformanceGantt(detail, options = {}) {
     return map;
   }, {});
 
-  const shiftDateOrder = Object.keys(groupedShifts).sort();
+  // Puxar calendário para filtrar dias
+  const calendar = getAppState()?.datasets?.calendar;
+  const intervals = calendar?.intervals || [];
+  const feriados = calendar?.feriados ? calendar.feriados.map(f => f.cal_data) : [];
+  
+  // Montar set de dias da semana com expediente/turnos
+  const daysWithShiftsSet = new Set();
+  intervals.forEach((interval) => {
+    const days = interval.days || [];
+    days.forEach(day => daysWithShiftsSet.add(day));
+  });
+
+  // Filtrar datas: excluir domingos, feriados, e dias sem expediente
+  let shiftDateOrder = Object.keys(groupedShifts).sort().filter((dateKey) => {
+    const dateObj = new Date(`${dateKey}T00:00`);
+    const dayOfWeek = dateObj.getDay();
+    const normalizedDayOfWeek = dayOfWeek === 0 ? 7 : dayOfWeek;
+    
+    const isDomingo = dayOfWeek === 0;
+    const isFeriado = feriados.includes(dateKey);
+    const temExpediente = calendar ? daysWithShiftsSet.has(normalizedDayOfWeek) : true;
+    
+    return !isDomingo && !isFeriado && temExpediente;
+  });
 
   const shiftHtml = shiftDateOrder.map((dateKey) => {
     const intervals = groupedShifts[dateKey];

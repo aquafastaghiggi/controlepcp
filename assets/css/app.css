@@ -1410,10 +1410,88 @@ select {
     gap: 10px;
     align-items: center;
     position: sticky;
-    top: 0;
+    top: calc(var(--performance-gantt-shift-height, 64px));
     z-index: 6;
     background: rgba(255, 255, 255, 0.94);
     padding: 4px 0 10px;
+}
+
+.performance-gantt-shifts {
+    grid-column: 2 / -1;
+    display: flex;
+    gap: 24px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.5);
+    padding-bottom: 6px;
+    margin-bottom: 6px;
+    position: sticky;
+    top: 0;
+    z-index: 7;
+    background: rgba(255, 255, 255, 0.95);
+    --performance-gantt-shift-height: 64px;
+}
+
+.performance-gantt-shift-day {
+    display: flex;
+    flex-direction: column;
+    min-width: 140px;
+    font-size: 12px;
+    align-items: flex-start;
+}
+.performance-gantt-shift-day-date {
+    font-weight: 700;
+    font-size: 13px;
+}
+.performance-gantt-shift-day-weekday {
+    font-size: 11px;
+    color: #64748b;
+    margin-bottom: 4px;
+}
+.performance-gantt-shift-day-slots {
+    display: flex;
+    gap: 8px;
+    font-size: 11px;
+    color: #1d4ed8;
+    flex-wrap: wrap;
+}
+.performance-gantt-shift-slot {
+    background: rgba(59, 130, 246, 0.12);
+    border-radius: 999px;
+    padding: 2px 6px;
+    border: 1px solid rgba(99, 102, 241, 0.4);
+}
+
+.performance-gantt-shift-day {
+    display: flex;
+    flex-direction: column;
+    min-width: 140px;
+    font-size: 12px;
+    align-items: flex-start;
+}
+
+.performance-gantt-shift-day-date {
+    font-weight: 700;
+    font-size: 13px;
+}
+
+.performance-gantt-shift-day-weekday {
+    font-size: 11px;
+    color: #64748b;
+    margin-bottom: 4px;
+}
+
+.performance-gantt-shift-day-slots {
+    display: flex;
+    gap: 8px;
+    font-size: 11px;
+    color: #1d4ed8;
+    flex-wrap: wrap;
+}
+
+.performance-gantt-shift-slot {
+    background: rgba(59, 130, 246, 0.12);
+    border-radius: 999px;
+    padding: 2px 6px;
+    border: 1px solid rgba(99, 102, 241, 0.4);
 }
 
 .performance-gantt-axis-label {

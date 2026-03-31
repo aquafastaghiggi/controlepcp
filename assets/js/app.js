@@ -3989,6 +3989,97 @@ function collectScheduleTickDates(schedule = []) {
     .filter((date, idx, arr) => idx === 0 || date.getTime() !== arr[idx - 1].getTime());
 }
 
+function collectPerformanceScheduleDates(detail) {
+  const schedule = Array.isArray(detail?.schedule) ? detail.schedule : [];
+  const dateKeys = new Set();
+
+  // Puxar calendário para validar expediente
+  const calendar = getAppState()?.datasets?.calendar;
+  const intervals = calendar?.intervals || [];
+  const feriados = calendar?.feriados ? calendar.feriados.map(f => f.cal_data) : [];
+  
+  // Montar set de dias da semana com expediente/turnos
+  const daysWithShiftsSet = new Set();
+  intervals.forEach((interval) => {
+    const days = interval.days || [];
+    days.forEach(day => daysWithShiftsSet.add(day));
+  });
+
+  schedule.forEach((row) => {
+    const start = parseLocalDateTime(row?.sch_data_inicio, row?.sch_hora_inicio);
+    const end = parseLocalDateTimeFromSql(row?.sch_fim_producao)
+      || parseLocalDateTime(row?.sch_data_inicio, row?.sch_hora_fim);
+    if (!start || !end) return;
+
+    const segments = splitMinutesByDay(start, end);
+    segments.forEach((segment) => {
+      if (segment?.dateKey) {
+        // Validar se o dia deve aparecer
+        const dateObj = new Date(`${segment.dateKey}T00:00`);
+        const dayOfWeek = dateObj.getDay(); // 0=Sunday, 1=Monday, etc
+        const normalizedDayOfWeek = dayOfWeek === 0 ? 7 : dayOfWeek;
+        
+        // Verificar:
+        // 1. Não é domingo
+        // 2. Não é feriado
+        // 3. Tem expediente (turno no calendário)
+        const isDomingo = dayOfWeek === 0;
+        const isFeriado = feriados.includes(segment.dateKey);
+        const temExpediente = calendar ? daysWithShiftsSet.has(normalizedDayOfWeek) : true; // Se não tem calendário, assume que tem expediente
+        
+        if (!isDomingo && !isFeriado && temExpediente) {
+          dateKeys.add(segment.dateKey);
+        }
+      }
+    });
+  });
+
+  return Array.from(dateKeys).sort();
+}
+
+function getCalendarWeekdayValue(date) {
+  if (!date || Number.isNaN(date.getTime())) return null;
+  const day = date.getDay();
+  return day === 0 ? 7 : day;
+}
+
+function collectPerformanceShiftIntervals(detail) {
+  const dateKeys = collectPerformanceScheduleDates(detail);
+  if (!dateKeys.length) {
+    return [];
+  }
+
+  const calendarIntervals = (getAppState()?.datasets?.calendar?.intervals) || [];
+  if (!calendarIntervals.length) {
+    return [];
+  }
+
+  const intervalsByDate = [];
+
+  dateKeys.forEach((dateKey) => {
+    const date = new Date(`${dateKey}T00:00`);
+    const weekday = getCalendarWeekdayValue(date);
+    if (weekday === null) {
+      return;
+    }
+
+    const matches = calendarIntervals
+      .filter((interval) => Array.isArray(interval?.days) && interval.days.some((day) => Number(day) === weekday))
+      .map((interval) => ({
+        dateKey,
+        weekday,
+        start: interval.start,
+        end: interval.end,
+      }));
+
+    if (matches.length) {
+      intervalsByDate.push(...matches);
+    }
+  });
+
+  return intervalsByDate;
+}
+
 function formatDurationMinutesToHHMM(minutesValue) {
   const minutesNumber = Number(minutesValue);
   if (!Number.isFinite(minutesNumber)) return '-';
@@ -4242,6 +4333,7 @@ function renderPerformanceGantt(detail, options = {}) {
   window.__performanceGanttState = window.__performanceGanttState || {
     selectedByContainer: {},
     rowsByContainer: {},
+    shiftIntervalsByContainer: {},
   };
 
   const schedule = Array.isArray(options?.scheduleOverride)
@@ -4279,8 +4371,11 @@ function renderPerformanceGantt(detail, options = {}) {
             ? skuNameMap.get(seqKey) || ''
             : '',
         };
-      })
+    })
     .filter(Boolean);
+
+  const shiftIntervalsCollected = collectPerformanceShiftIntervals(detail);
+  window.__performanceGanttState.shiftIntervalsByContainer[containerId] = shiftIntervalsCollected;
 
   if (!rows.length) {
     ganttEl.innerHTML = '<div class="performance-gantt-empty muted">Nenhum registro com datas v\u00e1lidas.</div>';
@@ -4312,6 +4407,35 @@ function renderPerformanceGantt(detail, options = {}) {
   if (tickDates.length > 8 && readPerformanceGanttZoom() < 2.4) {
     applyPerformanceGanttZoom(2.4);
   }
+
+  const shiftIntervals = window.__performanceGanttState.shiftIntervalsByContainer[containerId] || [];
+  const groupedShifts = shiftIntervals.reduce((map, interval) => {
+    const dateKey = interval.dateKey;
+    if (!map[dateKey]) map[dateKey] = [];
+    map[dateKey].push(interval);
+    return map;
+  }, {});
+
+  const shiftDateOrder = Object.keys(groupedShifts).sort();
+
+  const shiftHtml = shiftDateOrder.map((dateKey) => {
+    const intervals = groupedShifts[dateKey];
+    const dateObj = new Date(`${dateKey}T00:00`);
+    const displayDate = formatDateKeyPt(dateKey);
+    const weekdayShort = formatWeekDayShortPt(dateObj);
+
+    const intervalCells = intervals
+      .map((interval) => `<span class="performance-gantt-shift-slot">${escapeHtml(interval.start)}</span>`)
+      .join('');
+
+    return `
+      <div class="performance-gantt-shift-day">
+        <div class="performance-gantt-shift-day-date">${escapeHtml(displayDate)}</div>
+        <div class="performance-gantt-shift-day-weekday">${escapeHtml(weekdayShort)}</div>
+        <div class="performance-gantt-shift-day-slots">${intervalCells}</div>
+      </div>
+    `;
+  }).join('');
 
   const tickHtml = tickDates.map((t, i) => {
     const dateLabel = formatDateShortPt(t);
@@ -4357,6 +4481,7 @@ function renderPerformanceGantt(detail, options = {}) {
 
   ganttEl.innerHTML = `
     <div class="performance-gantt-scroll">
+      ${shiftHtml ? `<div class="performance-gantt-shifts">${shiftHtml}</div>` : ''}
       <div class="performance-gantt-axis-row">
         <div class="performance-gantt-axis-label"></div>
         <div class="performance-gantt-axis performance-gantt-axis-track">${tickHtml}</div>

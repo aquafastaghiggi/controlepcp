@@ -4602,6 +4602,13 @@ function setPerformanceGanttSelection(containerId, idx) {
   if (detailEl) {
     detailEl.innerHTML = buildPerformanceGanttDetailHtml(row);
   }
+
+  if (typeof window.highlightAlternativeSelection === 'function') {
+    window.highlightAlternativeSelection(finalValue);
+  }
+  if (typeof window.updatePerformanceAltSummary === 'function') {
+    window.updatePerformanceAltSummary();
+  }
 }
 
 function loadAndRenderPerformanceGantt(programId, compareProgramId = '') {
@@ -4675,6 +4682,17 @@ function loadAndRenderPerformanceGantt(programId, compareProgramId = '') {
         skuNameMap: skuNameMapA,
         tickDates: scheduleTicksA,
       });
+
+      if (typeof window.renderPerformanceAlternative === 'function') {
+        try {
+          window.renderPerformanceAlternative({ ...detailA, schedule: schedA });
+          if (typeof window.updatePerformanceAltSummary === 'function') {
+            window.updatePerformanceAltSummary();
+          }
+        } catch (error) {
+          console.warn('Falha ao renderizar layout alternativo.', error);
+        }
+      }
 
       if (idB && detailB) {
         if (blockB) blockB.classList.remove('is-hidden');

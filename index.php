@@ -69,6 +69,7 @@ if ($rawFeatureFlags !== '') {
     <title>Controle PCP</title>
     <?php $appCssVersion = @filemtime(__DIR__ . '/assets/css/app.css') ?: 'dev'; ?>
     <?php $appJsVersion = @filemtime(__DIR__ . '/assets/js/app.js') ?: 'dev'; ?>
+    <?php $performanceAltJsVersion = @filemtime(__DIR__ . '/assets/js/performance-alt.js') ?: $appJsVersion; ?>
     <link rel="stylesheet" href="/controlepcp/assets/css/app.css?v=<?= urlencode((string) $appCssVersion) ?>">
     <link rel="stylesheet" href="/controlepcp/assets/css/theme.css?v=11">
     <style>
@@ -505,6 +506,20 @@ if ($rawFeatureFlags !== '') {
                             <div id="performance-gantt-b"></div>
                         </div>
                     </div>
+                    <div id="performance-alt" class="performance-alt hidden">
+                        <div id="performance-alt-indicator" class="performance-alt-indicator">
+                            <label class="performance-alt-filter">
+                                <input type="checkbox" id="performance-alt-filter-prod" checked>
+                                <span>Produ&ccedil;&atilde;o</span>
+                            </label>
+                            <label class="performance-alt-filter">
+                                <input type="checkbox" id="performance-alt-filter-setup" checked>
+                                <span>Setup</span>
+                            </label>
+                        </div>
+                        <div class="performance-alt-title">Layout alternativo em constru&ccedil;&atilde;o...</div>
+                        <div class="performance-alt-body" id="performance-alt-body"></div>
+                    </div>
                     <div id="performance-daily" class="performance-daily"></div>
                 </section>
 
@@ -538,6 +553,7 @@ if ($rawFeatureFlags !== '') {
     <div id="app-toast" class="app-toast" aria-live="polite" aria-atomic="true"></div>
     <script src="/controlepcp/assets/js/xlsx-import.js?v=3"></script>
     <script src="/controlepcp/assets/js/app.js?v=<?= urlencode((string) $appJsVersion) ?>"></script>
+    <script src="/controlepcp/assets/js/performance-alt.js?v=<?= urlencode((string) $performanceAltJsVersion) ?>"></script>
 </body>
 </html>
 

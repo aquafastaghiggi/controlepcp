@@ -4828,9 +4828,19 @@ function renderPerformanceAlternative(detail) {
                   const qty = item?.sch_quantidade ? `Qty ${item.sch_quantidade}` : '';
                   const title = `${item.label}\\n${qty}${qty ? ' • ' : ''}${duration ? `${Math.floor(duration / 60)}h${duration % 60}m` : ''}`;
                   const barTextRaw = item.isSetup ? 'Setup' : stripSeqPrefix(item.label);
-                  const showBarText = item.isSetup ? (widthPct >= 10) : (widthPct >= 18);
-                  const barTextHtml = showBarText && barTextRaw
-                    ? `<span class="performance-alt-item-bar-text">${escapeHtml(barTextRaw)}</span>`
+                  const mode = (() => {
+                    if (!barTextRaw) return 'none';
+                    if (item.isSetup) {
+                      if (widthPct >= 10) return 'always';
+                      if (widthPct >= 6) return 'hover';
+                      return 'none';
+                    }
+                    if (widthPct >= 18) return 'always';
+                    if (widthPct >= 8) return 'hover';
+                    return 'none';
+                  })();
+                  const barTextHtml = mode !== 'none'
+                    ? `<span class="performance-alt-item-bar-text" data-mode="${escapeHtml(mode)}">${escapeHtml(barTextRaw)}</span>`
                     : '';
                   return `
                     <div class="performance-alt-item ${item.isSetup ? 'is-setup' : ''}" data-alt-idx="${item.idx}" data-seq="${escapeHtml(item.seq || '')}" data-op="${escapeHtml(item.op || '')}" data-bar-left="${leftPct}" data-bar-width="${widthPct}" title="${escapeHtml(title)}">

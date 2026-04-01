@@ -4833,13 +4833,14 @@ function renderPerformanceAlternative(detail) {
                 : '--:--';
               const daySpanText = opDayDiff > 0 ? ` • ${opDayDiff + 1} dias` : '';
               const headerMeta = `${startMeta} → ${endMeta}${daySpanText} • Prod ${formatDurationMinutesToHHMM(prodMin)} • Setup ${formatDurationMinutesToHHMM(setupMin)} (${setupCount})`;
+              const multiDayBadge = opDayDiff > 0 ? '<span class="performance-alt-badge is-multiday">Multi-dia</span>' : '';
 
               const itemHtml = ordered
                 .map((item) => {
                   const startTime = formatTimeOnlyPt(item.start);
                   const endTime = formatTimeOnlyPt(item.end);
                   const dayDiff = diffDaysLocal(item.start, item.end);
-                  const endSuffix = dayDiff > 0 ? ` (+${dayDiff}d)` : '';
+                  const endSuffix = dayDiff > 0 ? ` <span class="performance-alt-item-multiday">(+${dayDiff}d)</span>` : '';
                   const endPinText = dayDiff > 0 ? `${endTime}+${dayDiff}d` : endTime;
                   const span = computeSpanWithinShift(item.start, item.end, shift.start, shift.end);
                   const leftPct = Math.round(span.leftPct * 100) / 100;
@@ -4871,7 +4872,7 @@ function renderPerformanceAlternative(detail) {
                       <span class="performance-alt-pin is-start" style="left:${pinStartPct}%" aria-hidden="true">${escapeHtml(startTime)}</span>
                       <span class="performance-alt-pin is-end" style="left:${endPct}%" aria-hidden="true">${escapeHtml(endPinText)}</span>
                       <span class="performance-alt-item-label">${escapeHtml(item.label)}</span>
-                      <span class="performance-alt-item-time">${escapeHtml(startTime)} ↔ ${escapeHtml(endTime)}${escapeHtml(endSuffix)}</span>
+                      <span class="performance-alt-item-time">${escapeHtml(startTime)} ↔ ${escapeHtml(endTime)}${endSuffix}</span>
                     </div>
                   `;
                 })
@@ -4880,7 +4881,7 @@ function renderPerformanceAlternative(detail) {
               return `
                 <div class="performance-alt-op" data-seq="${escapeHtml(seqKey)}">
                   <div class="performance-alt-op-header">
-                    <div class="performance-alt-op-title" title="${escapeHtml(headerTitle)}">${escapeHtml(headerTitle)}</div>
+                    <div class="performance-alt-op-title" title="${escapeHtml(headerTitle)}">${escapeHtml(headerTitle)} ${multiDayBadge}</div>
                     <div class="performance-alt-op-meta">${escapeHtml(headerMeta)}</div>
                   </div>
                   <div class="performance-alt-op-items">${itemHtml}</div>

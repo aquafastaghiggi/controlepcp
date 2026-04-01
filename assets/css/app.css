@@ -1914,6 +1914,26 @@ select {
     text-overflow: ellipsis;
 }
 
+.performance-alt-badge {
+    display: inline-flex;
+    align-items: center;
+    height: 18px;
+    padding: 0 8px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 900;
+    margin-left: 8px;
+    border: 1px solid rgba(148, 163, 184, 0.55);
+    background: rgba(248, 250, 252, 0.95);
+    color: #334155;
+}
+
+.performance-alt-badge.is-multiday {
+    border-color: rgba(234, 88, 12, 0.35);
+    background: rgba(251, 146, 60, 0.12);
+    color: #9a3412;
+}
+
 .performance-alt-op-meta {
     margin-top: 2px;
     font-size: 10px;
@@ -2030,6 +2050,11 @@ select {
     position: relative;
     z-index: 4;
     white-space: nowrap;
+}
+
+.performance-alt-item-multiday {
+    font-weight: 900;
+    color: #9a3412;
 }
 .performance-alt-item-bar {
     position: absolute;

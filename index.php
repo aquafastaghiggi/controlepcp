@@ -506,7 +506,7 @@ if ($rawFeatureFlags !== '') {
                             <div id="performance-gantt-b"></div>
                         </div>
                     </div>
-                    <div id="performance-alt" class="performance-alt hidden">
+                    <div id="performance-alt" class="performance-alt">
                         <div id="performance-alt-indicator" class="performance-alt-indicator">
                             <label class="performance-alt-filter">
                                 <input type="checkbox" id="performance-alt-filter-prod" checked>

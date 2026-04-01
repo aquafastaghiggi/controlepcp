@@ -1694,6 +1694,12 @@ select {
     border-radius: 12px;
 }
 
+/* Produção: Desempenho usa o layout alternativo (mantém o Gantt antigo apenas como base interna). */
+#section-performance .performance-gantt-block,
+#section-performance .performance-gantt {
+    display: none !important;
+}
+
 .performance-alt {
     margin-top: 10px;
     padding: 12px;

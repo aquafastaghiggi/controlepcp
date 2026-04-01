@@ -4192,6 +4192,15 @@ function formatDateKeyPt(dateKey) {
   return `${match[3]}/${match[2]}/${match[1]}`;
 }
 
+function formatWeekdayShortPt(dateKey) {
+  const match = String(dateKey || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return '';
+  const date = new Date(`${match[1]}-${match[2]}-${match[3]}T00:00`);
+  if (Number.isNaN(date.getTime())) return '';
+  const labels = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'];
+  return labels[date.getDay()] || '';
+}
+
 function splitMinutesByDay(start, end) {
   const result = [];
   if (!start || !end) return result;
@@ -4681,24 +4690,19 @@ function renderPerformanceAlternative(detail) {
     return (dateObj.getHours() * 60) + dateObj.getMinutes();
   };
 
-  const computeSpanWithinShift = (itemStart, itemEnd, shiftStart, shiftEnd) => {
-    let shiftStartMin = toMinutes(shiftStart);
-    let shiftEndMin = toMinutes(shiftEnd);
-    const crossesMidnight = shiftEndMin <= shiftStartMin;
-    if (crossesMidnight) shiftEndMin += 1440;
-
+  const computeSpanWithinWindow = (itemStart, itemEnd, windowStartMin, windowEndMin) => {
     let startMin = minutesOfDay(itemStart);
     let endMin = minutesOfDay(itemEnd);
-    if (crossesMidnight) {
-      if (startMin < shiftStartMin) startMin += 1440;
-      if (endMin < shiftStartMin) endMin += 1440;
-    } else if (endMin < startMin) {
+
+    while (startMin < windowStartMin) startMin += 1440;
+    while (endMin < windowStartMin) endMin += 1440;
+    if (endMin < startMin) {
       endMin += 1440;
     }
 
-    const span = Math.max(1, shiftEndMin - shiftStartMin);
-    const left = Math.min(1, Math.max(0, (startMin - shiftStartMin) / span));
-    const right = Math.min(1, Math.max(0, (endMin - shiftStartMin) / span));
+    const span = Math.max(1, windowEndMin - windowStartMin);
+    const left = Math.min(1, Math.max(0, (startMin - windowStartMin) / span));
+    const right = Math.min(1, Math.max(0, (endMin - windowStartMin) / span));
     const width = Math.max(0.02, right - left);
 
     return {
@@ -4724,6 +4728,7 @@ function renderPerformanceAlternative(detail) {
         _altIdx: idx,
       }))
     : [];
+  const todayKey = toDateKeyLocal(new Date());
   if (!scheduleRows.length) {
     body.innerHTML = '<div class="muted">Nenhum dado disponível para este layout alternativo.</div>';
     container.classList.remove('hidden');
@@ -4752,6 +4757,7 @@ function renderPerformanceAlternative(detail) {
         isSetup,
         seq: seqKey,
         op: seqKey ? (opMap.get(seqKey) || '') : '',
+        plannedMin: Number(row?.sch_duracao_minutos) || 0,
         idx: row._altIdx,
       };
       map[dateKey].push(item);
@@ -4779,7 +4785,9 @@ function renderPerformanceAlternative(detail) {
   const rowsHtml = Object.entries(grouped)
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([dateKey, items]) => {
-      const displayDate = formatDateKeyPt(dateKey);
+      const weekdayShort = formatWeekdayShortPt(dateKey);
+      const displayDate = `${weekdayShort ? `${weekdayShort} ` : ''}${formatDateKeyPt(dateKey)}`;
+      const isToday = dateKey === todayKey;
       const weekday = new Date(`${dateKey}T00:00`).getDay();
       const shifts = calendarIntervals
         .filter((interval) => (interval.days || []).includes(weekday))
@@ -4788,6 +4796,23 @@ function renderPerformanceAlternative(detail) {
           start: interval.start,
           end: interval.end,
         }));
+
+      const dayScale = (() => {
+        if (!shifts.length) return { startMin: 0, endMin: 1440 };
+        const bounds = shifts
+          .map((shift) => {
+            const startMin = toMinutes(shift.start);
+            let endMin = toMinutes(shift.end);
+            if (endMin <= startMin) endMin += 1440;
+            return { startMin, endMin };
+          })
+          .filter((bound) => Number.isFinite(bound.startMin) && Number.isFinite(bound.endMin));
+        if (!bounds.length) return { startMin: 0, endMin: 1440 };
+        return {
+          startMin: Math.min(...bounds.map((bound) => bound.startMin)),
+          endMin: Math.max(...bounds.map((bound) => bound.endMin)),
+        };
+      })();
 
       const dayHtml = shifts
         .map((shift) => {
@@ -4800,6 +4825,11 @@ function renderPerformanceAlternative(detail) {
           const toMin = (start, end) => {
             if (!start || !end) return 0;
             return Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000));
+          };
+          const formatSignedDuration = (deltaMin) => {
+            const min = Number(deltaMin) || 0;
+            const sign = min > 0 ? '+' : (min < 0 ? '-' : '');
+            return `${sign}${formatDurationMinutesToHHMM(Math.abs(min))}`;
           };
 
           const groups = shiftItems.reduce((map, item) => {
@@ -4839,10 +4869,15 @@ function renderPerformanceAlternative(detail) {
                 .map((item) => {
                   const startTime = formatTimeOnlyPt(item.start);
                   const endTime = formatTimeOnlyPt(item.end);
+                  const realMin = toMin(item.start, item.end);
+                  const plannedMin = Number(item?.plannedMin) || 0;
+                  const deltaMin = plannedMin > 0 ? (realMin - plannedMin) : null;
+                  const deltaText = deltaMin === null ? '' : ` • Desvio ${formatSignedDuration(deltaMin)}`;
+                  const isLate = deltaMin !== null && deltaMin > 5;
                   const dayDiff = diffDaysLocal(item.start, item.end);
                   const endSuffix = dayDiff > 0 ? ` <span class="performance-alt-item-multiday">(+${dayDiff}d)</span>` : '';
                   const endPinText = dayDiff > 0 ? `${endTime}+${dayDiff}d` : endTime;
-                  const span = computeSpanWithinShift(item.start, item.end, shift.start, shift.end);
+                  const span = computeSpanWithinWindow(item.start, item.end, dayScale.startMin, dayScale.endMin);
                   const leftPct = Math.round(span.leftPct * 100) / 100;
                   const widthPct = Math.round(span.widthPct * 100) / 100;
                   const clampPct = (value) => Math.min(98, Math.max(2, value));
@@ -4867,12 +4902,12 @@ function renderPerformanceAlternative(detail) {
                     ? `<span class="performance-alt-item-bar-text" data-mode="${escapeHtml(mode)}">${escapeHtml(barTextRaw)}</span>`
                     : '';
                   return `
-                    <div class="performance-alt-item ${item.isSetup ? 'is-setup' : ''}" data-alt-idx="${item.idx}" data-seq="${escapeHtml(item.seq || '')}" data-op="${escapeHtml(item.op || '')}" data-bar-left="${leftPct}" data-bar-width="${widthPct}" title="${escapeHtml(title)}">
+                    <div class="performance-alt-item ${item.isSetup ? 'is-setup' : ''}${isLate ? ' is-late' : ''}" data-alt-idx="${item.idx}" data-seq="${escapeHtml(item.seq || '')}" data-op="${escapeHtml(item.op || '')}" data-bar-left="${leftPct}" data-bar-width="${widthPct}" title="${escapeHtml(title)}">
                       <span class="performance-alt-item-bar ${item.isSetup ? 'is-setup' : 'is-prod'}" style="left:${leftPct}%;width:${widthPct}%">${barTextHtml}</span>
                       <span class="performance-alt-pin is-start" style="left:${pinStartPct}%" aria-hidden="true">${escapeHtml(startTime)}</span>
                       <span class="performance-alt-pin is-end" style="left:${endPct}%" aria-hidden="true">${escapeHtml(endPinText)}</span>
                       <span class="performance-alt-item-label">${escapeHtml(item.label)}</span>
-                      <span class="performance-alt-item-time">${escapeHtml(startTime)} ↔ ${escapeHtml(endTime)}${endSuffix}</span>
+                      <span class="performance-alt-item-time">${escapeHtml(startTime)} ↔ ${escapeHtml(endTime)}${endSuffix}${escapeHtml(deltaText)}</span>
                     </div>
                   `;
                 })
@@ -4899,16 +4934,17 @@ function renderPerformanceAlternative(detail) {
         })
         .join('') || '<div class="performance-alt-no-shift">Sem items nos turnos definidos.</div>';
 
+      const isCompact = items.length >= 6;
       return `
-        <div class="performance-alt-day">
-          <div class="performance-alt-day-header">${escapeHtml(displayDate)}</div>
+        <div class="performance-alt-day ${isToday ? 'is-today' : ''}${isCompact ? ' is-compact' : ''}">
+          <div class="performance-alt-day-header">${escapeHtml(displayDate)}${isToday ? '<span class="performance-alt-day-badge">Hoje</span>' : ''}${isCompact ? '<span class="performance-alt-day-badge is-compact-badge" title="Dia com alta densidade de itens — modo compacto ativo">Compacto</span>' : ''}</div>
           <div class="performance-alt-day-items">${dayHtml}</div>
         </div>
       `;
     })
     .join('');
 
-  const summaryShell = '<div id="performance-alt-summary" class="performance-alt-summary muted">Clique em um item para ver detalhes.</div>';
+  const summaryShell = `<div id="performance-alt-summary" class="performance-alt-summary muted"><div class="performance-alt-summary-empty">Clique em um item para ver detalhes.</div>${getPerformanceAltLegendHtml()}</div>`;
 
   if (!rowsHtml) {
     body.innerHTML = '<div class="muted">Nenhum evento válido encontrado.</div>';
@@ -4949,6 +4985,11 @@ function renderPerformanceAlternative(detail) {
         <div>Setups</div>
         <strong>${Math.floor(totals.setup / 60)}h ${totals.setup % 60}m</strong>
         <small>${totals.setupCount} itens</small>
+      </div>
+      <div class="performance-alt-indicator-item is-axis-guide">
+        <div>Escala horizontal</div>
+        <strong>Largura = duração</strong>
+        <small>Posição e extremidades mostram o horário dentro do turno</small>
       </div>
     `;
   }
@@ -5002,6 +5043,27 @@ function renderPerformanceAltConnectors() {
     const items = Array.from(shiftEl.querySelectorAll('.performance-alt-item'));
     if (items.length < 2) return;
 
+    // Marca conflitos reais: sobreposição temporal entre barras no mesmo bloco de turno.
+    items.forEach((item) => item.classList.remove('is-conflict'));
+    const overlapEpsilon = 0.05;
+    for (let i = 0; i < items.length; i += 1) {
+      const a = items[i];
+      const aLeft = Number(a.dataset.barLeft) || 0;
+      const aWidth = Number(a.dataset.barWidth) || 0;
+      const aEnd = aLeft + aWidth;
+      for (let j = i + 1; j < items.length; j += 1) {
+        const b = items[j];
+        const bLeft = Number(b.dataset.barLeft) || 0;
+        const bWidth = Number(b.dataset.barWidth) || 0;
+        const bEnd = bLeft + bWidth;
+        const hasOverlap = (aLeft + overlapEpsilon) < bEnd && (bLeft + overlapEpsilon) < aEnd;
+        if (hasOverlap) {
+          a.classList.add('is-conflict');
+          b.classList.add('is-conflict');
+        }
+      }
+    }
+
     const connectors = [];
     for (let i = 0; i < items.length; i += 1) {
       const from = items[i];
@@ -5010,7 +5072,11 @@ function renderPerformanceAltConnectors() {
       if (!seq) continue;
       const to = items.slice(i + 1).find((next) => !next.classList.contains('is-setup') && String(next.dataset.seq || '').trim() === seq);
       if (!to) continue;
-      connectors.push({ from, to });
+      const fromLeft = Number(from.dataset.barLeft) || 0;
+      const fromWidth = Number(from.dataset.barWidth) || 0;
+      const toLeft = Number(to.dataset.barLeft) || 0;
+      const overlap = toLeft < (fromLeft + fromWidth - overlapEpsilon);
+      connectors.push({ from, to, overlap });
     }
     if (!connectors.length) return;
 
@@ -5035,10 +5101,24 @@ function renderPerformanceAltConnectors() {
     arrow.setAttribute('d', 'M0,0 L8,4 L0,8 Z');
     arrow.setAttribute('fill', 'rgba(100, 116, 139, 0.65)');
     marker.appendChild(arrow);
+
+    const conflictMarker = document.createElementNS(SVG_NS, 'marker');
+    conflictMarker.setAttribute('id', 'perf-alt-arrow-conflict');
+    conflictMarker.setAttribute('markerWidth', '8');
+    conflictMarker.setAttribute('markerHeight', '8');
+    conflictMarker.setAttribute('refX', '7');
+    conflictMarker.setAttribute('refY', '4');
+    conflictMarker.setAttribute('orient', 'auto');
+    const conflictArrow = document.createElementNS(SVG_NS, 'path');
+    conflictArrow.setAttribute('d', 'M0,0 L8,4 L0,8 Z');
+    conflictArrow.setAttribute('fill', 'rgba(194, 65, 12, 0.85)');
+    conflictMarker.appendChild(conflictArrow);
+
     defs.appendChild(marker);
+    defs.appendChild(conflictMarker);
     svg.appendChild(defs);
 
-    connectors.forEach(({ from, to }) => {
+    connectors.forEach(({ from, to, overlap }) => {
       const fromLeft = Number(from.dataset.barLeft) || 0;
       const fromWidth = Number(from.dataset.barWidth) || 0;
       const toLeft = Number(to.dataset.barLeft) || 0;
@@ -5054,8 +5134,8 @@ function renderPerformanceAltConnectors() {
       const c1x = x1 + 18;
       const c2x = x2 - 18;
       path.setAttribute('d', `M ${x1} ${y1} C ${c1x} ${y1}, ${c2x} ${y2}, ${x2} ${y2}`);
-      path.setAttribute('class', 'performance-alt-connector');
-      path.setAttribute('marker-end', 'url(#perf-alt-arrow)');
+      path.setAttribute('class', `performance-alt-connector ${overlap ? 'is-conflict' : ''}`.trim());
+      path.setAttribute('marker-end', overlap ? 'url(#perf-alt-arrow-conflict)' : 'url(#perf-alt-arrow)');
       svg.appendChild(path);
     });
 
@@ -5118,7 +5198,7 @@ function updatePerformanceAltSummary() {
 
   if (!item) {
     el.classList.add('muted');
-    el.innerHTML = 'Clique em um item para ver detalhes.';
+    el.innerHTML = `<div class="performance-alt-summary-empty">Clique em um item para ver detalhes.</div>${getPerformanceAltLegendHtml()}`;
     return;
   }
 
@@ -5177,19 +5257,36 @@ function updatePerformanceAltSummary() {
         <span class="is-prod">Produção</span>
       </div>
     </div>
+    ${getPerformanceAltLegendHtml()}
+  `;
+}
+
+function getPerformanceAltLegendHtml() {
+  return `
+    <div class="performance-alt-summary-legend" aria-label="Legenda do gráfico de desempenho">
+      <div class="performance-alt-mini-legend">
+        <span class="is-setup">Setup</span>
+        <span class="is-prod">Produção</span>
+      </div>
+      <div class="performance-alt-summary-note">Horários ficam nas extremidades das barras.</div>
+    </div>
   `;
 }
 
 function isWithinShift(item, shift) {
   if (!shift.start || !shift.end) return true;
+  if (!item?.start || Number.isNaN(item.start.getTime())) return false;
   const [startHour, startMin] = shift.start.split(':').map((n) => Number(n));
   const [endHour, endMin] = shift.end.split(':').map((n) => Number(n));
-  const itemStart = toDateKeyLocal(item.start) === toDateKeyLocal(item.end) ? item.start : item.start;
-  const itemHour = itemStart.getHours();
-  const itemMinute = itemStart.getMinutes();
+  const itemHour = item.start.getHours();
+  const itemMinute = item.start.getMinutes();
   const shiftStartTotal = (startHour * 60) + (startMin || 0);
   const shiftEndTotal = (endHour * 60) + (endMin || 0);
   const itemTotal = (itemHour * 60) + (itemMinute || 0);
+  // Turno noturno: cruza meia-noite (ex: 22:00 – 06:00)
+  if (shiftEndTotal <= shiftStartTotal) {
+    return itemTotal >= shiftStartTotal || itemTotal <= shiftEndTotal;
+  }
   return itemTotal >= shiftStartTotal && itemTotal <= shiftEndTotal;
 }
 

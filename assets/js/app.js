@@ -4657,6 +4657,18 @@ function renderPerformanceAlternative(detail) {
   const body = document.getElementById('performance-alt-body');
   if (!container || !body) return;
 
+  const diffDaysLocal = (start, end) => {
+    if (!start || !end || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 0;
+    const s0 = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+    const e0 = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+    return Math.max(0, Math.round((e0.getTime() - s0.getTime()) / 86400000));
+  };
+
+  const formatDateOnlyPtShort = (dateObj) => {
+    if (!dateObj || Number.isNaN(dateObj.getTime())) return '--/--';
+    return `${String(dateObj.getDate()).padStart(2, '0')}/${String(dateObj.getMonth() + 1).padStart(2, '0')}`;
+  };
+
   const toMinutes = (hhmm) => {
     const parts = String(hhmm || '').split(':');
     const h = Number(parts[0] || 0);
@@ -4812,12 +4824,23 @@ function renderPerformanceAlternative(detail) {
               const productName = stripSeqPrefix(prodLabel) || '-';
 
               const headerTitle = `${op ? `OP ${op} / ` : ''}Seq ${seqKey} – ${productName}`;
-              const headerMeta = `${start ? formatTimeOnlyPt(start) : '--:--'} → ${end ? formatTimeOnlyPt(end) : '--:--'} • Prod ${formatDurationMinutesToHHMM(prodMin)} • Setup ${formatDurationMinutesToHHMM(setupMin)} (${setupCount})`;
+              const opDayDiff = diffDaysLocal(start, end);
+              const startMeta = start
+                ? (opDayDiff > 0 ? `${formatDateOnlyPtShort(start)} ${formatTimeOnlyPt(start)}` : formatTimeOnlyPt(start))
+                : '--:--';
+              const endMeta = end
+                ? (opDayDiff > 0 ? `${formatDateOnlyPtShort(end)} ${formatTimeOnlyPt(end)}` : formatTimeOnlyPt(end))
+                : '--:--';
+              const daySpanText = opDayDiff > 0 ? ` • ${opDayDiff + 1} dias` : '';
+              const headerMeta = `${startMeta} → ${endMeta}${daySpanText} • Prod ${formatDurationMinutesToHHMM(prodMin)} • Setup ${formatDurationMinutesToHHMM(setupMin)} (${setupCount})`;
 
               const itemHtml = ordered
                 .map((item) => {
                   const startTime = formatTimeOnlyPt(item.start);
                   const endTime = formatTimeOnlyPt(item.end);
+                  const dayDiff = diffDaysLocal(item.start, item.end);
+                  const endSuffix = dayDiff > 0 ? ` (+${dayDiff}d)` : '';
+                  const endPinText = dayDiff > 0 ? `${endTime}+${dayDiff}d` : endTime;
                   const span = computeSpanWithinShift(item.start, item.end, shift.start, shift.end);
                   const leftPct = Math.round(span.leftPct * 100) / 100;
                   const widthPct = Math.round(span.widthPct * 100) / 100;
@@ -4826,7 +4849,7 @@ function renderPerformanceAlternative(detail) {
                   const pinStartPct = clampPct(leftPct);
                   const duration = Number(item?.sch_duracao_minutos) || 0;
                   const qty = item?.sch_quantidade ? `Qty ${item.sch_quantidade}` : '';
-                  const title = `${item.label}\\n${qty}${qty ? ' • ' : ''}${duration ? `${Math.floor(duration / 60)}h${duration % 60}m` : ''}`;
+                  const title = `${item.label}\\n${formatDateTimeShortPt(item.start)} → ${formatDateTimeShortPt(item.end)}\\n${qty}${qty ? ' • ' : ''}${duration ? `${Math.floor(duration / 60)}h${duration % 60}m` : ''}`;
                   const barTextRaw = item.isSetup ? 'Setup' : stripSeqPrefix(item.label);
                   const mode = (() => {
                     if (!barTextRaw) return 'none';
@@ -4846,9 +4869,9 @@ function renderPerformanceAlternative(detail) {
                     <div class="performance-alt-item ${item.isSetup ? 'is-setup' : ''}" data-alt-idx="${item.idx}" data-seq="${escapeHtml(item.seq || '')}" data-op="${escapeHtml(item.op || '')}" data-bar-left="${leftPct}" data-bar-width="${widthPct}" title="${escapeHtml(title)}">
                       <span class="performance-alt-item-bar ${item.isSetup ? 'is-setup' : 'is-prod'}" style="left:${leftPct}%;width:${widthPct}%">${barTextHtml}</span>
                       <span class="performance-alt-pin is-start" style="left:${pinStartPct}%" aria-hidden="true">${escapeHtml(startTime)}</span>
-                      <span class="performance-alt-pin is-end" style="left:${endPct}%" aria-hidden="true">${escapeHtml(endTime)}</span>
+                      <span class="performance-alt-pin is-end" style="left:${endPct}%" aria-hidden="true">${escapeHtml(endPinText)}</span>
                       <span class="performance-alt-item-label">${escapeHtml(item.label)}</span>
-                      <span class="performance-alt-item-time">${escapeHtml(startTime)} ↔ ${escapeHtml(endTime)}</span>
+                      <span class="performance-alt-item-time">${escapeHtml(startTime)} ↔ ${escapeHtml(endTime)}${escapeHtml(endSuffix)}</span>
                     </div>
                   `;
                 })

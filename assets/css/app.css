@@ -1822,12 +1822,25 @@ select {
     padding: 10px;
     border-radius: 10px;
     border: 1px solid rgba(148, 163, 184, 0.4);
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+    margin-bottom: 10px;
 }
+
+.performance-alt-day:nth-of-type(even) {
+    background: rgba(248, 250, 252, 0.98);
+}
+
+.performance-alt-day:last-child {
+    margin-bottom: 0;
+}
+
 .performance-alt-day-header {
     font-size: 13px;
     font-weight: 700;
     color: #0f172a;
-    margin-bottom: 4px;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px dashed rgba(148, 163, 184, 0.35);
 }
 .performance-alt-day-items {
     display: flex;
@@ -1838,13 +1851,36 @@ select {
     border: 1px solid rgba(148, 163, 184, 0.4);
     border-radius: 10px;
     padding: 6px 8px;
-    background: rgba(255, 255, 255, 0.95);
+    background: rgba(248, 250, 252, 0.95);
 }
+
+.performance-alt-shift + .performance-alt-shift {
+    margin-top: 8px;
+}
+
 .performance-alt-shift-label {
     font-size: 11px;
     font-weight: 700;
     color: #0f172a;
     margin-bottom: 4px;
+    position: relative;
+    padding-bottom: 8px;
+}
+
+.performance-alt-shift-label::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 6px;
+    border-radius: 999px;
+    background: repeating-linear-gradient(
+        to right,
+        rgba(148, 163, 184, 0.5) 0 1px,
+        rgba(148, 163, 184, 0) 1px 22px
+    );
+    opacity: 0.55;
 }
 .performance-alt-shift-items {
     display: grid;

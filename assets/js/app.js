@@ -3902,6 +3902,12 @@ function renderPerformanceGanttEmpty(message = 'Selecione uma programa\u00e7\u00
   if (kpisEl) kpisEl.innerHTML = '';
   const dailyEl = document.getElementById('performance-daily');
   if (dailyEl) dailyEl.innerHTML = '';
+
+  const altEl = document.getElementById('performance-alt');
+  const altBodyEl = document.getElementById('performance-alt-body');
+  if (altBodyEl) altBodyEl.innerHTML = `<div class="muted">${escapeHtml(message)}</div>`;
+  if (altEl) altEl.classList.remove('hidden');
+
   const blockB = document.getElementById('performance-gantt-block-b');
   if (blockB) blockB.classList.add('is-hidden');
 

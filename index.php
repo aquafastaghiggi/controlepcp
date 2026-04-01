@@ -505,6 +505,20 @@ if ($rawFeatureFlags !== '') {
                             <div id="performance-gantt-b"></div>
                         </div>
                     </div>
+                    <div id="performance-alt" class="performance-alt hidden">
+                        <div id="performance-alt-indicator" class="performance-alt-indicator">
+                            <label class="performance-alt-filter">
+                                <input type="checkbox" id="performance-alt-filter-prod" checked>
+                                <span>Produ&ccedil;&atilde;o</span>
+                            </label>
+                            <label class="performance-alt-filter">
+                                <input type="checkbox" id="performance-alt-filter-setup" checked>
+                                <span>Setup</span>
+                            </label>
+                        </div>
+                        <div class="performance-alt-title">Layout alternativo em constru&ccedil;&atilde;o...</div>
+                        <div class="performance-alt-body" id="performance-alt-body"></div>
+                    </div>
                     <div id="performance-daily" class="performance-daily"></div>
                 </section>
 

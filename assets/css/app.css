@@ -1916,15 +1916,37 @@ select {
     content: '';
     position: absolute;
     top: 50%;
-    width: 8px;
-    height: 8px;
+    width: 10px;
+    height: 10px;
     border-radius: 50%;
     background: rgba(255, 255, 255, 0.95);
     transform: translateY(-50%);
-    box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.18);
+    box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.22);
 }
-.performance-alt-item-bar::before { left: -3px; }
-.performance-alt-item-bar::after { right: -3px; }
+.performance-alt-item-bar::before { left: -4px; }
+.performance-alt-item-bar::after { right: -4px; }
+
+.performance-alt-pin {
+    position: absolute;
+    top: -14px;
+    transform: translateX(-50%);
+    font-size: 10px;
+    font-weight: 800;
+    color: #0f172a;
+    background: rgba(248, 250, 252, 0.95);
+    border: 1px solid rgba(148, 163, 184, 0.55);
+    padding: 1px 6px;
+    border-radius: 10px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 4;
+}
+
+.performance-alt-item.is-selected .performance-alt-pin,
+.performance-alt-item.is-hover .performance-alt-pin {
+    opacity: 1;
+}
 .performance-alt-item.is-setup {
     border-color: rgba(250, 204, 21, 0.6);
     background: rgba(250, 204, 21, 0.15);

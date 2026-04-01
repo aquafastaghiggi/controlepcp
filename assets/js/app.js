@@ -4773,12 +4773,17 @@ function renderPerformanceAlternative(detail) {
             const span = computeSpanWithinShift(item.start, item.end, shift.start, shift.end);
             const leftPct = Math.round(span.leftPct * 100) / 100;
             const widthPct = Math.round(span.widthPct * 100) / 100;
+            const clampPct = (value) => Math.min(98, Math.max(2, value));
+            const endPct = clampPct(leftPct + widthPct);
+            const pinStartPct = clampPct(leftPct);
             const duration = Number(item?.sch_duracao_minutos) || 0;
             const qty = item?.sch_quantidade ? `Qty ${item.sch_quantidade}` : '';
             const title = `${item.label}\\n${qty}${qty ? ' • ' : ''}${duration ? `${Math.floor(duration / 60)}h${duration % 60}m` : ''}`;
             return `
             <div class="performance-alt-item ${item.isSetup ? 'is-setup' : ''}" data-alt-idx="${item.idx}" data-bar-left="${leftPct}" data-bar-width="${widthPct}" title="${escapeHtml(title)}">
               <span class="performance-alt-item-bar ${item.isSetup ? 'is-setup' : 'is-prod'}" style="left:${leftPct}%;width:${widthPct}%"></span>
+              <span class="performance-alt-pin is-start" style="left:${pinStartPct}%" aria-hidden="true">${escapeHtml(startTime)}</span>
+              <span class="performance-alt-pin is-end" style="left:${endPct}%" aria-hidden="true">${escapeHtml(endTime)}</span>
               <span class="performance-alt-item-label">${escapeHtml(item.label)}</span>
               <span class="performance-alt-item-time">${escapeHtml(startTime)} ↔ ${escapeHtml(endTime)}</span>
             </div>

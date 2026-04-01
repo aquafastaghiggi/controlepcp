@@ -516,7 +516,6 @@ if ($rawFeatureFlags !== '') {
                                 <span>Setup</span>
                             </label>
                         </div>
-                        <div class="performance-alt-title">Layout alternativo em constru&ccedil;&atilde;o...</div>
                         <div class="performance-alt-body" id="performance-alt-body"></div>
                     </div>
                     <div id="performance-daily" class="performance-daily"></div>

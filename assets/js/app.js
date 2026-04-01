@@ -4719,6 +4719,7 @@ function renderPerformanceAlternative(detail) {
   }
 
   const calendarIntervals = getAppState()?.datasets?.calendar?.intervals || [];
+  const opMap = buildPerformanceOpMap(detail);
 
   const altItemByIdx = new Map();
 
@@ -4729,13 +4730,17 @@ function renderPerformanceAlternative(detail) {
       if (!start) return map;
       const dateKey = toDateKeyLocal(start);
       if (!map[dateKey]) map[dateKey] = [];
+      const seqKey = String(row?.sch_sequencia ?? '').trim();
+      const isSetup = String(row?.sch_tipo || '').trim().toLowerCase() === 'setup';
       map[dateKey].push({
         start,
-      end: parseLocalDateTime(row?.sch_data_inicio, row?.sch_hora_fim) || parseLocalDateTimeFromSql(row?.sch_fim_producao) || start,
-      label: row?.sch_sequencia ? `${row.sch_sequencia} - ${row.sch_descricao}` : row.sch_descricao || 'Produção',
-      isSetup: String(row?.sch_tipo || '').trim().toLowerCase() === 'setup',
-      idx: row._altIdx,
-    });
+        end: parseLocalDateTime(row?.sch_data_inicio, row?.sch_hora_fim) || parseLocalDateTimeFromSql(row?.sch_fim_producao) || start,
+        label: row?.sch_sequencia ? `${row.sch_sequencia} - ${row.sch_descricao}` : row.sch_descricao || 'Produção',
+        isSetup,
+        seq: seqKey,
+        op: !isSetup && seqKey ? (opMap.get(seqKey) || '') : '',
+        idx: row._altIdx,
+      });
     return map;
   }, {});
 
@@ -4780,7 +4785,7 @@ function renderPerformanceAlternative(detail) {
             const qty = item?.sch_quantidade ? `Qty ${item.sch_quantidade}` : '';
             const title = `${item.label}\\n${qty}${qty ? ' • ' : ''}${duration ? `${Math.floor(duration / 60)}h${duration % 60}m` : ''}`;
             return `
-            <div class="performance-alt-item ${item.isSetup ? 'is-setup' : ''}" data-alt-idx="${item.idx}" data-bar-left="${leftPct}" data-bar-width="${widthPct}" title="${escapeHtml(title)}">
+            <div class="performance-alt-item ${item.isSetup ? 'is-setup' : ''}" data-alt-idx="${item.idx}" data-seq="${escapeHtml(item.seq || '')}" data-op="${escapeHtml(item.op || '')}" data-bar-left="${leftPct}" data-bar-width="${widthPct}" title="${escapeHtml(title)}">
               <span class="performance-alt-item-bar ${item.isSetup ? 'is-setup' : 'is-prod'}" style="left:${leftPct}%;width:${widthPct}%"></span>
               <span class="performance-alt-pin is-start" style="left:${pinStartPct}%" aria-hidden="true">${escapeHtml(startTime)}</span>
               <span class="performance-alt-pin is-end" style="left:${endPct}%" aria-hidden="true">${escapeHtml(endTime)}</span>
@@ -4855,6 +4860,7 @@ function renderPerformanceAlternative(detail) {
 
   container.classList.remove('hidden');
   highlightAlternativeSelection(window.__performanceGanttState?.selectedByContainer?.['performance-gantt-a']);
+  renderPerformanceAltConnectors();
 
   if (container.dataset.altListener !== '1') {
     container.dataset.altListener = '1';
@@ -4877,6 +4883,89 @@ function renderPerformanceAlternative(detail) {
   });
   container.addEventListener('mouseleave', () => {
     body.querySelectorAll('.performance-alt-item').forEach((el) => el.classList.remove('is-hover'));
+  });
+
+  if (container.dataset.altResizeListener !== '1') {
+    container.dataset.altResizeListener = '1';
+    let resizeTimer = null;
+    window.addEventListener('resize', () => {
+      window.clearTimeout(resizeTimer);
+      resizeTimer = window.setTimeout(() => renderPerformanceAltConnectors(), 150);
+    });
+  }
+}
+
+function renderPerformanceAltConnectors() {
+  const body = document.getElementById('performance-alt-body');
+  if (!body) return;
+
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  const clampPx = (value, min, max) => Math.min(max, Math.max(min, value));
+
+  body.querySelectorAll('.performance-alt-shift-items').forEach((shiftEl) => {
+    shiftEl.querySelectorAll('svg.performance-alt-connectors').forEach((el) => el.remove());
+
+    const items = Array.from(shiftEl.querySelectorAll('.performance-alt-item'));
+    if (items.length < 2) return;
+
+    const connectors = [];
+    for (let i = 0; i < items.length; i += 1) {
+      const from = items[i];
+      if (!from.classList.contains('is-setup')) continue;
+      const seq = String(from.dataset.seq || '').trim();
+      if (!seq) continue;
+      const to = items.slice(i + 1).find((next) => !next.classList.contains('is-setup') && String(next.dataset.seq || '').trim() === seq);
+      if (!to) continue;
+      connectors.push({ from, to });
+    }
+    if (!connectors.length) return;
+
+    const width = shiftEl.clientWidth;
+    const height = shiftEl.scrollHeight;
+    if (!width || !height) return;
+
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.classList.add('performance-alt-connectors');
+    svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+    svg.setAttribute('preserveAspectRatio', 'none');
+
+    const defs = document.createElementNS(SVG_NS, 'defs');
+    const marker = document.createElementNS(SVG_NS, 'marker');
+    marker.setAttribute('id', 'perf-alt-arrow');
+    marker.setAttribute('markerWidth', '8');
+    marker.setAttribute('markerHeight', '8');
+    marker.setAttribute('refX', '7');
+    marker.setAttribute('refY', '4');
+    marker.setAttribute('orient', 'auto');
+    const arrow = document.createElementNS(SVG_NS, 'path');
+    arrow.setAttribute('d', 'M0,0 L8,4 L0,8 Z');
+    arrow.setAttribute('fill', 'rgba(100, 116, 139, 0.65)');
+    marker.appendChild(arrow);
+    defs.appendChild(marker);
+    svg.appendChild(defs);
+
+    connectors.forEach(({ from, to }) => {
+      const fromLeft = Number(from.dataset.barLeft) || 0;
+      const fromWidth = Number(from.dataset.barWidth) || 0;
+      const toLeft = Number(to.dataset.barLeft) || 0;
+
+      const x1 = clampPx(((fromLeft + fromWidth) / 100) * width, 0, width);
+      let x2 = clampPx((toLeft / 100) * width, 0, width);
+      if (x2 < x1 + 10) x2 = Math.min(width, x1 + 10);
+
+      const y1 = clampPx(from.offsetTop + (from.offsetHeight / 2), 0, height);
+      const y2 = clampPx(to.offsetTop + (to.offsetHeight / 2), 0, height);
+
+      const path = document.createElementNS(SVG_NS, 'path');
+      const c1x = x1 + 18;
+      const c2x = x2 - 18;
+      path.setAttribute('d', `M ${x1} ${y1} C ${c1x} ${y1}, ${c2x} ${y2}, ${x2} ${y2}`);
+      path.setAttribute('class', 'performance-alt-connector');
+      path.setAttribute('marker-end', 'url(#perf-alt-arrow)');
+      svg.appendChild(path);
+    });
+
+    shiftEl.appendChild(svg);
   });
 }
 

@@ -5128,9 +5128,6 @@ function updatePerformanceAltSummary() {
     : [];
 
   const op = String(item?.op || (seqItems.find((x) => x?.op)?.op) || '').trim() || '-';
-  const durMin = (item?.start && item?.end)
-    ? Math.max(0, Math.round((item.end.getTime() - item.start.getTime()) / 60000))
-    : 0;
   const tipo = item.isSetup ? 'Setup' : 'Produção';
 
   const range = seqItems.length
@@ -5139,6 +5136,18 @@ function updatePerformanceAltSummary() {
         end: seqItems.reduce((max, x) => (x.end?.getTime?.() || 0) > (max?.getTime?.() || 0) ? x.end : max, seqItems[0].end),
       }
     : { start: item.start, end: item.end };
+
+  const diffDaysLocal = (start, end) => {
+    if (!start || !end || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 0;
+    const s0 = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+    const e0 = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+    return Math.max(0, Math.round((e0.getTime() - s0.getTime()) / 86400000));
+  };
+  const dayDiff = diffDaysLocal(range.start, range.end);
+  const endLabel = dayDiff > 0
+    ? `${formatDateTimeShortPt(range.end)} (+${dayDiff}d)`
+    : formatDateTimeShortPt(range.end);
+
   const totalProdMin = seqItems.reduce((sum, x) => sum + (!x.isSetup ? Math.max(0, Math.round((x.end - x.start) / 60000)) : 0), 0);
   const totalSetupMin = seqItems.reduce((sum, x) => sum + (x.isSetup ? Math.max(0, Math.round((x.end - x.start) / 60000)) : 0), 0);
   const setupCount = seqItems.filter((x) => x.isSetup).length;
@@ -5153,7 +5162,8 @@ function updatePerformanceAltSummary() {
     <div><span>Tipo</span><strong>${escapeHtml(tipo)}</strong></div>
     <div><span>Item</span><strong title="${escapeHtml(item.label)}">${escapeHtml(item.label)}</strong></div>
     <div><span>Início</span><strong>${escapeHtml(formatDateTimeShortPt(range.start))}</strong></div>
-    <div><span>Fim</span><strong>${escapeHtml(formatDateTimeShortPt(range.end))}</strong></div>
+    <div><span>Fim</span><strong>${escapeHtml(endLabel)}</strong></div>
+    <div><span>Dias</span><strong>${escapeHtml(String(dayDiff + 1))}</strong></div>
     <div><span>Setup</span><strong>${escapeHtml(formatDurationMinutesToHHMM(totalSetupMin))} (${escapeHtml(String(setupCount))})</strong></div>
     <div><span>Produção</span><strong>${escapeHtml(formatDurationMinutesToHHMM(totalProdMin))}</strong></div>
     <div><span>Total</span><strong>${escapeHtml(formatDurationMinutesToHHMM(totalProdMin + totalSetupMin))}</strong></div>

@@ -4783,34 +4783,78 @@ function renderPerformanceAlternative(detail) {
           if (!shiftItems.length) {
             return '';
           }
-          const itemHtml = shiftItems
-          .map((item) => {
-            const startTime = formatTimeOnlyPt(item.start);
-            const endTime = formatTimeOnlyPt(item.end);
-            const span = computeSpanWithinShift(item.start, item.end, shift.start, shift.end);
-            const leftPct = Math.round(span.leftPct * 100) / 100;
-            const widthPct = Math.round(span.widthPct * 100) / 100;
-            const clampPct = (value) => Math.min(98, Math.max(2, value));
-            const endPct = clampPct(leftPct + widthPct);
-            const pinStartPct = clampPct(leftPct);
-            const duration = Number(item?.sch_duracao_minutos) || 0;
-            const qty = item?.sch_quantidade ? `Qty ${item.sch_quantidade}` : '';
-            const title = `${item.label}\\n${qty}${qty ? ' • ' : ''}${duration ? `${Math.floor(duration / 60)}h${duration % 60}m` : ''}`;
-            return `
-            <div class="performance-alt-item ${item.isSetup ? 'is-setup' : ''}" data-alt-idx="${item.idx}" data-seq="${escapeHtml(item.seq || '')}" data-op="${escapeHtml(item.op || '')}" data-bar-left="${leftPct}" data-bar-width="${widthPct}" title="${escapeHtml(title)}">
-              <span class="performance-alt-item-bar ${item.isSetup ? 'is-setup' : 'is-prod'}" style="left:${leftPct}%;width:${widthPct}%"></span>
-              <span class="performance-alt-pin is-start" style="left:${pinStartPct}%" aria-hidden="true">${escapeHtml(startTime)}</span>
-              <span class="performance-alt-pin is-end" style="left:${endPct}%" aria-hidden="true">${escapeHtml(endTime)}</span>
-              <span class="performance-alt-item-label">${escapeHtml(item.label)}</span>
-              <span class="performance-alt-item-time">${escapeHtml(startTime)} ↔ ${escapeHtml(endTime)}</span>
-            </div>
-          `;
-        })
+
+          const stripSeqPrefix = (value) => String(value || '').replace(/^\s*\d+\s*-\s*/g, '').trim();
+          const toMin = (start, end) => {
+            if (!start || !end) return 0;
+            return Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000));
+          };
+
+          const groups = shiftItems.reduce((map, item) => {
+            const seqKey = String(item?.seq || '').trim() || `__no_seq__${String(item?.idx ?? '')}`;
+            if (!map[seqKey]) map[seqKey] = [];
+            map[seqKey].push(item);
+            return map;
+          }, {});
+
+          const groupHtml = Object.entries(groups)
+            .map(([seqKey, groupItems]) => {
+              const ordered = [...groupItems].sort((a, b) => (a.start?.getTime?.() || 0) - (b.start?.getTime?.() || 0));
+              const start = ordered[0]?.start || null;
+              const end = ordered.reduce((max, it) => (it.end?.getTime?.() || 0) > (max?.getTime?.() || 0) ? it.end : max, ordered[0]?.end || null);
+
+              const prodMin = ordered.reduce((sum, it) => sum + (!it.isSetup ? toMin(it.start, it.end) : 0), 0);
+              const setupMin = ordered.reduce((sum, it) => sum + (it.isSetup ? toMin(it.start, it.end) : 0), 0);
+              const setupCount = ordered.filter((it) => it.isSetup).length;
+
+              const op = String(ordered.find((it) => String(it?.op || '').trim())?.op || '').trim();
+              const prodLabel = ordered.find((it) => !it.isSetup)?.label || ordered[0]?.label || '';
+              const productName = stripSeqPrefix(prodLabel) || '-';
+
+              const headerTitle = `${op ? `OP ${op} / ` : ''}Seq ${seqKey} – ${productName}`;
+              const headerMeta = `${start ? formatTimeOnlyPt(start) : '--:--'} → ${end ? formatTimeOnlyPt(end) : '--:--'} • Prod ${formatDurationMinutesToHHMM(prodMin)} • Setup ${formatDurationMinutesToHHMM(setupMin)} (${setupCount})`;
+
+              const itemHtml = ordered
+                .map((item) => {
+                  const startTime = formatTimeOnlyPt(item.start);
+                  const endTime = formatTimeOnlyPt(item.end);
+                  const span = computeSpanWithinShift(item.start, item.end, shift.start, shift.end);
+                  const leftPct = Math.round(span.leftPct * 100) / 100;
+                  const widthPct = Math.round(span.widthPct * 100) / 100;
+                  const clampPct = (value) => Math.min(98, Math.max(2, value));
+                  const endPct = clampPct(leftPct + widthPct);
+                  const pinStartPct = clampPct(leftPct);
+                  const duration = Number(item?.sch_duracao_minutos) || 0;
+                  const qty = item?.sch_quantidade ? `Qty ${item.sch_quantidade}` : '';
+                  const title = `${item.label}\\n${qty}${qty ? ' • ' : ''}${duration ? `${Math.floor(duration / 60)}h${duration % 60}m` : ''}`;
+                  return `
+                    <div class="performance-alt-item ${item.isSetup ? 'is-setup' : ''}" data-alt-idx="${item.idx}" data-seq="${escapeHtml(item.seq || '')}" data-op="${escapeHtml(item.op || '')}" data-bar-left="${leftPct}" data-bar-width="${widthPct}" title="${escapeHtml(title)}">
+                      <span class="performance-alt-item-bar ${item.isSetup ? 'is-setup' : 'is-prod'}" style="left:${leftPct}%;width:${widthPct}%"></span>
+                      <span class="performance-alt-pin is-start" style="left:${pinStartPct}%" aria-hidden="true">${escapeHtml(startTime)}</span>
+                      <span class="performance-alt-pin is-end" style="left:${endPct}%" aria-hidden="true">${escapeHtml(endTime)}</span>
+                      <span class="performance-alt-item-label">${escapeHtml(item.label)}</span>
+                      <span class="performance-alt-item-time">${escapeHtml(startTime)} ↔ ${escapeHtml(endTime)}</span>
+                    </div>
+                  `;
+                })
+                .join('');
+
+              return `
+                <div class="performance-alt-op" data-seq="${escapeHtml(seqKey)}">
+                  <div class="performance-alt-op-header">
+                    <div class="performance-alt-op-title" title="${escapeHtml(headerTitle)}">${escapeHtml(headerTitle)}</div>
+                    <div class="performance-alt-op-meta">${escapeHtml(headerMeta)}</div>
+                  </div>
+                  <div class="performance-alt-op-items">${itemHtml}</div>
+                </div>
+              `;
+            })
             .join('');
+
           return `
             <div class="performance-alt-shift">
               <div class="performance-alt-shift-label">${escapeHtml(shift.label)} (${escapeHtml(shift.start)} - ${escapeHtml(shift.end)})</div>
-              <div class="performance-alt-shift-items">${itemHtml}</div>
+              <div class="performance-alt-shift-items">${groupHtml}</div>
             </div>
           `;
         })

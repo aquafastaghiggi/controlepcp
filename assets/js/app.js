@@ -4827,9 +4827,14 @@ function renderPerformanceAlternative(detail) {
                   const duration = Number(item?.sch_duracao_minutos) || 0;
                   const qty = item?.sch_quantidade ? `Qty ${item.sch_quantidade}` : '';
                   const title = `${item.label}\\n${qty}${qty ? ' • ' : ''}${duration ? `${Math.floor(duration / 60)}h${duration % 60}m` : ''}`;
+                  const barTextRaw = item.isSetup ? 'Setup' : stripSeqPrefix(item.label);
+                  const showBarText = item.isSetup ? (widthPct >= 10) : (widthPct >= 18);
+                  const barTextHtml = showBarText && barTextRaw
+                    ? `<span class="performance-alt-item-bar-text">${escapeHtml(barTextRaw)}</span>`
+                    : '';
                   return `
                     <div class="performance-alt-item ${item.isSetup ? 'is-setup' : ''}" data-alt-idx="${item.idx}" data-seq="${escapeHtml(item.seq || '')}" data-op="${escapeHtml(item.op || '')}" data-bar-left="${leftPct}" data-bar-width="${widthPct}" title="${escapeHtml(title)}">
-                      <span class="performance-alt-item-bar ${item.isSetup ? 'is-setup' : 'is-prod'}" style="left:${leftPct}%;width:${widthPct}%"></span>
+                      <span class="performance-alt-item-bar ${item.isSetup ? 'is-setup' : 'is-prod'}" style="left:${leftPct}%;width:${widthPct}%">${barTextHtml}</span>
                       <span class="performance-alt-pin is-start" style="left:${pinStartPct}%" aria-hidden="true">${escapeHtml(startTime)}</span>
                       <span class="performance-alt-pin is-end" style="left:${endPct}%" aria-hidden="true">${escapeHtml(endTime)}</span>
                       <span class="performance-alt-item-label">${escapeHtml(item.label)}</span>

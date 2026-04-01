@@ -2037,6 +2037,11 @@ select {
     border-radius: 8px;
     opacity: 0.75;
     z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    padding: 0 10px;
 }
 .performance-alt-item-bar.is-prod {
     background: linear-gradient(90deg, rgba(59, 130, 246, 0.45), rgba(37, 99, 235, 0.55));
@@ -2058,6 +2063,17 @@ select {
 }
 .performance-alt-item-bar::before { left: -4px; }
 .performance-alt-item-bar::after { right: -4px; }
+
+.performance-alt-item-bar-text {
+    font-size: 11px;
+    font-weight: 900;
+    color: rgba(15, 23, 42, 0.92);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.65);
+}
 
 .performance-alt-pin {
     position: absolute;

@@ -4722,6 +4722,7 @@ function renderPerformanceAlternative(detail) {
   const opMap = buildPerformanceOpMap(detail);
 
   const altItemByIdx = new Map();
+  const flatAltItems = [];
 
   const grouped = scheduleRows
     .filter(filterPredicate)
@@ -4732,15 +4733,17 @@ function renderPerformanceAlternative(detail) {
       if (!map[dateKey]) map[dateKey] = [];
       const seqKey = String(row?.sch_sequencia ?? '').trim();
       const isSetup = String(row?.sch_tipo || '').trim().toLowerCase() === 'setup';
-      map[dateKey].push({
+      const item = {
         start,
         end: parseLocalDateTime(row?.sch_data_inicio, row?.sch_hora_fim) || parseLocalDateTimeFromSql(row?.sch_fim_producao) || start,
         label: row?.sch_sequencia ? `${row.sch_sequencia} - ${row.sch_descricao}` : row.sch_descricao || 'Produção',
         isSetup,
         seq: seqKey,
-        op: !isSetup && seqKey ? (opMap.get(seqKey) || '') : '',
+        op: seqKey ? (opMap.get(seqKey) || '') : '',
         idx: row._altIdx,
-      });
+      };
+      map[dateKey].push(item);
+      flatAltItems.push(item);
     return map;
   }, {});
 
@@ -4751,6 +4754,15 @@ function renderPerformanceAlternative(detail) {
       }
     });
   });
+
+  const itemsBySeq = new Map();
+  flatAltItems.forEach((item) => {
+    const seq = String(item?.seq || '').trim();
+    if (!seq) return;
+    if (!itemsBySeq.has(seq)) itemsBySeq.set(seq, []);
+    itemsBySeq.get(seq).push(item);
+  });
+  itemsBySeq.forEach((arr) => arr.sort((a, b) => (a.start?.getTime?.() || 0) - (b.start?.getTime?.() || 0)));
 
   const rowsHtml = Object.entries(grouped)
     .sort(([a], [b]) => a.localeCompare(b))
@@ -4827,7 +4839,7 @@ function renderPerformanceAlternative(detail) {
     body.innerHTML = summaryShell + rowsHtml;
   }
 
-  window.__performanceAltState = { itemByIdx: altItemByIdx };
+  window.__performanceAltState = { itemByIdx: altItemByIdx, itemsBySeq };
   updatePerformanceAltSummary();
 
   const totals = scheduleRows.reduce((sum, row) => {
@@ -5028,18 +5040,51 @@ function updatePerformanceAltSummary() {
     return;
   }
 
+  const seqKey = String(item?.seq || '').trim();
+  const seqItems = seqKey
+    ? (window.__performanceAltState?.itemsBySeq?.get(seqKey) || [])
+    : [];
+
+  const op = String(item?.op || (seqItems.find((x) => x?.op)?.op) || '').trim() || '-';
   const durMin = (item?.start && item?.end)
     ? Math.max(0, Math.round((item.end.getTime() - item.start.getTime()) / 60000))
     : 0;
   const tipo = item.isSetup ? 'Setup' : 'Produção';
 
+  const range = seqItems.length
+    ? {
+        start: seqItems[0].start,
+        end: seqItems.reduce((max, x) => (x.end?.getTime?.() || 0) > (max?.getTime?.() || 0) ? x.end : max, seqItems[0].end),
+      }
+    : { start: item.start, end: item.end };
+  const totalProdMin = seqItems.reduce((sum, x) => sum + (!x.isSetup ? Math.max(0, Math.round((x.end - x.start) / 60000)) : 0), 0);
+  const totalSetupMin = seqItems.reduce((sum, x) => sum + (x.isSetup ? Math.max(0, Math.round((x.end - x.start) / 60000)) : 0), 0);
+  const setupCount = seqItems.filter((x) => x.isSetup).length;
+  const totalMin = Math.max(1, totalProdMin + totalSetupMin);
+  const prodPct = Math.round((totalProdMin / totalMin) * 1000) / 10;
+  const setupPct = Math.round((totalSetupMin / totalMin) * 1000) / 10;
+
   el.classList.remove('muted');
   el.innerHTML = `
+    <div><span>OP</span><strong>${escapeHtml(op)}</strong></div>
+    <div><span>Seq</span><strong>${escapeHtml(seqKey || '-')}</strong></div>
     <div><span>Tipo</span><strong>${escapeHtml(tipo)}</strong></div>
     <div><span>Item</span><strong title="${escapeHtml(item.label)}">${escapeHtml(item.label)}</strong></div>
-    <div><span>Início</span><strong>${escapeHtml(formatDateTimeShortPt(item.start))}</strong></div>
-    <div><span>Fim</span><strong>${escapeHtml(formatDateTimeShortPt(item.end))}</strong></div>
-    <div><span>Duração</span><strong>${escapeHtml(formatDurationMinutesToHHMM(durMin))}</strong></div>
+    <div><span>Início</span><strong>${escapeHtml(formatDateTimeShortPt(range.start))}</strong></div>
+    <div><span>Fim</span><strong>${escapeHtml(formatDateTimeShortPt(range.end))}</strong></div>
+    <div><span>Setup</span><strong>${escapeHtml(formatDurationMinutesToHHMM(totalSetupMin))} (${escapeHtml(String(setupCount))})</strong></div>
+    <div><span>Produção</span><strong>${escapeHtml(formatDurationMinutesToHHMM(totalProdMin))}</strong></div>
+    <div><span>Total</span><strong>${escapeHtml(formatDurationMinutesToHHMM(totalProdMin + totalSetupMin))}</strong></div>
+    <div class="performance-alt-mini" aria-hidden="true" title="Setup ${escapeHtml(String(setupPct))}% • Produção ${escapeHtml(String(prodPct))}%">
+      <div class="performance-alt-mini-bar">
+        <div class="is-setup" style="width:${setupPct}%"></div>
+        <div class="is-prod" style="width:${prodPct}%"></div>
+      </div>
+      <div class="performance-alt-mini-legend">
+        <span class="is-setup">Setup</span>
+        <span class="is-prod">Produção</span>
+      </div>
+    </div>
   `;
 }
 

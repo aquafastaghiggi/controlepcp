@@ -4771,12 +4771,14 @@ function renderPerformanceAlternative(detail) {
             const startTime = formatTimeOnlyPt(item.start);
             const endTime = formatTimeOnlyPt(item.end);
             const span = computeSpanWithinShift(item.start, item.end, shift.start, shift.end);
+            const leftPct = Math.round(span.leftPct * 100) / 100;
+            const widthPct = Math.round(span.widthPct * 100) / 100;
             const duration = Number(item?.sch_duracao_minutos) || 0;
             const qty = item?.sch_quantidade ? `Qty ${item.sch_quantidade}` : '';
             const title = `${item.label}\\n${qty}${qty ? ' • ' : ''}${duration ? `${Math.floor(duration / 60)}h${duration % 60}m` : ''}`;
             return `
-            <div class="performance-alt-item ${item.isSetup ? 'is-setup' : ''}" data-alt-idx="${item.idx}" title="${escapeHtml(title)}">
-              <span class="performance-alt-item-bar ${item.isSetup ? 'is-setup' : 'is-prod'}" style="left:${span.leftPct}%;width:${span.widthPct}%"></span>
+            <div class="performance-alt-item ${item.isSetup ? 'is-setup' : ''}" data-alt-idx="${item.idx}" data-bar-left="${leftPct}" data-bar-width="${widthPct}" title="${escapeHtml(title)}">
+              <span class="performance-alt-item-bar ${item.isSetup ? 'is-setup' : 'is-prod'}" style="left:${leftPct}%;width:${widthPct}%"></span>
               <span class="performance-alt-item-label">${escapeHtml(item.label)}</span>
               <span class="performance-alt-item-time">${escapeHtml(startTime)} ↔ ${escapeHtml(endTime)}</span>
             </div>
@@ -4877,10 +4879,44 @@ function renderPerformanceAlternative(detail) {
 function highlightAlternativeSelection(selectedIdx) {
   const body = document.getElementById('performance-alt-body');
   if (!body) return;
+  const container = document.getElementById('performance-alt');
+  if (container) {
+    container.querySelectorAll('.performance-alt-focus-line').forEach((el) => el.remove());
+  }
+
+  let selectedEl = null;
   body.querySelectorAll('.performance-alt-item').forEach((el) => {
     const isSelected = el.dataset.altIdx && selectedIdx && String(el.dataset.altIdx) === String(selectedIdx);
     el.classList.toggle('is-selected', Boolean(isSelected));
+    if (isSelected) selectedEl = el;
   });
+
+  body.classList.toggle('has-selection', Boolean(selectedEl));
+  updatePerformanceAltFocus(selectedEl);
+}
+
+function updatePerformanceAltFocus(selectedEl) {
+  if (!selectedEl) return;
+
+  const leftPct = Number(selectedEl.dataset.barLeft);
+  const widthPct = Number(selectedEl.dataset.barWidth);
+  if (!Number.isFinite(leftPct) || !Number.isFinite(widthPct)) return;
+
+  const clampPct = (value) => Math.min(100, Math.max(0, value));
+  const endPct = clampPct(leftPct + widthPct);
+  const shiftItems = selectedEl.closest('.performance-alt-shift-items');
+  if (!shiftItems) return;
+
+  const buildLine = (posPct, label, variant) => {
+    const line = document.createElement('div');
+    line.className = `performance-alt-focus-line ${variant || ''}`.trim();
+    line.style.left = `${posPct}%`;
+    line.innerHTML = `<span>${escapeHtml(label)}</span>`;
+    return line;
+  };
+
+  shiftItems.appendChild(buildLine(clampPct(leftPct), 'Início', 'is-start'));
+  shiftItems.appendChild(buildLine(endPct, 'Fim', 'is-end'));
 }
 
 function updatePerformanceAltSummary() {

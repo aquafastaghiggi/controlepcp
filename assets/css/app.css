@@ -1849,6 +1849,7 @@ select {
 .performance-alt-shift-items {
     display: grid;
     gap: 4px;
+    position: relative;
 }
 .performance-alt-summary {
     display: grid;
@@ -1936,6 +1937,42 @@ select {
 .performance-alt-item.is-hover {
     border-color: rgba(14, 165, 233, 0.8);
     background: rgba(14, 165, 233, 0.12);
+}
+
+.performance-alt-body.has-selection .performance-alt-item:not(.is-selected) {
+    opacity: 0.35;
+}
+
+.performance-alt-body .performance-alt-item {
+    transition: opacity 120ms ease;
+}
+
+.performance-alt-focus-line {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 0;
+    border-left: 2px dashed rgba(37, 99, 235, 0.35);
+    pointer-events: none;
+    z-index: 3;
+}
+
+.performance-alt-focus-line.is-end {
+    border-left-color: rgba(234, 88, 12, 0.35);
+}
+
+.performance-alt-focus-line span {
+    position: absolute;
+    top: -18px;
+    left: 6px;
+    font-size: 10px;
+    font-weight: 800;
+    color: #0f172a;
+    background: rgba(248, 250, 252, 0.95);
+    border: 1px solid rgba(148, 163, 184, 0.5);
+    padding: 2px 6px;
+    border-radius: 10px;
+    white-space: nowrap;
 }
 
 .performance-daily-title {

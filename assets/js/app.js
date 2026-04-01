@@ -4963,7 +4963,6 @@ function renderPerformanceAlternative(detail) {
       const item = event.target.closest('.performance-alt-item[data-alt-idx]');
       if (item) {
         setPerformanceGanttSelection('performance-gantt-a', item.dataset.altIdx);
-        highlightAlternativeSelection(item.dataset.altIdx);
         updatePerformanceAltSummary();
       }
     });

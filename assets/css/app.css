@@ -2245,7 +2245,7 @@ select {
 
 .performance-timeline-row-bars {
     position: relative;
-    height: 24px;
+    height: 36px;
     background: rgba(148, 163, 184, 0.1);
     border-radius: 4px;
     overflow: hidden;

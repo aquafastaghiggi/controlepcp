@@ -5467,11 +5467,14 @@ function renderPerformanceTimeline(detail) {
         const endMs = Math.min(itemEnd.getTime(), timelineEndMsClamped);
         const clampedStartMs = Math.max(startMs, timelineStartMs);
         if (endMs <= clampedStartMs) return '';
-        const renderEndMs = hasManualSelection
+        const shouldExtendToSelectedDate = hasManualSelection
+          && Number.isFinite(selectionEndMs)
+          && clampedStartMs < selectionEndMs;
+        const renderEndMs = shouldExtendToSelectedDate
           ? Math.max(endMs, selectionEndMs)
           : endMs;
         const itemStartPct = ((clampedStartMs - timelineStartMs) / timelineRangeMs) * 100;
-        const itemWidthPct = ((renderEndMs - clampedStartMs) / timelineRangeMs) * 100;
+        const itemWidthPct = Math.max(0, ((Math.min(renderEndMs, timelineEndMsClamped) - clampedStartMs) / timelineRangeMs) * 100);
         const itemStartTime = formatTimeOnlyPt(itemStart);
         const itemEndTime = formatTimeOnlyPt(itemEnd);
         

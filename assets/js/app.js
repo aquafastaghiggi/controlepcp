@@ -5956,7 +5956,10 @@ function loadAndRenderPerformanceGantt(programId, compareProgramId = '') {
 
       renderPerformanceKpis(detailA, detailB);
       renderPerformanceDaily(detailA, detailB);
-      renderPerformanceAlternative(detailA);
+
+      // Mantem apenas o grafico novo: oculta o grafico antigo (performance-alt).
+      const altEl = document.getElementById('performance-alt');
+      if (altEl) altEl.classList.add('hidden');
 
       // Substitui o gráfico de cima pelo timeline ajustado, mantendo a estrutura existente.
       if (blockB) blockB.classList.add('is-hidden');

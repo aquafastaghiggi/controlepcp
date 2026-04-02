@@ -5961,16 +5961,18 @@ function loadAndRenderPerformanceGantt(programId, compareProgramId = '') {
       const altEl = document.getElementById('performance-alt');
       if (altEl) altEl.classList.add('hidden');
 
-      // Substitui o gráfico de cima pelo timeline ajustado, mantendo a estrutura existente.
+      // Substitui o gráfico de cima pelo timeline ajustado movendo o componente novo para o bloco A.
       if (blockB) blockB.classList.add('is-hidden');
       if (ganttB) ganttB.innerHTML = '';
-      const legacyTimeline = document.getElementById('performance-timeline');
-      if (legacyTimeline) legacyTimeline.classList.add('hidden');
 
-      renderPerformanceTimeline(detailA, {
-        containerId: 'performance-gantt',
-        bodyId: 'performance-gantt-a',
-      });
+      const timelineEl = document.getElementById('performance-timeline');
+      if (ganttA && timelineEl && timelineEl.parentElement !== ganttA) {
+        ganttA.innerHTML = '';
+        ganttA.appendChild(timelineEl);
+      }
+      if (timelineEl) timelineEl.classList.remove('hidden');
+
+      renderPerformanceTimeline(detailA);
 
       if (blockB) blockB.classList.add('is-hidden');
     })

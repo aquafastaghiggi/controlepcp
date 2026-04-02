@@ -5487,7 +5487,20 @@ function renderPerformanceTimeline(detail) {
         const durMin = Math.round((itemEnd.getTime() - itemStart.getTime()) / 60000);
         const itemSeq = item?.sch_sequencia ? String(item.sch_sequencia).trim() : 'Setup';
         
-        return `<span class="performance-timeline-item ${isS ? 'is-setup' : 'is-prod'}" style="left:${itemStartPct.toFixed(4)}%; width:${itemWidthPct.toFixed(4)}%; --timeline-start-ms:${clampedStartMs}; --timeline-end-ms:${endMs}; --timeline-range-ms:${timelineRangeMs};" data-item-start="${clampedStartMs}" data-item-end="${endMs}" data-item-type="${isS ? 'setup' : 'prod'}" data-item-date="${startDateKeyItem}" data-item-seq="${escapeHtml(itemSeq)}" data-item-duration="${durMin}" data-item-desc="${escapeHtml(item.sch_descricao || '')}" title="${escapeHtml(item.sch_descricao || '')} ${itemStartTime} → ${itemEndTime}"><span class="performance-timeline-item-label">${labelContent}</span></span>`;
+        // Formatação de duração: 1m, 1h 19m, etc
+        const formatDuration = (minutes) => {
+          if (minutes < 60) return `${minutes}m`;
+          const h = Math.floor(minutes / 60);
+          const m = minutes % 60;
+          return m > 0 ? `${h}h ${m}m` : `${h}h`;
+        };
+        const durFormatted = formatDuration(durMin);
+        
+        // Label visível na barra (adaptado ao tamanho)
+        const seqLabel = itemWidthPct < 8 ? itemSeq : `${itemSeq}`;
+        const barLabel = itemWidthPct < 15 ? `${durFormatted}` : `${itemSeq} • ${durFormatted}`;
+        
+        return `<span class="performance-timeline-item ${isS ? 'is-setup' : 'is-prod'}" style="left:${itemStartPct.toFixed(4)}%; width:${itemWidthPct.toFixed(4)}%; --timeline-start-ms:${clampedStartMs}; --timeline-end-ms:${endMs}; --timeline-range-ms:${timelineRangeMs};" data-item-start="${clampedStartMs}" data-item-end="${endMs}" data-item-type="${isS ? 'setup' : 'prod'}" data-item-date="${startDateKeyItem}" data-item-seq="${escapeHtml(itemSeq)}" data-item-duration="${durMin}" data-item-desc="${escapeHtml(item.sch_descricao || '')}" title="${escapeHtml(item.sch_descricao || '')} ${itemStartTime} → ${itemEndTime}"><span class="performance-timeline-item-label">${labelContent}</span><span class="performance-timeline-item-info">${barLabel}</span></span>`;
       }).join('')}
             </div>
           </div>

@@ -2356,6 +2356,27 @@ select {
     text-overflow: ellipsis;
 }
 
+/* Novo label com informações de Seq e Duração */
+.performance-timeline-item-info {
+    position: absolute;
+    bottom: 2px;
+    left: 2px;
+    right: 2px;
+    display: inline-block;
+    font-size: 8px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.9);
+    background: rgba(0, 0, 0, 0.3);
+    padding: 1px 3px;
+    border-radius: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+    letter-spacing: -0.4px;
+    transition: opacity 120ms ease;
+}
+
 .performance-timeline-item.is-hover {
     opacity: 1;
     z-index: 8;

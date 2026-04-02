@@ -4595,35 +4595,55 @@ function renderPerformanceGantt(detail, options = {}) {
     `;
   }).join('');
 
-  const tickHtml = tickDates.map((t, i) => {
-    const dateLabel = formatDateShortPt(t);
-    const weekdayLabel = formatWeekDayShortPt(t);
-    const timeLabel = formatTimeOnlyPt(t);
-    const position = tickCountForPosition ? (i / tickCountForPosition) * 100 : 0;
-    const isFocusTick = focusMs && Math.abs(t.getTime() - focusMs) < (24 * 60 * 60 * 1000);
-    return `
+  const tickPositions = tickDates.map((t, i) => {
+    const tickDate = t instanceof Date ? t : new Date(t);
+    const tickMs = tickDate instanceof Date ? tickDate.getTime() : NaN;
+    const dateLabel = formatDateShortPt(tickDate);
+    const weekdayLabel = formatWeekDayShortPt(tickDate);
+    const timeLabel = formatTimeOnlyPt(tickDate);
+    const position = Number.isFinite(tickMs) && rangeMs > 0
+      ? Math.max(0, Math.min(100, ((tickMs - startMs) / rangeMs) * 100))
+      : (tickCountForPosition ? (i / tickCountForPosition) * 100 : 0);
+    const isFocusTick = focusMs && Number.isFinite(tickMs) && Math.abs(tickMs - focusMs) < (24 * 60 * 60 * 1000);
+    return {
+      dateLabel,
+      weekdayLabel,
+      timeLabel,
+      position,
+      isFocusTick,
+    };
+  });
+
+  const tickHtml = tickPositions.map(({ dateLabel, weekdayLabel, timeLabel, position, isFocusTick }) => `
       <div class="performance-gantt-tick${isFocusTick ? ' is-focus' : ''}" style="left:${position}%">
         <div class="performance-gantt-tick-date">${escapeHtml(dateLabel)}</div>
         <div class="performance-gantt-tick-weekday">${escapeHtml(weekdayLabel)}</div>
         <div class="performance-gantt-tick-time">${escapeHtml(timeLabel)}</div>
       </div>
-    `;
-  }).join('');
+    `).join('');
+
+  const gridLineHtml = tickPositions.map(({ position }) => `
+      <div class="performance-gantt-grid-line" style="left:${position}%"></div>
+    `).join('');
 
   const selectedIdx = window.__performanceGanttState.selectedByContainer[containerId];
 
   const rowHtml = visibleRows.map((r) => {
     const left = ((r.start.getTime() - startMs) / rangeMs) * 100;
     const width = Math.max(0.6, ((r.end.getTime() - r.start.getTime()) / rangeMs) * 100);
+    const endPosition = Math.min(100, left + width);
     const seqLabel = r.seq ? `${r.seq}` : 'Produ\u00e7\u00e3o';
     const labelMain = r.isSetup ? 'Setup' : `${seqLabel}${r.skuName ? ' - ' + r.skuName : ''}`;
     const labelSub = '';
     const title = `${labelMain}${labelSub ? ' - ' + labelSub : ''}\n${formatDateTimeShortPt(r.start)} \u2192 ${formatDateTimeShortPt(r.end)}\nDura\u00e7\u00e3o: ${formatDurationMinutesToHHMM(r.durMin)}`;
     const selected = selectedIdx !== undefined && selectedIdx !== null && String(selectedIdx) === String(r.idx);
+    const tooltipText = `${formatDateTimeShortPt(r.start)} \u2192 ${formatDateTimeShortPt(r.end)}`;
 
     const isFocusRow = focusMs && Math.abs(r.start.getTime() - focusMs) < (60 * 60 * 1000);
     return `
-      <div class="performance-gantt-row ${selected ? 'is-selected' : ''} ${isFocusRow ? 'is-focus' : ''}" tabindex="0" role="button" aria-selected="${selected ? 'true' : 'false'}" data-gantt-row="${escapeHtml(String(r.idx))}" data-gantt-container="${escapeHtml(containerId)}">
+      <div class="performance-gantt-row ${selected ? 'is-selected' : ''} ${isFocusRow ? 'is-focus' : ''}" tabindex="0" role="button" aria-selected="${selected ? 'true' : 'false'}" data-gantt-row="${escapeHtml(String(r.idx))}" data-gantt-container="${escapeHtml(containerId)}" style="--row-start:${left}%; --row-end:${endPosition}%;">
+        <div class="performance-gantt-row-guide" aria-hidden="true"></div>
+        <div class="performance-gantt-row-tooltip">${escapeHtml(tooltipText)}</div>
         <div class="performance-gantt-label">
           <div class="performance-gantt-label-main">${escapeHtml(labelMain)}</div>
           <div class="performance-gantt-label-sub">${escapeHtml(labelSub)}</div>
@@ -4647,6 +4667,7 @@ function renderPerformanceGantt(detail, options = {}) {
         <div class="performance-gantt-axis-label"></div>
         <div class="performance-gantt-axis performance-gantt-axis-track">${tickHtml}</div>
       </div>
+      <div class="performance-gantt-grid-lines">${gridLineHtml}</div>
       <div class="performance-gantt-rows">${rowHtml}</div>
     </div>
     <div class="performance-gantt-detail" data-gantt-detail="${escapeHtml(containerId)}">${buildPerformanceGanttDetailHtml(selectedRow)}</div>

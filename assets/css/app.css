@@ -1438,16 +1438,19 @@ select {
 }
 
 .performance-gantt-scroll {
+    position: relative;
     max-height: 380px;
     overflow: auto;
     padding-right: 6px;
-    --performance-gantt-shift-height: 0;
+    --performance-gantt-label-width: 220px;
+    --performance-gantt-col-gap: 4px;
+    --performance-gantt-axis-height: 70px;
 }
 
 .performance-gantt-axis-row {
     display: grid;
-    grid-template-columns: 220px minmax(0, 1fr);
-    gap: 10px;
+    grid-template-columns: var(--performance-gantt-label-width) minmax(0, 1fr);
+    gap: var(--performance-gantt-col-gap);
     align-items: center;
     position: sticky;
     top: 0;
@@ -1560,6 +1563,27 @@ select {
     min-height: 48px;
 }
 
+.performance-gantt-grid-lines {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: calc(var(--performance-gantt-label-width) + var(--performance-gantt-col-gap));
+    width: calc((100% - (var(--performance-gantt-label-width) + var(--performance-gantt-col-gap))) * var(--performance-gantt-zoom));
+    min-width: calc((100% - (var(--performance-gantt-label-width) + var(--performance-gantt-col-gap))) * var(--performance-gantt-zoom));
+    pointer-events: none;
+    z-index: 0;
+}
+
+.performance-gantt-grid-line {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    transform: translateX(-50%);
+    background: rgba(59, 130, 246, 0.25);
+    box-shadow: 0 0 6px rgba(37, 99, 235, 0.35);
+}
+
 .performance-gantt-tick {
     position: absolute;
     top: 0;
@@ -1610,17 +1634,75 @@ select {
 
 .performance-gantt-row {
     display: grid;
-    grid-template-columns: 220px minmax(0, 1fr);
-    gap: 10px;
+    grid-template-columns: var(--performance-gantt-label-width) minmax(0, 1fr);
+    gap: var(--performance-gantt-col-gap);
     align-items: center;
     min-width: 0;
     cursor: pointer;
     border-radius: 10px;
+    position: relative;
 }
 
 .performance-gantt-row:focus-visible {
     outline: 2px solid rgba(37, 99, 235, 0.55);
     outline-offset: 2px;
+}
+
+.performance-gantt-row-guide {
+    position: absolute;
+    top: calc(-1 * var(--performance-gantt-axis-height, 70px));
+    bottom: 0;
+    left: 0;
+    right: 0;
+    pointer-events: none;
+    display: none;
+}
+
+.performance-gantt-row:hover .performance-gantt-row-guide,
+.performance-gantt-row.is-selected .performance-gantt-row-guide {
+    display: block;
+}
+
+.performance-gantt-row-guide::before,
+.performance-gantt-row-guide::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    transform: translateX(-50%);
+    border-left: 1px dashed rgba(59, 130, 246, 0.65);
+}
+
+.performance-gantt-row-guide::before {
+    left: var(--row-start);
+}
+
+.performance-gantt-row-guide::after {
+    left: var(--row-end);
+}
+
+.performance-gantt-row-tooltip {
+    position: absolute;
+    top: -26px;
+    right: 12px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    background: rgba(15, 23, 42, 0.85);
+    color: #fff;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(-6px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.performance-gantt-row:hover .performance-gantt-row-tooltip,
+.performance-gantt-row.is-selected .performance-gantt-row-tooltip {
+    opacity: 1;
+    transform: translateY(0);
 }
 
 .performance-gantt-row.is-selected .performance-gantt-label {
@@ -1660,10 +1742,11 @@ select {
 
 .performance-gantt-track {
     position: relative;
-    height: 16px;
+    height: 8px;
     border-radius: 999px;
-    background: rgba(226, 232, 240, 0.75);
-    border: 1px solid rgba(148, 163, 184, 0.22);
+    background: rgba(226, 232, 240, 0.8);
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
     overflow: hidden;
     width: calc(100% * var(--performance-gantt-zoom));
     min-width: calc(100% * var(--performance-gantt-zoom));
@@ -1671,18 +1754,23 @@ select {
 
 .performance-gantt-bar {
     position: absolute;
-    top: 2px;
-    height: 12px;
+    top: 1px;
+    height: 6px;
     border-radius: 999px;
-    box-shadow: 0 6px 12px rgba(15, 23, 42, 0.1);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: flex-start;
-    padding-left: 6px;
+    padding-left: 4px;
+    min-width: 16px;
+    border: 1px solid rgba(15, 23, 42, 0.12);
+    /* Borda + brilho dentro da barra para ficar nítido mesmo com largura pequena. */
+    box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.18), inset 0 0 0 1px rgba(255, 255, 255, 0.25), 0 1px 4px rgba(15, 23, 42, 0.12);
+    filter: none;
+    transition: transform 0.1s ease, box-shadow 0.1s ease;
 }
 .performance-gantt-bar-label {
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 700;
     color: rgba(255, 255, 255, 0.95);
     text-shadow: 0 0 2px rgba(15, 23, 42, 0.6);
@@ -1694,14 +1782,27 @@ select {
 
 .performance-gantt-bar.is-selected {
     box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.95), 0 0 0 4px rgba(37, 99, 235, 0.45), 0 10px 20px rgba(15, 23, 42, 0.18);
+    transform: translateY(-1px);
 }
 
 .performance-gantt-bar.is-prod {
-    background: linear-gradient(90deg, rgba(59, 130, 246, 0.95), rgba(37, 99, 235, 0.95));
+    background: linear-gradient(90deg, rgba(37, 99, 235, 1), rgba(59, 130, 246, 0.95));
+    border-color: rgba(29, 78, 216, 0.65);
+    box-shadow: 0 0 0 1px rgba(29, 78, 216, 0.75), inset 0 0 0 1px rgba(255, 255, 255, 0.25), 0 0 8px rgba(59, 130, 246, 0.55), 0 1px 4px rgba(15, 23, 42, 0.12);
 }
 
 .performance-gantt-bar.is-setup {
-    background: linear-gradient(90deg, rgba(245, 158, 11, 0.95), rgba(234, 88, 12, 0.95));
+    background: linear-gradient(90deg, rgba(234, 88, 12, 1), rgba(245, 158, 11, 0.98));
+    border-color: rgba(194, 65, 12, 0.65);
+    box-shadow: 0 0 0 1px rgba(194, 65, 12, 0.78), inset 0 0 0 1px rgba(255, 255, 255, 0.25), 0 0 8px rgba(245, 158, 11, 0.6), 0 1px 4px rgba(15, 23, 42, 0.12);
+}
+
+.performance-gantt-bar.is-selected.is-prod {
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.95), 0 0 0 4px rgba(37, 99, 235, 0.55), 0 0 10px rgba(59, 130, 246, 0.65), 0 10px 20px rgba(15, 23, 42, 0.18);
+}
+
+.performance-gantt-bar.is-selected.is-setup {
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.95), 0 0 0 4px rgba(234, 88, 12, 0.55), 0 0 10px rgba(245, 158, 11, 0.7), 0 10px 20px rgba(15, 23, 42, 0.18);
 }
 
 .performance-gantt-note {

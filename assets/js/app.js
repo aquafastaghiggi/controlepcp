@@ -4886,20 +4886,12 @@ function renderPerformanceAlternative(detail) {
                   const duration = Number(item?.sch_duracao_minutos) || 0;
                   const qty = item?.sch_quantidade ? `Qty ${item.sch_quantidade}` : '';
                   const title = `${item.label}\\n${formatDateTimeShortPt(item.start)} → ${formatDateTimeShortPt(item.end)}\\n${qty}${qty ? ' • ' : ''}${duration ? `${Math.floor(duration / 60)}h${duration % 60}m` : ''}`;
+                  // Mostrar texto dentro da barra com thresholds conservadores
+                  // Setup: 15% (texto curto) | Produção: 30% (texto potencialmente longo)
+                  const showTextInBar = item.isSetup ? widthPct >= 15 : widthPct >= 30;
                   const barTextRaw = item.isSetup ? 'Setup' : stripSeqPrefix(item.label);
-                  const mode = (() => {
-                    if (!barTextRaw) return 'none';
-                    if (item.isSetup) {
-                      if (widthPct >= 10) return 'always';
-                      if (widthPct >= 6) return 'hover';
-                      return 'none';
-                    }
-                    if (widthPct >= 18) return 'always';
-                    if (widthPct >= 8) return 'hover';
-                    return 'none';
-                  })();
-                  const barTextHtml = mode !== 'none'
-                    ? `<span class="performance-alt-item-bar-text" data-mode="${escapeHtml(mode)}">${escapeHtml(barTextRaw)}</span>`
+                  const barTextHtml = showTextInBar && barTextRaw
+                    ? `<span class="performance-alt-item-bar-text">${escapeHtml(barTextRaw)}</span>`
                     : '';
                   return `
                     <div class="performance-alt-item ${item.isSetup ? 'is-setup' : ''}${isLate ? ' is-late' : ''}" data-alt-idx="${item.idx}" data-seq="${escapeHtml(item.seq || '')}" data-op="${escapeHtml(item.op || '')}" data-bar-left="${leftPct}" data-bar-width="${widthPct}" title="${escapeHtml(title)}">

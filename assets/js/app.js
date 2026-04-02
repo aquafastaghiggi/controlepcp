@@ -5152,9 +5152,11 @@ function updatePerformanceTimelineSelection(dateKey) {
   return true;
 }
 
-function renderPerformanceTimeline(detail) {
-  const container = document.getElementById('performance-timeline');
-  const body = document.getElementById('performance-timeline-body');
+function renderPerformanceTimeline(detail, options = {}) {
+  const containerId = options?.containerId || 'performance-timeline';
+  const bodyId = options?.bodyId || 'performance-timeline-body';
+  const container = document.getElementById(containerId);
+  const body = document.getElementById(bodyId);
   if (!container || !body) return;
 
   console.log('DEBUG renderPerformanceTimeline - detail:', detail);
@@ -5537,7 +5539,7 @@ function renderPerformanceTimeline(detail) {
         const key = target.getAttribute('data-date-key') || '';
         if (!key) return;
         if (updatePerformanceTimelineSelection(key)) {
-          renderPerformanceTimeline(detail);
+          renderPerformanceTimeline(detail, options);
         }
       });
     }
@@ -5545,19 +5547,18 @@ function renderPerformanceTimeline(detail) {
     if (resetButton) {
       resetButton.addEventListener('click', () => {
         updatePerformanceTimelineSelection(null);
-        renderPerformanceTimeline(detail);
+        renderPerformanceTimeline(detail, options);
       });
     }
   }
 
   container.classList.remove('hidden');
-  syncPerformanceAltFromTimeline();
 
   // Adicionar listeners para filtros e interatividade
   if (container.dataset.timelineListener !== '1') {
     container.dataset.timelineListener = '1';
-    document.getElementById('performance-timeline-filter-prod')?.addEventListener('change', () => renderPerformanceTimeline(detail));
-    document.getElementById('performance-timeline-filter-setup')?.addEventListener('change', () => renderPerformanceTimeline(detail));
+    document.getElementById('performance-timeline-filter-prod')?.addEventListener('change', () => renderPerformanceTimeline(detail, options));
+    document.getElementById('performance-timeline-filter-setup')?.addEventListener('change', () => renderPerformanceTimeline(detail, options));
 
     // Listener para click nas barras do timeline
     container.addEventListener('click', (event) => {
@@ -5601,28 +5602,6 @@ function renderPerformanceTimeline(detail) {
       }
     });
   }
-}
-
-function syncPerformanceAltFromTimeline() {
-  const altContainer = document.getElementById('performance-alt');
-  const altBody = document.getElementById('performance-alt-body');
-  const altIndicator = document.getElementById('performance-alt-indicator');
-  const timelineBody = document.getElementById('performance-timeline-body');
-
-  if (!altContainer || !altBody || !timelineBody) return;
-
-  const timelineHtml = String(timelineBody.innerHTML || '').trim();
-  if (!timelineHtml) {
-    altBody.innerHTML = '<div class="muted">Nenhum evento válido encontrado.</div>';
-    altContainer.classList.remove('hidden');
-    if (altIndicator) altIndicator.style.display = 'none';
-    return;
-  }
-
-  // Espelha o gráfico principal na segunda área para manter visual e comportamento consistentes.
-  altBody.innerHTML = timelineHtml;
-  altContainer.classList.remove('hidden');
-  if (altIndicator) altIndicator.style.display = 'none';
 }
 
 function highlightAlternativeSelection(selectedIdx) {
@@ -5976,6 +5955,12 @@ function loadAndRenderPerformanceGantt(programId, compareProgramId = '') {
 
       renderPerformanceKpis(detailA, detailB);
       renderPerformanceDaily(detailA, detailB);
+      const timelinePrimary = document.getElementById('performance-timeline');
+      const altContainer = document.getElementById('performance-alt');
+      const altIndicator = document.getElementById('performance-alt-indicator');
+      if (timelinePrimary) timelinePrimary.classList.add('hidden');
+      if (altContainer) altContainer.classList.remove('hidden');
+      if (altIndicator) altIndicator.style.display = 'none';
       const scheduleTicksA = collectScheduleTickDates(detailA?.schedule);
       renderPerformanceGantt(detailA, {
         containerId: 'performance-gantt-a',
@@ -5986,8 +5971,10 @@ function loadAndRenderPerformanceGantt(programId, compareProgramId = '') {
         skuNameMap: skuNameMapA,
         tickDates: scheduleTicksA,
       });
-      renderPerformanceTimeline(detailA);
-      syncPerformanceAltFromTimeline();
+      renderPerformanceTimeline(detailA, {
+        containerId: 'performance-alt',
+        bodyId: 'performance-alt-body',
+      });
 
       if (idB && detailB) {
         if (blockB) blockB.classList.remove('is-hidden');

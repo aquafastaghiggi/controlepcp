@@ -2266,7 +2266,7 @@ select {
     justify-content: center;
     border-radius: 3px;
     opacity: 0.85;
-    transition: transform 180ms ease, opacity 120ms ease, box-shadow 120ms ease, filter 120ms ease;
+    transition: all 120ms ease;
     font-size: 10px;
     font-weight: 700;
     color: white;
@@ -2277,10 +2277,6 @@ select {
     --timeline-start-ms: 0;
     --timeline-end-ms: 0;
     --timeline-range-ms: 1;
-    --timeline-zoom-factor: 1;
-    --item-translate-y: 0px;
-    transform: translateY(var(--item-translate-y)) scaleX(1);
-    transform-origin: left center;
 }
 
 /* Tooltip customizado ao hover */
@@ -2330,7 +2326,7 @@ select {
         0 0 0 8px rgba(59, 130, 246, 0.15),
         0 4px 12px rgba(59, 130, 246, 0.25);
     z-index: 10;
-    --item-translate-y: -1px;
+    transform: translateY(-1px);
     filter: drop-shadow(0 0 6px rgba(59, 130, 246, 0.4));
 }
 
@@ -2384,17 +2380,6 @@ select {
 .performance-timeline-item.is-hover {
     opacity: 1;
     z-index: 8;
-}
-
-.performance-timeline-item.is-selected-day-bar {
-    opacity: 1;
-    z-index: 9;
-    transform: translateY(var(--item-translate-y)) scaleX(var(--timeline-zoom-factor));
-}
-
-.performance-timeline-item.is-outside-day-bar {
-    opacity: 0.24;
-    filter: saturate(0.55);
 }
 
 .performance-timeline-row.is-selected {

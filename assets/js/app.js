@@ -5380,16 +5380,8 @@ function renderPerformanceTimeline(detail) {
     const selectionState = ensurePerformanceTimelineSelectionState();
     const hasManualSelection = Boolean(selectionState.dateKey);
     const selectionDateKey = selectionState.dateKey;
-    const selectionStartDate = hasManualSelection && selectionDateKey ? new Date(`${selectionDateKey}T00:00:00`) : null;
-    const selectionStartMs = selectionStartDate && !Number.isNaN(selectionStartDate.getTime()) ? selectionStartDate.getTime() : null;
     const selectionEndDate = hasManualSelection ? parseDateKeyToEndOfDay(selectionDateKey) : null;
     const selectionEndMs = selectionEndDate ? selectionEndDate.getTime() : maxDate;
-
-    const totalRangeMs = Math.max(1, maxDate - earliestStartMs);
-    const selectedDayRangeMs = 24 * 60 * 60 * 1000;
-    const dayZoomFactor = hasManualSelection
-      ? Math.min(4, Math.max(1.35, totalRangeMs / selectedDayRangeMs))
-      : 1;
 
     const visibleOperationLines = operationLines.filter((op) => op.start.getTime() <= selectionEndMs);
     const timelineStartMs = earliestStartMs;
@@ -5475,8 +5467,11 @@ function renderPerformanceTimeline(detail) {
         const endMs = Math.min(itemEnd.getTime(), timelineEndMsClamped);
         const clampedStartMs = Math.max(startMs, timelineStartMs);
         if (endMs <= clampedStartMs) return '';
+        const renderEndMs = hasManualSelection
+          ? Math.max(endMs, selectionEndMs)
+          : endMs;
         const itemStartPct = ((clampedStartMs - timelineStartMs) / timelineRangeMs) * 100;
-        const itemWidthPct = ((endMs - clampedStartMs) / timelineRangeMs) * 100;
+        const itemWidthPct = ((renderEndMs - clampedStartMs) / timelineRangeMs) * 100;
         const itemStartTime = formatTimeOnlyPt(itemStart);
         const itemEndTime = formatTimeOnlyPt(itemEnd);
         
@@ -5508,13 +5503,7 @@ function renderPerformanceTimeline(detail) {
         const seqLabel = itemWidthPct < 8 ? itemSeq : `${itemSeq}`;
         const barLabel = itemWidthPct < 15 ? `${durFormatted}` : `${itemSeq} • ${durFormatted}`;
         
-        const intersectsSelectedDay = hasManualSelection
-          && Number.isFinite(selectionStartMs)
-          && Number.isFinite(selectionEndMs)
-          && (itemEnd.getTime() > selectionStartMs)
-          && (itemStart.getTime() < selectionEndMs);
-
-        return `<span class="performance-timeline-item ${isS ? 'is-setup' : 'is-prod'}" style="left:${itemStartPct.toFixed(4)}%; width:${itemWidthPct.toFixed(4)}%; --timeline-start-ms:${clampedStartMs}; --timeline-end-ms:${endMs}; --timeline-range-ms:${timelineRangeMs}; --timeline-zoom-factor:${dayZoomFactor.toFixed(3)};" data-item-start="${clampedStartMs}" data-item-end="${endMs}" data-item-type="${isS ? 'setup' : 'prod'}" data-item-date="${startDateKeyItem}" data-item-seq="${escapeHtml(itemSeq)}" data-item-duration="${durMin}" data-item-desc="${escapeHtml(item.sch_descricao || '')}" data-in-selected-day="${intersectsSelectedDay ? '1' : '0'}" title="${escapeHtml(item.sch_descricao || '')} ${itemStartTime} → ${itemEndTime}"><span class="performance-timeline-item-label">${labelContent}</span><span class="performance-timeline-item-info">${barLabel}</span></span>`;
+        return `<span class="performance-timeline-item ${isS ? 'is-setup' : 'is-prod'}" style="left:${itemStartPct.toFixed(4)}%; width:${itemWidthPct.toFixed(4)}%; --timeline-start-ms:${clampedStartMs}; --timeline-end-ms:${endMs}; --timeline-range-ms:${timelineRangeMs};" data-item-start="${clampedStartMs}" data-item-end="${endMs}" data-item-type="${isS ? 'setup' : 'prod'}" data-item-date="${startDateKeyItem}" data-item-seq="${escapeHtml(itemSeq)}" data-item-duration="${durMin}" data-item-desc="${escapeHtml(item.sch_descricao || '')}" title="${escapeHtml(item.sch_descricao || '')} ${itemStartTime} → ${itemEndTime}"><span class="performance-timeline-item-label">${labelContent}</span><span class="performance-timeline-item-info">${barLabel}</span></span>`;
       }).join('')}
             </div>
           </div>
@@ -5531,26 +5520,11 @@ function renderPerformanceTimeline(detail) {
     const contentHtml = visibleOperationLines.length ? lines : '<div class="muted">Nenhuma operação encontrada no período selecionado.</div>';
     body.innerHTML = headerHtml + contentHtml;
     
-    // Sincronizar destaque das barras com data selecionada
-    if (hasManualSelection && selectionState.dateKey) {
-      const allItems = body.querySelectorAll('.performance-timeline-item[data-in-selected-day]');
-      allItems.forEach((item) => {
-        const inSelectedDay = item.getAttribute('data-in-selected-day') === '1';
-        if (inSelectedDay) {
-          item.classList.add('is-selected-day-bar');
-          item.classList.remove('is-outside-day-bar');
-        } else {
-          item.classList.remove('is-selected-day-bar');
-          item.classList.add('is-outside-day-bar');
-        }
-      });
-    } else {
-      // Remove destaque quando deseleciona
-      const allItems = body.querySelectorAll('.performance-timeline-item');
-      allItems.forEach((item) => {
-        item.classList.remove('is-selected-day-bar', 'is-outside-day-bar', 'is-selected-date', 'is-faded');
-      });
-    }
+    // Limpa classes de destaque legadas para manter foco no comprimento das barras
+    const allItems = body.querySelectorAll('.performance-timeline-item');
+    allItems.forEach((item) => {
+      item.classList.remove('is-selected-day-bar', 'is-outside-day-bar', 'is-selected-date', 'is-faded');
+    });
     
     const headerScaleEl = container.querySelector('.performance-timeline-header-scale');
     if (headerScaleEl) {

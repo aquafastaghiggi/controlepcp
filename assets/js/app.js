@@ -5137,7 +5137,7 @@ function renderPerformanceAltConnectors() {
 
 function ensurePerformanceTimelineSelectionState() {
   if (!window.__performanceTimelineSelection) {
-    window.__performanceTimelineSelection = { dateKey: null };
+    window.__performanceTimelineSelection = { dateKey: null, forceAll: false };
   }
   return window.__performanceTimelineSelection;
 }
@@ -5145,10 +5145,12 @@ function ensurePerformanceTimelineSelectionState() {
 function updatePerformanceTimelineSelection(dateKey) {
   const state = ensurePerformanceTimelineSelectionState();
   const normalized = dateKey ? String(dateKey).trim() : null;
-  if (state.dateKey === normalized) {
+  const nextForceAll = normalized === null;
+  if (state.dateKey === normalized && Boolean(state.forceAll) === nextForceAll) {
     return false;
   }
   state.dateKey = normalized;
+  state.forceAll = nextForceAll;
   return true;
 }
 
@@ -5381,7 +5383,10 @@ function renderPerformanceTimeline(detail, options = {}) {
     const earliestStartMs = Math.min(...operationLines.map((op) => op.start.getTime()));
     const maxDate = Math.max(...operationLines.map((op) => op.end.getTime()));
     const selectionState = ensurePerformanceTimelineSelectionState();
-    const hasManualSelection = Boolean(selectionState.dateKey);
+    if (!selectionState.forceAll && !selectionState.dateKey && Number.isFinite(maxDate)) {
+      selectionState.dateKey = toDateKeyLocal(new Date(maxDate));
+    }
+    const hasManualSelection = Boolean(selectionState.dateKey) && !selectionState.forceAll;
     const selectionDateKey = selectionState.dateKey;
     const selectionEndDate = hasManualSelection ? parseDateKeyToEndOfDay(selectionDateKey) : null;
     const selectionEndMs = selectionEndDate ? selectionEndDate.getTime() : maxDate;

@@ -5137,7 +5137,7 @@ function renderPerformanceAltConnectors() {
 
 function ensurePerformanceTimelineSelectionState() {
   if (!window.__performanceTimelineSelection) {
-    window.__performanceTimelineSelection = { dateKey: null, forceAll: false };
+    window.__performanceTimelineSelection = { dateKey: null };
   }
   return window.__performanceTimelineSelection;
 }
@@ -5145,22 +5145,17 @@ function ensurePerformanceTimelineSelectionState() {
 function updatePerformanceTimelineSelection(dateKey) {
   const state = ensurePerformanceTimelineSelectionState();
   const normalized = dateKey ? String(dateKey).trim() : null;
-  const nextForceAll = normalized === null;
-  if (state.dateKey === normalized && Boolean(state.forceAll) === nextForceAll) {
+  if (state.dateKey === normalized) {
     return false;
   }
   state.dateKey = normalized;
-  state.forceAll = nextForceAll;
   return true;
 }
 
-function renderPerformanceTimeline(detail, options = {}) {
-  const containerId = options?.containerId || 'performance-timeline';
-  const bodyId = options?.bodyId || 'performance-timeline-body';
-  const container = document.getElementById(containerId);
-  const body = document.getElementById(bodyId);
+function renderPerformanceTimeline(detail) {
+  const container = document.getElementById('performance-timeline');
+  const body = document.getElementById('performance-timeline-body');
   if (!container || !body) return;
-  const rerenderTimeline = () => renderPerformanceTimeline(detail, options);
 
   console.log('DEBUG renderPerformanceTimeline - detail:', detail);
   console.log('DEBUG renderPerformanceTimeline - detail.programacao:', detail?.programacao);
@@ -5383,10 +5378,7 @@ function renderPerformanceTimeline(detail, options = {}) {
     const earliestStartMs = Math.min(...operationLines.map((op) => op.start.getTime()));
     const maxDate = Math.max(...operationLines.map((op) => op.end.getTime()));
     const selectionState = ensurePerformanceTimelineSelectionState();
-    if (!selectionState.forceAll && !selectionState.dateKey && Number.isFinite(maxDate)) {
-      selectionState.dateKey = toDateKeyLocal(new Date(maxDate));
-    }
-    const hasManualSelection = Boolean(selectionState.dateKey) && !selectionState.forceAll;
+    const hasManualSelection = Boolean(selectionState.dateKey);
     const selectionDateKey = selectionState.dateKey;
     const selectionEndDate = hasManualSelection ? parseDateKeyToEndOfDay(selectionDateKey) : null;
     const selectionEndMs = selectionEndDate ? selectionEndDate.getTime() : maxDate;
@@ -5545,7 +5537,7 @@ function renderPerformanceTimeline(detail, options = {}) {
         const key = target.getAttribute('data-date-key') || '';
         if (!key) return;
         if (updatePerformanceTimelineSelection(key)) {
-          rerenderTimeline();
+          renderPerformanceTimeline(detail);
         }
       });
     }
@@ -5553,18 +5545,19 @@ function renderPerformanceTimeline(detail, options = {}) {
     if (resetButton) {
       resetButton.addEventListener('click', () => {
         updatePerformanceTimelineSelection(null);
-        rerenderTimeline();
+        renderPerformanceTimeline(detail);
       });
     }
   }
 
   container.classList.remove('hidden');
+  syncPerformanceAltFromTimeline();
 
   // Adicionar listeners para filtros e interatividade
   if (container.dataset.timelineListener !== '1') {
     container.dataset.timelineListener = '1';
-    document.getElementById('performance-timeline-filter-prod')?.addEventListener('change', rerenderTimeline);
-    document.getElementById('performance-timeline-filter-setup')?.addEventListener('change', rerenderTimeline);
+    document.getElementById('performance-timeline-filter-prod')?.addEventListener('change', () => renderPerformanceTimeline(detail));
+    document.getElementById('performance-timeline-filter-setup')?.addEventListener('change', () => renderPerformanceTimeline(detail));
 
     // Listener para click nas barras do timeline
     container.addEventListener('click', (event) => {
@@ -5608,6 +5601,28 @@ function renderPerformanceTimeline(detail, options = {}) {
       }
     });
   }
+}
+
+function syncPerformanceAltFromTimeline() {
+  const altContainer = document.getElementById('performance-alt');
+  const altBody = document.getElementById('performance-alt-body');
+  const altIndicator = document.getElementById('performance-alt-indicator');
+  const timelineBody = document.getElementById('performance-timeline-body');
+
+  if (!altContainer || !altBody || !timelineBody) return;
+
+  const timelineHtml = String(timelineBody.innerHTML || '').trim();
+  if (!timelineHtml) {
+    altBody.innerHTML = '<div class="muted">Nenhum evento válido encontrado.</div>';
+    altContainer.classList.remove('hidden');
+    if (altIndicator) altIndicator.style.display = 'none';
+    return;
+  }
+
+  // Espelha o gráfico principal na segunda área para manter visual e comportamento consistentes.
+  altBody.innerHTML = timelineHtml;
+  altContainer.classList.remove('hidden');
+  if (altIndicator) altIndicator.style.display = 'none';
 }
 
 function highlightAlternativeSelection(selectedIdx) {
@@ -5961,25 +5976,33 @@ function loadAndRenderPerformanceGantt(programId, compareProgramId = '') {
 
       renderPerformanceKpis(detailA, detailB);
       renderPerformanceDaily(detailA, detailB);
-
-      // Mantem apenas o grafico novo: oculta o grafico antigo (performance-alt).
-      const altEl = document.getElementById('performance-alt');
-      if (altEl) altEl.classList.add('hidden');
-
-      // Substitui o gráfico de cima pelo timeline ajustado movendo o componente novo para o bloco A.
-      if (blockB) blockB.classList.add('is-hidden');
-      if (ganttB) ganttB.innerHTML = '';
-
-      const timelineEl = document.getElementById('performance-timeline');
-      if (ganttA && timelineEl && timelineEl.parentElement !== ganttA) {
-        ganttA.innerHTML = '';
-        ganttA.appendChild(timelineEl);
-      }
-      if (timelineEl) timelineEl.classList.remove('hidden');
-
+      const scheduleTicksA = collectScheduleTickDates(detailA?.schedule);
+      renderPerformanceGantt(detailA, {
+        containerId: 'performance-gantt-a',
+        scheduleOverride: schedA,
+        rangeStartMs: hasRange ? rangeStartMs : undefined,
+        rangeEndMs: hasRange ? rangeEndMs : undefined,
+        opMap: opMapA,
+        skuNameMap: skuNameMapA,
+        tickDates: scheduleTicksA,
+      });
       renderPerformanceTimeline(detailA);
+      syncPerformanceAltFromTimeline();
 
-      if (blockB) blockB.classList.add('is-hidden');
+      if (idB && detailB) {
+        if (blockB) blockB.classList.remove('is-hidden');
+        renderPerformanceGantt(detailB, {
+          containerId: 'performance-gantt-b',
+          scheduleOverride: schedB,
+          rangeStartMs: hasRange ? rangeStartMs : undefined,
+          rangeEndMs: hasRange ? rangeEndMs : undefined,
+          opMap: opMapB,
+          skuNameMap: skuNameMapB,
+        tickDates: collectScheduleTickDates(detailB?.schedule),
+        });
+      } else if (blockB) {
+        blockB.classList.add('is-hidden');
+      }
     })
     .catch((error) => {
       if (window.__performanceGanttLastRequest !== requestId) return;

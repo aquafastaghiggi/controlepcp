@@ -5152,10 +5152,13 @@ function updatePerformanceTimelineSelection(dateKey) {
   return true;
 }
 
-function renderPerformanceTimeline(detail) {
-  const container = document.getElementById('performance-timeline');
-  const body = document.getElementById('performance-timeline-body');
+function renderPerformanceTimeline(detail, options = {}) {
+  const containerId = options?.containerId || 'performance-timeline';
+  const bodyId = options?.bodyId || 'performance-timeline-body';
+  const container = document.getElementById(containerId);
+  const body = document.getElementById(bodyId);
   if (!container || !body) return;
+  const rerenderTimeline = () => renderPerformanceTimeline(detail, options);
 
   console.log('DEBUG renderPerformanceTimeline - detail:', detail);
   console.log('DEBUG renderPerformanceTimeline - detail.programacao:', detail?.programacao);
@@ -5537,7 +5540,7 @@ function renderPerformanceTimeline(detail) {
         const key = target.getAttribute('data-date-key') || '';
         if (!key) return;
         if (updatePerformanceTimelineSelection(key)) {
-          renderPerformanceTimeline(detail);
+          rerenderTimeline();
         }
       });
     }
@@ -5545,7 +5548,7 @@ function renderPerformanceTimeline(detail) {
     if (resetButton) {
       resetButton.addEventListener('click', () => {
         updatePerformanceTimelineSelection(null);
-        renderPerformanceTimeline(detail);
+        rerenderTimeline();
       });
     }
   }
@@ -5555,8 +5558,8 @@ function renderPerformanceTimeline(detail) {
   // Adicionar listeners para filtros e interatividade
   if (container.dataset.timelineListener !== '1') {
     container.dataset.timelineListener = '1';
-    document.getElementById('performance-timeline-filter-prod')?.addEventListener('change', () => renderPerformanceTimeline(detail));
-    document.getElementById('performance-timeline-filter-setup')?.addEventListener('change', () => renderPerformanceTimeline(detail));
+    document.getElementById('performance-timeline-filter-prod')?.addEventListener('change', rerenderTimeline);
+    document.getElementById('performance-timeline-filter-setup')?.addEventListener('change', rerenderTimeline);
 
     // Listener para click nas barras do timeline
     container.addEventListener('click', (event) => {
@@ -5953,33 +5956,20 @@ function loadAndRenderPerformanceGantt(programId, compareProgramId = '') {
 
       renderPerformanceKpis(detailA, detailB);
       renderPerformanceDaily(detailA, detailB);
-      const scheduleTicksA = collectScheduleTickDates(detailA?.schedule);
-      renderPerformanceGantt(detailA, {
-        containerId: 'performance-gantt-a',
-        scheduleOverride: schedA,
-        rangeStartMs: hasRange ? rangeStartMs : undefined,
-        rangeEndMs: hasRange ? rangeEndMs : undefined,
-        opMap: opMapA,
-        skuNameMap: skuNameMapA,
-        tickDates: scheduleTicksA,
-      });
       renderPerformanceAlternative(detailA);
-      renderPerformanceTimeline(detailA);
 
-      if (idB && detailB) {
-        if (blockB) blockB.classList.remove('is-hidden');
-        renderPerformanceGantt(detailB, {
-          containerId: 'performance-gantt-b',
-          scheduleOverride: schedB,
-          rangeStartMs: hasRange ? rangeStartMs : undefined,
-          rangeEndMs: hasRange ? rangeEndMs : undefined,
-          opMap: opMapB,
-          skuNameMap: skuNameMapB,
-        tickDates: collectScheduleTickDates(detailB?.schedule),
-        });
-      } else if (blockB) {
-        blockB.classList.add('is-hidden');
-      }
+      // Substitui o gráfico de cima pelo timeline ajustado, mantendo a estrutura existente.
+      if (blockB) blockB.classList.add('is-hidden');
+      if (ganttB) ganttB.innerHTML = '';
+      const legacyTimeline = document.getElementById('performance-timeline');
+      if (legacyTimeline) legacyTimeline.classList.add('hidden');
+
+      renderPerformanceTimeline(detailA, {
+        containerId: 'performance-gantt',
+        bodyId: 'performance-gantt-a',
+      });
+
+      if (blockB) blockB.classList.add('is-hidden');
     })
     .catch((error) => {
       if (window.__performanceGanttLastRequest !== requestId) return;

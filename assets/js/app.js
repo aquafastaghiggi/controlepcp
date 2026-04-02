@@ -5484,7 +5484,7 @@ function renderPerformanceTimeline(detail) {
           ? `${itemStartTimeCompact}→${itemEndTimeCompact}` 
           : `${dateCompact} ${itemStartTimeCompact}→${itemEndTimeCompact}`;
           
-        return `<span class="performance-timeline-item ${isS ? 'is-setup' : 'is-prod'}" style="left:${itemStartPct.toFixed(4)}%; width:${itemWidthPct.toFixed(4)}%; --timeline-start-ms:${clampedStartMs}; --timeline-end-ms:${endMs}; --timeline-range-ms:${timelineRangeMs};" data-item-start="${clampedStartMs}" data-item-end="${endMs}" data-item-type="${isS ? 'setup' : 'prod'}" title="${escapeHtml(item.sch_descricao || '')} ${itemStartTime} → ${itemEndTime}"><span class="performance-timeline-item-label">${labelContent}</span></span>`;
+        return `<span class="performance-timeline-item ${isS ? 'is-setup' : 'is-prod'}" style="left:${itemStartPct.toFixed(4)}%; width:${itemWidthPct.toFixed(4)}%; --timeline-start-ms:${clampedStartMs}; --timeline-end-ms:${endMs}; --timeline-range-ms:${timelineRangeMs};" data-item-start="${clampedStartMs}" data-item-end="${endMs}" data-item-type="${isS ? 'setup' : 'prod'}" data-item-date="${startDateKeyItem}" title="${escapeHtml(item.sch_descricao || '')} ${itemStartTime} → ${itemEndTime}"><span class="performance-timeline-item-label">${labelContent}</span></span>`;
       }).join('')}
             </div>
           </div>
@@ -5500,6 +5500,28 @@ function renderPerformanceTimeline(detail) {
 
     const contentHtml = visibleOperationLines.length ? lines : '<div class="muted">Nenhuma operação encontrada no período selecionado.</div>';
     body.innerHTML = headerHtml + contentHtml;
+    
+    // Sincronizar highlight das barras com data selecionada
+    if (hasManualSelection && selectionState.dateKey) {
+      const allItems = body.querySelectorAll('.performance-timeline-item[data-item-date]');
+      allItems.forEach((item) => {
+        const itemDate = item.getAttribute('data-item-date') || '';
+        if (itemDate === selectionState.dateKey) {
+          item.classList.add('is-selected-date');
+          item.classList.remove('is-faded');
+        } else {
+          item.classList.remove('is-selected-date');
+          item.classList.add('is-faded');
+        }
+      });
+    } else {
+      // Remove highlight quando deseleciona
+      const allItems = body.querySelectorAll('.performance-timeline-item');
+      allItems.forEach((item) => {
+        item.classList.remove('is-selected-date', 'is-faded');
+      });
+    }
+    
     const headerScaleEl = container.querySelector('.performance-timeline-header-scale');
     if (headerScaleEl) {
       headerScaleEl.addEventListener('click', (event) => {

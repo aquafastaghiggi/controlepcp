@@ -505,6 +505,7 @@ if ($rawFeatureFlags !== '') {
                             <div id="performance-gantt-b"></div>
                         </div>
                     </div>
+                    <!-- Gráfico Original (Dias em Linha) -->
                     <div id="performance-alt" class="performance-alt hidden">
                         <div id="performance-alt-indicator" class="performance-alt-indicator">
                             <label class="performance-alt-filter">
@@ -519,6 +520,23 @@ if ($rawFeatureFlags !== '') {
                         <div class="performance-alt-title">Layout alternativo em constru&ccedil;&atilde;o...</div>
                         <div class="performance-alt-body" id="performance-alt-body"></div>
                     </div>
+
+                    <!-- Novo Gráfico Timeline (Horizontal) - PARALELO -->
+                    <div id="performance-timeline" class="performance-timeline hidden">
+                        <div id="performance-timeline-controls" class="performance-timeline-controls">
+                            <label class="performance-timeline-filter">
+                                <input type="checkbox" id="performance-timeline-filter-prod" checked>
+                                <span>Produ&ccedil;&atilde;o</span>
+                            </label>
+                            <label class="performance-timeline-filter">
+                                <input type="checkbox" id="performance-timeline-filter-setup" checked>
+                                <span>Setup</span>
+                            </label>
+                        </div>
+                        <div class="performance-timeline-title">Linha de Tempo - Operações por Data</div>
+                        <div class="performance-timeline-body" id="performance-timeline-body"></div>
+                    </div>
+
                     <div id="performance-daily" class="performance-daily"></div>
                 </section>
 

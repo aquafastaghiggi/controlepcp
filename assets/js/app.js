@@ -5135,6 +5135,347 @@ function renderPerformanceAltConnectors() {
   });
 }
 
+function renderPerformanceTimeline(detail) {
+  const container = document.getElementById('performance-timeline');
+  const body = document.getElementById('performance-timeline-body');
+  if (!container || !body) return;
+
+  console.log('DEBUG renderPerformanceTimeline - detail:', detail);
+  console.log('DEBUG renderPerformanceTimeline - detail.programacao:', detail?.programacao);
+  const programacaoOp = detail?.programacao?.prg_numero_op || '';
+  console.log('DEBUG programacaoOp:', programacaoOp);
+
+  const scheduleRows = detail?.schedule || [];
+  if (!scheduleRows.length) {
+    body.innerHTML = '<div class="muted">Nenhum evento válido encontrado.</div>';
+    container.classList.add('hidden');
+    return;
+  }
+
+  // Reutilizar helpers de renderPerformanceAlternative
+  const parseLocalDateTime = (dateStr, timeStr) => {
+    if (!dateStr || !timeStr) return null;
+    try {
+      const dt = new Date(`${dateStr}T${timeStr}`);
+      return Number.isNaN(dt.getTime()) ? null : dt;
+    } catch (e) {
+      return null;
+    }
+  };
+
+  const parseLocalDateTimeFromSql = (sqlDateTimeStr) => {
+    if (!sqlDateTimeStr) return null;
+    try {
+      const normalized = String(sqlDateTimeStr || '').replace(' ', 'T');
+      const dt = new Date(normalized);
+      return Number.isNaN(dt.getTime()) ? null : dt;
+    } catch (e) {
+      return null;
+    }
+  };
+
+  const formatTimeOnlyPt = (dateObj) => {
+    if (!dateObj || Number.isNaN(dateObj.getTime())) return '--:--';
+    return `${String(dateObj.getHours()).padStart(2, '0')}:${String(dateObj.getMinutes()).padStart(2, '0')}`;
+  };
+
+  const formatDateOnlyPtShort = (dateObj) => {
+    if (!dateObj || Number.isNaN(dateObj.getTime())) return '--/--';
+    return `${String(dateObj.getDate()).padStart(2, '0')}/${String(dateObj.getMonth() + 1).padStart(2, '0')}`;
+  };
+
+  const formatWeekdayShortPt = (dateKey) => {
+    if (!dateKey) return '';
+    try {
+      const dt = new Date(`${dateKey}T00:00`);
+      const days = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
+      return days[dt.getDay()] || '';
+    } catch (e) {
+      return '';
+    }
+  };
+
+  const toDateKeyLocal = (dateObj) => {
+    if (!dateObj || Number.isNaN(dateObj.getTime())) return '';
+    const y = dateObj.getFullYear();
+    const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const d = String(dateObj.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+
+  const formatDateKeyPt = (dateKey) => {
+    if (!dateKey) return '';
+    const parts = dateKey.split('-');
+    if (parts.length !== 3) return dateKey;
+    return `${parts[2]}/${parts[1]}`;
+  };
+
+  const toMin = (start, end) => {
+    if (!start || !end) return 0;
+    return Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000));
+  };
+
+  const formatDurationMinutesToHHMM = (totalMinutes) => {
+    const min = Math.abs(Math.floor(totalMinutes || 0));
+    const h = Math.floor(min / 60);
+    const m = min % 60;
+    return `${h}h${m}m`;
+  };
+
+  const escapeHtml = (text) => {
+    if (!text) return '';
+    const map = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#039;',
+    };
+    return String(text).replace(/[&<>"']/g, (char) => map[char]);
+  };
+
+  const stripSeqPrefix = (value) => String(value || '').replace(/^\s*\d+\s*-\s*/g, '').trim();
+
+  // Coleta informações operacionais
+  const opMap = new Map();
+  scheduleRows.forEach((row) => {
+    const seq = String(row?.sch_sequencia || '').trim();
+    if (seq && !opMap.has(seq)) {
+      opMap.set(seq, seq);
+    }
+  });
+
+  // Agrupa por operação (seq)
+  const showProd = document.getElementById('performance-timeline-filter-prod')?.checked ?? true;
+  const showSetup = document.getElementById('performance-timeline-filter-setup')?.checked ?? true;
+  const filterPredicate = (row) => {
+    const isSetup = String(row?.sch_tipo || '').trim().toLowerCase() === 'setup';
+    if (isSetup && !showSetup) return false;
+    if (!isSetup && !showProd) return false;
+    return true;
+  };
+
+  const operationLines = [];
+  const seenSeqs = new Set();
+
+  scheduleRows.filter(filterPredicate).forEach((row, idx) => {
+    const start = parseLocalDateTime(row?.sch_data_inicio, row?.sch_hora_inicio) || parseLocalDateTimeFromSql(row?.sch_inicio_producao);
+    const end = parseLocalDateTime(row?.sch_data_inicio, row?.sch_hora_fim) || parseLocalDateTimeFromSql(row?.sch_fim_producao);
+    if (!start || !end) return;
+
+    const seqKey = String(row?.sch_sequencia || '').trim();
+    const isSetup = String(row?.sch_tipo || '').trim().toLowerCase() === 'setup';
+    const label = row?.sch_sequencia ? `${row.sch_sequencia} - ${row.sch_descricao}` : row.sch_descricao || 'Produção';
+
+    if (!seenSeqs.has(seqKey)) {
+      seenSeqs.add(seqKey);
+      const items = scheduleRows.filter((r) => String(r?.sch_sequencia || '').trim() === seqKey);
+      const itemsFiltered = items.filter(filterPredicate);
+      if (itemsFiltered.length === 0) return;
+
+      const startMinAll = Math.min(...itemsFiltered.map((r) => {
+        const s = parseLocalDateTime(r?.sch_data_inicio, r?.sch_hora_inicio) || parseLocalDateTimeFromSql(r?.sch_inicio_producao);
+        return s?.getTime?.() || Number.MAX_SAFE_INTEGER;
+      }));
+      const endMaxAll = Math.max(...itemsFiltered.map((r) => {
+        const e = parseLocalDateTime(r?.sch_data_inicio, r?.sch_hora_fim) || parseLocalDateTimeFromSql(r?.sch_fim_producao);
+        return e?.getTime?.() || 0;
+      }));
+
+      const opStart = new Date(startMinAll);
+      const opEnd = new Date(endMaxAll);
+
+      const prodMin = itemsFiltered.reduce((sum, r) => {
+        const s = parseLocalDateTime(r?.sch_data_inicio, r?.sch_hora_inicio) || parseLocalDateTimeFromSql(r?.sch_inicio_producao);
+        const e = parseLocalDateTime(r?.sch_data_inicio, r?.sch_hora_fim) || parseLocalDateTimeFromSql(r?.sch_fim_producao);
+        const isS = String(r?.sch_tipo || '').trim().toLowerCase() === 'setup';
+        return sum + (!isS ? toMin(s, e) : 0);
+      }, 0);
+
+      const setupMin = itemsFiltered.reduce((sum, r) => {
+        const s = parseLocalDateTime(r?.sch_data_inicio, r?.sch_hora_inicio) || parseLocalDateTimeFromSql(r?.sch_inicio_producao);
+        const e = parseLocalDateTime(r?.sch_data_inicio, r?.sch_hora_fim) || parseLocalDateTimeFromSql(r?.sch_fim_producao);
+        const isS = String(r?.sch_tipo || '').trim().toLowerCase() === 'setup';
+        return sum + (isS ? toMin(s, e) : 0);
+      }, 0);
+
+      const op = String(itemsFiltered.find((r) => String(r?.sch_sequencia || '').trim() === seqKey)?.sch_sequencia || '').trim();
+      const firstItem = itemsFiltered.find((r) => String(r?.sch_sequencia || '').trim() === seqKey);
+      let numProgramacao = String(firstItem?.prg_itens_op || firstItem?.sch_numero_programacao || firstItem?.prg_numero_op || firstItem?.numero_programacao || '').trim();
+      console.log('SEQ:', seqKey, 'prg_itens_op:', firstItem?.prg_itens_op, 'numProgramacao final:', numProgramacao);
+      const prodLabel = stripSeqPrefix(itemsFiltered.find((r) => !String(r?.sch_tipo || '').trim().toLowerCase().includes('setup'))?.sch_descricao || label);
+
+      operationLines.push({
+        seq: seqKey,
+        op,
+        numProgramacao,
+        label: prodLabel,
+        start: opStart,
+        end: opEnd,
+        prodMin,
+        setupMin,
+        items: itemsFiltered,
+      });
+    }
+  });
+
+  // Renderizar timelines
+  if (!operationLines.length) {
+    body.innerHTML = '<div class="muted">Nenhuma operação encontrada com os filtros aplicados.</div>';
+  } else {
+    const minDate = Math.min(...operationLines.map((op) => op.start.getTime()));
+    const maxDate = Math.max(...operationLines.map((op) => op.end.getTime()));
+    const dateRangeMs = maxDate - minDate;
+
+    // Gerar datas únicas para o header
+    const minDateObj = new Date(minDate);
+    const maxDateObj = new Date(maxDate);
+    const dateHeaderItems = [];
+    const currentDate = new Date(minDateObj);
+    currentDate.setHours(0, 0, 0, 0);
+
+    while (currentDate <= maxDateObj) {
+      const dateKey = toDateKeyLocal(currentDate);
+      const weekday = formatWeekdayShortPt(dateKey);
+      const formatted = formatDateKeyPt(dateKey);
+      const leftPct = ((currentDate.getTime() - minDate) / dateRangeMs) * 100;
+      dateHeaderItems.push({
+        dateKey,
+        weekday,
+        formatted,
+        leftPct,
+        dateObj: new Date(currentDate),
+      });
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    // Renderizar header de datas
+    const headerHtml = `
+      <div class="performance-timeline-header">
+        <div class="performance-timeline-header-spacer"></div>
+        <div class="performance-timeline-header-scale">
+          <div class="performance-timeline-header-container">
+            ${dateHeaderItems.map((item) => `
+              <div class="performance-timeline-header-item" style="left:${item.leftPct.toFixed(2)}%;">
+                <div class="performance-timeline-header-label">${escapeHtml(item.weekday)}</div>
+                <div class="performance-timeline-header-date">${escapeHtml(item.formatted)}</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+        <div class="performance-timeline-header-info"></div>
+      </div>
+    `;
+
+    const lines = operationLines.map((op) => {
+      const opStartPct = ((op.start.getTime() - minDate) / dateRangeMs) * 100;
+      const opWidthPct = ((op.end.getTime() - op.start.getTime()) / dateRangeMs) * 100;
+      const startDateKey = toDateKeyLocal(op.start);
+      const endDateKey = toDateKeyLocal(op.end);
+      const startWeekday = formatWeekdayShortPt(startDateKey);
+      const startDateFormatted = formatDateKeyPt(startDateKey);
+      const startTime = formatTimeOnlyPt(op.start);
+      const endTime = formatTimeOnlyPt(op.end);
+
+      return `
+        <div class="performance-timeline-row-wrapper">
+          <div class="performance-timeline-row-op-info">OP: ${escapeHtml(op.numProgramacao)} / Seq ${escapeHtml(op.seq)}</div>
+          <div class="performance-timeline-row">
+            <div class="performance-timeline-row-header">
+              <div class="performance-timeline-row-seq">${escapeHtml(op.label)}</div>
+            </div>
+          <div class="performance-timeline-row-bars" style="position:relative; flex:1;">
+            <div class="performance-timeline-bar-container">
+              ${op.items.map((item) => {
+        const itemStart = parseLocalDateTime(item?.sch_data_inicio, item?.sch_hora_inicio) || parseLocalDateTimeFromSql(item?.sch_inicio_producao);
+        const itemEnd = parseLocalDateTime(item?.sch_data_inicio, item?.sch_hora_fim) || parseLocalDateTimeFromSql(item?.sch_fim_producao);
+        if (!itemStart || !itemEnd) return '';
+        const isS = String(item?.sch_tipo || '').trim().toLowerCase() === 'setup';
+        const itemStartPct = ((itemStart.getTime() - minDate) / dateRangeMs) * 100;
+        const itemWidthPct = ((itemEnd.getTime() - itemStart.getTime()) / dateRangeMs) * 100;
+        const itemStartTime = formatTimeOnlyPt(itemStart);
+        const itemEndTime = formatTimeOnlyPt(itemEnd);
+        
+        // Opção A+B: Formato adaptativo com horários sem segundos
+        const itemStartTimeCompact = itemStartTime.split(':').slice(0, 2).join(':'); // HH:MM
+        const itemEndTimeCompact = itemEndTime.split(':').slice(0, 2).join(':'); // HH:MM
+        const startDateKeyItem = toDateKeyLocal(itemStart); // YYYY-MM-DD
+        const dateParts = startDateKeyItem.split('-'); // [YYYY, MM, DD]
+        const dateCompact = `${parseInt(dateParts[2])}/${parseInt(dateParts[1])}`; // DD/M (sem zeros)
+        
+        // Se barra é fina (<5%), mostrar só horários; senão, mostrar data + horários
+        const labelContent = itemWidthPct < 5 
+          ? `${itemStartTimeCompact}→${itemEndTimeCompact}` 
+          : `${dateCompact} ${itemStartTimeCompact}→${itemEndTimeCompact}`;
+          
+        return `<span class="performance-timeline-item ${isS ? 'is-setup' : 'is-prod'}" style="left:${itemStartPct.toFixed(2)}%; width:${itemWidthPct.toFixed(2)}%;" title="${escapeHtml(item.sch_descricao || '')} ${itemStartTime} → ${itemEndTime}"><span class="performance-timeline-item-label">${labelContent}</span></span>`;
+      }).join('')}
+            </div>
+          </div>
+          <div class="performance-timeline-row-info">
+            <small>${startWeekday} ${startDateFormatted} ${startTime}</small>
+            <small>→</small>
+            <small>${formatDateKeyPt(endDateKey)} ${endTime}</small>
+          </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    body.innerHTML = headerHtml + lines;
+  }
+
+  container.classList.remove('hidden');
+
+  // Adicionar listeners para filtros e interatividade
+  if (container.dataset.timelineListener !== '1') {
+    container.dataset.timelineListener = '1';
+    document.getElementById('performance-timeline-filter-prod')?.addEventListener('change', () => renderPerformanceTimeline(detail));
+    document.getElementById('performance-timeline-filter-setup')?.addEventListener('change', () => renderPerformanceTimeline(detail));
+
+    // Listener para click nas barras do timeline
+    container.addEventListener('click', (event) => {
+      const timelineItem = event.target.closest('.performance-timeline-item');
+      if (timelineItem && window.__performanceAltState) {
+        // Procurar o idx do item clicado
+        const titleAttr = timelineItem.getAttribute('title');
+        const itemDescription = titleAttr ? titleAttr.split(' ')[0] : '';
+        
+        // Tentar encontrar o item no estado
+        const body = document.getElementById('performance-alt-body');
+        if (body) {
+          const items = Array.from(body.querySelectorAll('[data-alt-idx]'));
+          const matchedItem = items.find((item) => {
+            const label = item.querySelector('.performance-alt-item-label');
+            return label && label.textContent.includes(itemDescription);
+          });
+          
+          if (matchedItem) {
+            const idx = matchedItem.getAttribute('data-alt-idx');
+            setPerformanceGanttSelection('performance-gantt-a', idx);
+            updatePerformanceAltSummary();
+            highlightAlternativeSelection(idx);
+          }
+        }
+      }
+    });
+
+    // Sincronizar hover no timeline com arquivo antigo
+    container.addEventListener('mouseover', (event) => {
+      const timelineItem = event.target.closest('.performance-timeline-item');
+      if (timelineItem) {
+        timelineItem.classList.add('is-hover');
+      }
+    });
+
+    container.addEventListener('mouseout', (event) => {
+      const timelineItem = event.target.closest('.performance-timeline-item');
+      if (timelineItem) {
+        timelineItem.classList.remove('is-hover');
+      }
+    });
+  }
+}
 
 function highlightAlternativeSelection(selectedIdx) {
   const body = document.getElementById('performance-alt-body');
@@ -5498,6 +5839,7 @@ function loadAndRenderPerformanceGantt(programId, compareProgramId = '') {
         tickDates: scheduleTicksA,
       });
       renderPerformanceAlternative(detailA);
+      renderPerformanceTimeline(detailA);
 
       if (idB && detailB) {
         if (blockB) blockB.classList.remove('is-hidden');

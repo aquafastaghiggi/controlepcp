@@ -2184,7 +2184,7 @@ select {
 .performance-timeline-row-wrapper {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 12px;
 }
 
 .performance-timeline-row-op-info {
@@ -2201,7 +2201,7 @@ select {
     grid-template-columns: 240px 1fr 160px;
     gap: 12px;
     align-items: center;
-    padding: 12px 14px;
+    padding: 16px 14px;
     background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.9));
     border-radius: 8px;
     border: 1px solid rgba(148, 163, 184, 0.3);
@@ -2245,7 +2245,7 @@ select {
 
 .performance-timeline-row-bars {
     position: relative;
-    height: 44px;
+    height: 60px;
     background: rgba(148, 163, 184, 0.1);
     border-radius: 4px;
     overflow: hidden;
@@ -2344,12 +2344,17 @@ select {
 
 /* Header Temporal com Datas */
 .performance-timeline-header {
+    position: sticky;
+    top: 16px;
     display: grid;
-    grid-template-columns: 180px 1fr 160px;
+    grid-template-columns: 240px 1fr 160px;
     gap: 12px;
     padding: 0 0 12px 0;
-    border-bottom: 2px solid rgba(59, 130, 246, 0.2);
     margin-bottom: 8px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.95));
+    border-bottom: 2px solid rgba(59, 130, 246, 0.2);
+    box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
+    z-index: 6;
 }
 
 .performance-timeline-header-spacer {
@@ -2369,6 +2374,40 @@ select {
     position: relative;
     width: 100%;
     height: 100%;
+    z-index: 1;
+}
+
+.performance-timeline-selection-range {
+    position: absolute;
+    inset: 0;
+    background: rgba(37, 99, 235, 0.15);
+    border-radius: 6px;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.performance-timeline-header-info {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+}
+
+.performance-timeline-reset {
+    border: none;
+    background: #2563eb;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 999px;
+    cursor: pointer;
+    box-shadow: 0 4px 10px rgba(15, 23, 42, 0.15);
+    transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.performance-timeline-reset:hover {
+    background: #1d4ed8;
+    transform: translateY(-1px);
 }
 
 .performance-timeline-header-item {
@@ -2382,10 +2421,21 @@ select {
     justify-content: flex-start;
     padding-top: 6px;
     gap: 3px;
-    pointer-events: none;
     background: linear-gradient(to bottom, rgba(59, 130, 246, 0.3), transparent);
     border-left: 2px solid rgba(59, 130, 246, 0.4);
     margin-left: -1px;
+}
+
+.performance-timeline-header-item.is-selected {
+    border-left-color: #2563eb;
+    background: linear-gradient(to bottom, rgba(37, 99, 235, 0.25), rgba(37, 99, 235, 0));
+    pointer-events: auto;
+}
+
+.performance-timeline-header-item.is-selected .performance-timeline-header-label,
+.performance-timeline-header-item.is-selected .performance-timeline-header-date {
+    background: rgba(37, 99, 235, 0.2);
+    color: #1e3a8a;
 }
 
 .performance-timeline-header-label {
@@ -2423,6 +2473,10 @@ select {
         grid-template-columns: 100px 1fr 120px;
         gap: 8px;
         padding: 8px;
+    }
+
+    .performance-timeline-header {
+        grid-template-columns: 100px 1fr 120px;
     }
 
     .performance-timeline-row-seq {

@@ -5384,21 +5384,10 @@ function renderPerformanceTimeline(detail) {
     const selectionEndMs = selectionEndDate ? selectionEndDate.getTime() : maxDate;
 
     const visibleOperationLines = operationLines.filter((op) => op.start.getTime() <= selectionEndMs);
-    
-    // ETAPA 4A: Recalcular range dinâmico com zoom no dia selecionado
-    let timelineStartMs, timelineEndMsClamped;
-    
-    if (hasManualSelection && selectionDateKey) {
-      // Quando tem seleção: zoom em 24h do dia selecionado (00:00 → 23:59:59)
-      const selectedDate = new Date(`${selectionDateKey}T00:00:00`);
-      timelineStartMs = selectedDate.getTime();
-      timelineEndMsClamped = selectionEndDate.getTime();
-    } else {
-      // Full range: de earliest até latest
-      timelineStartMs = earliestStartMs;
-      timelineEndMsClamped = maxDate;
-    }
-    
+    const timelineStartMs = earliestStartMs;
+    const timelineEndMsClamped = hasManualSelection
+      ? Math.max(selectionEndMs, timelineStartMs + 1)
+      : maxDate;
     const timelineRangeMs = Math.max(1, timelineEndMsClamped - timelineStartMs);
 
     // Gerar datas únicas para o header

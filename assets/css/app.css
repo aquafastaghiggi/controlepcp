@@ -2272,6 +2272,11 @@ select {
     color: white;
     cursor: pointer;
     min-width: 4px;
+    will-change: box-shadow, opacity, transform;
+    /* Custom properties para sincronismo e precisão */
+    --timeline-start-ms: 0;
+    --timeline-end-ms: 0;
+    --timeline-range-ms: 1;
 }
 
 .performance-timeline-item.is-setup {

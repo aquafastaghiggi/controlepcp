@@ -5539,6 +5539,9 @@ function renderPerformanceTimeline(detail, options = {}) {
     const nowMs = now.getTime();
     const isNowInRange = nowMs >= timelineStartMs && nowMs <= timelineEndMsClamped;
     const nowPct = isNowInRange ? ((nowMs - timelineStartMs) / timelineRangeMs) * 100 : -1;
+    
+    // Armazenar para o intervalo acessar depois
+    window.__performanceTimelineRange = { timelineStartMs, timelineEndMsClamped, timelineRangeMs };
 
     // Renderizar header de datas
     const headerHtml = `
@@ -5704,9 +5707,16 @@ function renderPerformanceTimeline(detail, options = {}) {
   // ========== ETAPA 3: Atualizar continuamente marcador "AGORA" em tempo real ==========
   const updateNowMarker = () => {
     const nowMarker = body.querySelector('.performance-timeline-now-marker');
-    if (nowMarker && isNowInRange) {
-      const nowMs = new Date().getTime();
-      const newNowPct = ((nowMs - timelineStartMs) / timelineRangeMs) * 100;
+    if (!nowMarker) return;
+    
+    const range = window.__performanceTimelineRange;
+    if (!range) return;
+    
+    const nowMs = new Date().getTime();
+    const isNowInRange = nowMs >= range.timelineStartMs && nowMs <= range.timelineEndMsClamped;
+    
+    if (isNowInRange) {
+      const newNowPct = ((nowMs - range.timelineStartMs) / range.timelineRangeMs) * 100;
       
       if (newNowPct >= 0 && newNowPct <= 100) {
         nowMarker.style.left = `${newNowPct.toFixed(2)}%`;

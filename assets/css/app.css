@@ -2198,7 +2198,7 @@ select {
     display: flex;
     flex-direction: column;
     gap: 0;
-    padding: 20px;
+    padding: 16px 20px;
     background: rgba(248, 250, 252, 0.5);
     border-radius: 10px;
     border: 1px solid rgba(148, 163, 184, 0.3);
@@ -2306,7 +2306,7 @@ select {
     flex-direction: column;
     gap: 0;
     min-height: 120px;
-    padding-top: 12px;
+    padding-top: 4px;
     position: relative;
 }
 
@@ -2314,7 +2314,7 @@ select {
 .performance-timeline-legend {
     display: flex;
     gap: 24px;
-    margin-bottom: 16px;
+    margin-bottom: 8px;
     font-size: 12px;
     padding: 0 4px;
 }
@@ -2363,8 +2363,8 @@ select {
     grid-template-columns: 120px 1fr 140px;
     gap: 12px;
     align-items: center;
-    padding: 8px 14px;
-    margin-bottom: 8px;
+    padding: 4px 14px;
+    margin-bottom: 2px;
     background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.9));
     border-radius: 8px;
     border: 1px solid rgba(148, 163, 184, 0.3);
@@ -2704,8 +2704,8 @@ select {
     display: grid;
     grid-template-columns: repeat(5, 1fr);
     gap: 12px;
-    margin-top: -8px;
-    padding: 16px;
+    margin-top: -12px;
+    padding: 14px 16px;
     background: linear-gradient(135deg, rgba(59, 130, 246, 0.06) 0%, rgba(99, 102, 241, 0.03) 100%);
     border: 1px solid rgba(59, 130, 246, 0.12);
     border-radius: 12px;
@@ -2714,8 +2714,8 @@ select {
 .performance-timeline-summary-card {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    padding: 12px;
+    gap: 4px;
+    padding: 8px;
     background: rgba(255, 255, 255, 0.8);
     border: 1px solid rgba(59, 130, 246, 0.15);
     border-radius: 8px;
@@ -2742,8 +2742,8 @@ select {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
     gap: 16px;
-    margin-top: -6px;
-    padding: 16px;
+    margin-top: -10px;
+    padding: 14px 16px;
     background: linear-gradient(135deg, rgba(248, 250, 252, 0.9), rgba(240, 249, 255, 0.85));
     border: 1px solid rgba(59, 130, 246, 0.1);
     border-radius: 12px;

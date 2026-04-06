@@ -5749,6 +5749,16 @@ function renderPerformanceTimeline(detail, options = {}) {
       : 0;
     const highlightWidthPct = hasManualSelection ? Math.max(0, highlightEndPct - highlightStartPct) : 0;
 
+    const selectedHeaderIndex = dateHeaderItems.findIndex((item) => item.dateKey === selectedHeaderDate);
+    const selectedHeaderItem = selectedHeaderIndex >= 0 ? dateHeaderItems[selectedHeaderIndex] : null;
+    const highlightTickLeftPct = selectedHeaderItem ? selectedHeaderItem.leftPct : highlightStartPct;
+    let highlightTickWidthPct = highlightWidthPct;
+    if (selectedHeaderItem && selectedHeaderIndex >= 0 && selectedHeaderIndex < dateHeaderItems.length - 1) {
+      const nextItem = dateHeaderItems[selectedHeaderIndex + 1];
+      const nextGap = Math.max(0, nextItem.leftPct - selectedHeaderItem.leftPct);
+      highlightTickWidthPct = Math.max(highlightTickWidthPct, nextGap);
+    }
+
     // ========== ETAPA 3: Calcular posição do marcador "AGORA" ==========
     const now = new Date();
     const nowMs = now.getTime();
@@ -5763,7 +5773,7 @@ function renderPerformanceTimeline(detail, options = {}) {
         <div class="performance-timeline-header">
           <div class="performance-timeline-header-spacer"></div>
           <div class="performance-timeline-header-scale">
-           ${highlightWidthPct > 0 ? `<span class="performance-timeline-selection-range" style="left:${highlightStartPct.toFixed(4)}%; width:${highlightWidthPct.toFixed(4)}%;"></span>` : ''}
+            ${highlightTickWidthPct > 0 ? `<span class="performance-timeline-selection-range" style="left:${highlightTickLeftPct.toFixed(4)}%; width:${highlightTickWidthPct.toFixed(4)}%;"></span>` : ''}
            <div class="performance-timeline-header-container">
               ${dateHeaderItems.map((item, idx) => `
                 <div class="performance-timeline-header-item${item.dateKey === selectedHeaderDate ? ' is-selected' : ''}${idx === 0 ? ' is-edge-start' : ''}${idx === (dateHeaderItems.length - 1) ? ' is-edge-end' : ''}" data-date-key="${item.dateKey}" style="left:${item.leftPct.toFixed(2)}%;">

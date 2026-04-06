@@ -1,0 +1,1 @@
+new_lines = ['    const earliestStartMs = Math.min(...operationLines.map((op) =;', '    const maxDate = Math.max(...operationLines.map((op) =;', '    const selectionState = ensurePerformanceTimelineSelectionState();', '    let selectionDateKey = selectionState.dateKey;', '    const todayDateKey = toDateKeyLocal(new Date());', '    if (!selectionDateKey 

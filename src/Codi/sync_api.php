@@ -25,7 +25,7 @@ try {
     
     // Inicializar cliente
     $client = new CodiClient(
-        $_GET['base_url'] ?? $_POST['base_url'] ?? $_ENV['CODI_BASE_URL'] ?? 'http://192.168.0.100:8080',
+        $_GET['base_url'] ?? $_POST['base_url'] ?? $_ENV['CODI_BASE_URL'] ?? 'http://192.168.8.123:8081',
         $_GET['username'] ?? $_POST['username'] ?? $_ENV['CODI_USERNAME'] ?? 'admin',
         $_GET['password'] ?? $_POST['password'] ?? $_ENV['CODI_PASSWORD'] ?? 'senha123',
         $_GET['company_code'] ?? $_POST['company_code'] ?? $_ENV['CODI_COMPANY_CODE'] ?? 'matriz'

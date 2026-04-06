@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Setup Wizard - Integração CODI</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 600px;
+            width: 100%;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 12px 12px 0 0;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 8px;
+        }
+
+        .header p {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        .progress-bar {
+            background: #f0f0f0;
+            height: 4px;
+            width: 100%;
+            margin-bottom: 30px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: #667eea;
+            transition: width 0.3s ease;
+        }
+
+        .content {
+            padding: 30px;
+            min-height: 300px;
+        }
+
+        .step-title {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .step-description {
+            color: #666;
+            margin-bottom: 25px;
+            line-height: 1.6;
+        }
+
+        .checklist {
+            margin: 20px 0;
+        }
+
+        .checklist-item {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            margin-bottom: 8px;
+            background: #f8f9fa;
+            border-radius: 6px;
+        }
+
+        .checklist-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: white;
+            margin-right: 12px;
+            font-size: 16px;
+        }
+
+        .checklist-icon.ok {
+            background: #10b981;
+        }
+
+        .checklist-icon.erro {
+            background: #ef4444;
+        }
+
+        .checklist-icon.aviso {
+            background: #f59e0b;
+        }
+
+        .checklist-content {
+            flex: 1;
+        }
+
+        .checklist-item-title {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .checklist-item-desc {
+            font-size: 12px;
+            color: #666;
+            margin-top: 4px;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 6px;
+            color: #333;
+            font-weight: 500;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 2px solid #e5e7eb;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .result-box {
+            background: #f0fdf4;
+            border: 2px solid #10b981;
+            border-radius: 6px;
+            padding: 16px;
+            margin: 15px 0;
+        }
+
+        .result-box.error {
+            background: #fef2f2;
+            border-color: #ef4444;
+        }
+
+        .result-box.warning {
+            background: #fffbeb;
+            border-color: #f59e0b;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 12px;
+            margin-top: 25px;
+        }
+
+        button {
+            flex: 1;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-secondary {
+            background: #e5e7eb;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #d1d5db;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+        }
+
+        .spinner {
+            border: 4px solid #f0f0f0;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .next-steps {
+            background: #f0f9ff;
+            border-left: 4px solid #0284c7;
+            padding: 16px;
+            border-radius: 4px;
+            margin: 15px 0;
+        }
+
+        .next-steps h3 {
+            color: #0284c7;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+
+        .next-steps ol {
+            margin-left: 20px;
+        }
+
+        .next-steps li {
+            color: #666;
+            margin-bottom: 6px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 Setup Wizard</h1>
+            <p>Integração CODI - Iniciação Passo a Passo</p>
+        </div>
+
+        <div class="progress-bar">
+            <div class="progress-fill" id="progressFill"></div>
+        </div>
+
+        <div class="content" id="content"></div>
+
+        <div style="padding: 0 30px 30px;">
+            <div class="button-group">
+                <button class="btn-secondary" id="btnAnterior" style="display: none;" onclick="anteriorStep()">← Anterior</button>
+                <button class="btn-primary" id="btnProximo" onclick="proximoStep()">Próximo →</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentStep = 1;
+        const totalSteps = 6;
+
+        const stepConfig = {
+            1: { action: 'status', method: 'GET', title: 'Verificar Pré-requisitos' },
+            2: { action: 'executar', method: 'POST', title: 'Executar Migrações' },
+            3: { action: 'verificar', method: 'GET', title: 'Verificar Tabelas' },
+            4: { action: 'config', method: 'GET', title: 'Configuração CODI' },
+            5: { action: 'testar', method: 'POST', title: 'Testar Conexão' },
+            6: { action: 'resumo', method: 'GET', title: 'Setup Concluído' }
+        };
+
+        function updateProgress() {
+            const percentage = (currentStep / totalSteps) * 100;
+            document.getElementById('progressFill').style.width = percentage + '%';
+        }
+
+        function renderCheckList(checklist) {
+            let html = '<div class="checklist">';
+            checklist.forEach(item => {
+                const iconClass = item.status === 'ok' ? 'ok' : (item.status === 'erro' ? 'erro' : 'aviso');
+                const icon = item.status === 'ok' ? '✓' : (item.status === 'erro' ? '✕' : '⚠');
+                html += `
+                    <div class="checklist-item">
+                        <div class="checklist-icon ${iconClass}">${icon}</div>
+                        <div class="checklist-content">
+                            <div class="checklist-item-title">${item.item}</div>
+                            <div class="checklist-item-desc">${item.detalhes}</div>
+                        </div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            return html;
+        }
+
+        function renderStep(data) {
+            let html = `<div class="step-title">${data.titulo}</div>`;
+            html += `<div class="step-description">${data.descricao || ''}</div>`;
+
+            if (data.checklist) {
+                html += renderCheckList(data.checklist);
+            }
+
+            if (data.campos_necessarios) {
+                data.campos_necessarios.forEach(campo => {
+                    html += `
+                        <div class="form-group">
+                            <label>${campo.campo}</label>
+                            <input 
+                                type="${campo.tipo}" 
+                                data-field="${campo.campo}"
+                                placeholder="${campo.placeholder}"
+                                ${campo.obrigatorio ? 'required' : ''}
+                            >
+                        </div>
+                    `;
+                });
+            }
+
+            if (data.status_http) {
+                const boxClass = data.conectado ? '' : (data.status_http === 401 ? 'warning' : 'error');
+                html += `<div class="result-box ${boxClass}">${data.mensagem}</div>`;
+            }
+
+            if (data.proximos_passos) {
+                html += '<div class="next-steps"><h3>Próximos Passos:</h3><ol>';
+                data.proximos_passos.forEach(step => {
+                    html += `<li>${step}</li>`;
+                });
+                html += '</ol></div>';
+            }
+
+            document.getElementById('content').innerHTML = html;
+            updateProgress();
+            updateButtons();
+        }
+
+        function updateButtons() {
+            const btnAnterior = document.getElementById('btnAnterior');
+            const btnProximo = document.getElementById('btnProximo');
+
+            btnAnterior.style.display = currentStep > 1 ? 'block' : 'none';
+            btnProximo.textContent = currentStep === totalSteps ? '✓ Concluir' : 'Próximo →';
+        }
+
+        async function proximoStep() {
+            const config = stepConfig[currentStep];
+            
+            if (config.method === 'POST' && currentStep === 4) {
+                // Validar formulário de configuração
+                const fields = document.querySelectorAll('input[data-field]');
+                const hasErrors = Array.from(fields).some(f => !f.value);
+                if (hasErrors) {
+                    alert('Por favor, preencha todos os campos');
+                    return;
+                }
+            }
+
+            // Mostrar loading
+            document.getElementById('content').innerHTML = `
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Processando...</p>
+                </div>
+            `;
+
+            try {
+                const url = `setup_wizard.php?step=${currentStep}&action=${config.action}`;
+                
+                if (config.method === 'POST') {
+                    // Coletar dados do formulário se existir
+                    const formData = new FormData();
+                    const inputs = document.querySelectorAll('input[data-field]');
+                    inputs.forEach(input => {
+                        formData.append(input.getAttribute('data-field'), input.value);
+                    });
+
+                    // Mapear nomes de campos
+                    if (currentStep === 5) {
+                        const fields = {};
+                        inputs.forEach(input => {
+                            const field = input.getAttribute('data-field');
+                            if (field === 'cdi_servidor_url') fields.url = input.value;
+                            if (field === 'cdi_usuario') fields.user = input.value;
+                            if (field === 'cdi_senha') fields.pass = input.value;
+                        });
+                        
+                        const response = await fetch(url, {
+                            method: 'POST',
+                            body: new URLSearchParams(fields)
+                        });
+                        const data = await response.json();
+                        renderStep(data);
+                    }
+                } else {
+                    const response = await fetch(url);
+                    const data = await response.json();
+                    renderStep(data);
+                }
+
+                if (currentStep < totalSteps) {
+                    currentStep++;
+                }
+            } catch (error) {
+                document.getElementById('content').innerHTML = `
+                    <div class="result-box error">
+                        <strong>Erro:</strong> ${error.message}
+                    </div>
+                `;
+            }
+        }
+
+        function anteriorStep() {
+            if (currentStep > 1) {
+                currentStep--;
+                proximoStep();
+            }
+        }
+
+        // Inicializar
+        proximoStep();
+    </script>
+</body>
+</html>

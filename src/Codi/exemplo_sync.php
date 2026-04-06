@@ -28,7 +28,7 @@ try {
     
     // Cliente CODI
     $client = new CodiClient(
-        $_ENV['CODI_BASE_URL'] ?? 'http://192.168.0.100:8080',
+        $_ENV['CODI_BASE_URL'] ?? 'http://192.168.8.123:8081',
         $_ENV['CODI_USERNAME'] ?? 'admin',
         $_ENV['CODI_PASSWORD'] ?? 'senha123',
         $_ENV['CODI_COMPANY_CODE'] ?? 'matriz'

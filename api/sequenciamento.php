@@ -153,18 +153,18 @@ function handleGantt(ProgramacaoRepository $repo): void
     $taskId = 1;
 
     foreach ((array) $schedule as $row) {
-        $recurso = $row['sch_recurso'] ?? $row['sch_operador'] ?? 'Padrão';
+        $recurso = trim($row['sch_recurso'] ?? $row['sch_operador'] ?? 'Padrão');
         $tipo = strtolower(trim($row['sch_tipo'] ?? 'produção'));
         
         // Parse dates
-        $dataInicio = $row['sch_data_inicio'] ?? $row['sch_inicio_producao'] ?? null;
+        $dataInicio = $row['sch_data_inicio'] ?? null;
         $horaInicio = $row['sch_hora_inicio'] ?? '00:00';
         $horaFim = $row['sch_hora_fim'] ?? '00:00';
         $fimProducao = $row['sch_fim_producao'] ?? null;
 
         // Montar datetime de início
         if ($dataInicio && $horaInicio) {
-            $dataInicio = is_string($dataInicio) ? $dataInicio : date('Y-m-d', strtotime((string) $dataInicio));
+            $dataInicio = is_string($dataInicio) ? substr($dataInicio, 0, 10) : date('Y-m-d', strtotime((string) $dataInicio));
             $startDateTime = "{$dataInicio}T{$horaInicio}";
         } else {
             continue; // Skip se não tem data válida
@@ -175,19 +175,24 @@ function handleGantt(ProgramacaoRepository $repo): void
         if ($fimProducao) {
             // Se vem com datetime completo
             if (strpos((string) $fimProducao, 'T') !== false || strpos((string) $fimProducao, ' ') !== false) {
-                $endDateTime = str_replace(' ', 'T', $fimProducao);
+                $endDateTime = str_replace(' ', 'T', (string) $fimProducao);
+                $endDateTime = substr($endDateTime, 0, 16); // Formato HH:MM
             } else {
                 // Só tem data, usa hora fim
-                $dataFim = substr($fimProducao, 0, 10);
+                $dataFim = substr((string) $fimProducao, 0, 10);
                 $endDateTime = "{$dataFim}T{$horaFim}";
             }
         } else {
             // Calcular usando duração
             $duracao = (int) ($row['sch_duracao_minutos'] ?? 0);
             if ($duracao > 0) {
-                $start = new DateTime($startDateTime);
-                $start->modify("+{$duracao} minutes");
-                $endDateTime = $start->format('Y-m-dTH:i');
+                try {
+                    $start = new DateTime($startDateTime);
+                    $start->modify("+{$duracao} minutes");
+                    $endDateTime = $start->format('Y-m-dTH:i');
+                } catch (Exception $e) {
+                    $endDateTime = $startDateTime;
+                }
             } else {
                 $endDateTime = $startDateTime;
             }
@@ -203,18 +208,19 @@ function handleGantt(ProgramacaoRepository $repo): void
         $color = $colorMap[$tipo] ?? '#3B82F6';
 
         // Label da task
+        $skuLabel = $row['sch_sku'] ?? 'N/A';
+        $seqLabel = $row['sch_sequencia'] ?? '';
         $label = match ($tipo) {
-            'setup' => "Setup - {$row['sch_sku']}",
-            'produção' => "{$row['prg_itens_op'] ?? $row['sch_sequencia'] ?? 'OP'} - {$row['sch_sku']}",
+            'setup' => "Setup - {$skuLabel}",
+            'produção' => "{$seqLabel} - {$skuLabel}",
             'pausa' => "Pausa",
             default => $row['sch_descricao'] ?? $tipo,
         };
 
         // Info para tooltip
         $tooltip = [
-            'OP' => $row['prg_itens_op'] ?? 'N/A',
             'Seq' => $row['sch_sequencia'] ?? 'N/A',
-            'SKU' => $row['sch_sku'] ?? 'N/A',
+            'SKU' => $skuLabel,
             'Descrição' => $row['sch_descricao'] ?? '',
             'Qtd' => $row['sch_quantidade'] ?? 'N/A',
             'Duração' => $row['sch_duracao_minutos'] ? formatDurationMinutes($row['sch_duracao_minutos']) : 'N/A',

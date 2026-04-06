@@ -5647,9 +5647,11 @@ function renderPerformanceTimeline(detail, options = {}) {
 
     // Ancorar a régua no início do dia para evitar "sumir" o primeiro dia no header
     // quando a primeira operação começa após 00:00 (ex.: 27/03 08:26).
+    // IMPORTANTE: Garantir que o timeline comece NO MÁXIMO em "hoje" 00:00 for visibility
     const startDay = new Date(earliestStartMs);
     startDay.setHours(0, 0, 0, 0);
-    const timelineStartMs = startDay.getTime();
+    const todayStartMs = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate(), 0, 0, 0, 0).getTime();
+    const timelineStartMs = Math.min(startDay.getTime(), todayStartMs);
     const timelineEndMsClamped = Math.max(maxDate, timelineStartMs + 1);
     const timelineRangeMs = Math.max(1, timelineEndMsClamped - timelineStartMs);
 
@@ -5792,8 +5794,14 @@ function renderPerformanceTimeline(detail, options = {}) {
     // ========== ETAPA 3: Calcular posição do marcador "AGORA" ==========
     const now = new Date();
     const nowMs = now.getTime();
-    const isNowInRange = nowMs >= timelineStartMs && nowMs <= timelineEndMsClamped;
-    const nowPct = isNowInRange ? ((nowMs - timelineStartMs) / timelineRangeMs) * 100 : -1;
+    // Calcular meia-noite de hoje EXATAMENTE como: new Date(year, month, day, 0, 0, 0, 0)
+    // Isso usa hora local, compatível com startDay
+    const todayMidnightMs = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).getTime();
+    // Calcular posição de "agora" = hoje 00:00 + minutos decorridos desde meia-noite
+    const msPastTodayStart = nowMs - todayMidnightMs;
+    const nowAlignedMs = todayMidnightMs + msPastTodayStart;
+    const isNowInRange = nowAlignedMs >= timelineStartMs && nowAlignedMs <= timelineEndMsClamped;
+    const nowPct = isNowInRange ? ((nowAlignedMs - timelineStartMs) / timelineRangeMs) * 100 : -1;
     
     // Armazenar para o intervalo acessar depois
     window.__performanceTimelineRange = { timelineStartMs, timelineEndMsClamped, timelineRangeMs };
@@ -5949,9 +5957,9 @@ function renderPerformanceTimeline(detail, options = {}) {
         if (!target) return;
         const key = target.getAttribute('data-date-key') || '';
         if (!key) return;
-        if (updatePerformanceTimelineSelection(key)) {
-          renderPerformanceTimeline(detail, options);
-        }
+        updatePerformanceTimelineSelection(key);
+        // Sempre renderizar o timeline ao clicar em um dia, mesmo que já esteja selecionado
+        renderPerformanceTimeline(detail, options);
       });
     }
     const resetButton = container.querySelector('.performance-timeline-reset');
@@ -5998,11 +6006,18 @@ function renderPerformanceTimeline(detail, options = {}) {
     const range = window.__performanceTimelineRange;
     if (!range) return;
     
-    const nowMs = new Date().getTime();
-    const isNowInRange = nowMs >= range.timelineStartMs && nowMs <= range.timelineEndMsClamped;
+    const now = new Date();
+    const nowMs = now.getTime();
+    // Usar toDateKeyLocal e parseDateKeyToStartOfDay para máxima compatibilidade
+    const todayKey = toDateKeyLocal(now);
+    const todayStartMs = parseDateKeyToStartOfDay(todayKey)?.getTime() || nowMs;
+    // Calcular offset dentro do dia e adicionar ao início do dia
+    const offsetMs = nowMs - new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).getTime();
+    const nowAlignedMs = todayStartMs + offsetMs;
+    const isNowInRange = nowAlignedMs >= range.timelineStartMs && nowAlignedMs <= range.timelineEndMsClamped;
     
     if (isNowInRange) {
-      const newNowPct = ((nowMs - range.timelineStartMs) / range.timelineRangeMs) * 100;
+      const newNowPct = ((nowAlignedMs - range.timelineStartMs) / range.timelineRangeMs) * 100;
       
       if (newNowPct >= 0 && newNowPct <= 100) {
         nowMarker.style.left = `${newNowPct.toFixed(2)}%`;

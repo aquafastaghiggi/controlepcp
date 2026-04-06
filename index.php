@@ -500,7 +500,7 @@ if ($rawFeatureFlags !== '') {
                             <thead>
                                 <tr>
                                     <th>Seq</th>
-                                    <th>SKU</th>
+                                    <th>SEQ</th>
                                     <th>Qtd</th>
                                     <th>Duração</th>
                                     <th>Data</th>

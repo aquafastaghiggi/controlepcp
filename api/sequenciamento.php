@@ -17,6 +17,16 @@ header('Content-Type: application/json; charset=utf-8');
 // Verificar autenticação antes de tudo
 $action = $_GET['action'] ?? 'listar';
 
+// Status: sem autenticação
+if ($action === 'status') {
+    echo json_encode([
+        'sucesso' => true,
+        'status' => 'API Online',
+        'timestamp' => date('Y-m-d H:i:s')
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 // Debug: sem autenticação se action=debug
 if ($action !== 'debug') {
     try {

@@ -442,11 +442,17 @@ $prgId = (int) ($_GET['id'] ?? 0);
 
     <script>
         let ganttInstance = null;
-        const apiBase = '/controlepcp_sandbox/api/sequenciamento.php';
+        
+        // Determinar caminho da API dinamicamente  
+        const baseDir = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/'));
+        const apiBase = baseDir + '/api/sequenciamento.php';
         
         // Capturar prgId da URL
         const urlParams = new URLSearchParams(window.location.search);
         window.urlPrgId = parseInt(urlParams.get('id') || 0);
+        
+        console.log('📍 Base Dir:', baseDir);
+        console.log('📌 API Base:', apiBase);
 
         /**
          * Selecionar programação pela sidebar
@@ -615,14 +621,21 @@ $prgId = (int) ($_GET['id'] ?? 0);
          */
         async function carregarProgramacoes() {
             try {
-                // Primeiro testar conexão
-                const debugResponse = await fetch(`${apiBase}?action=debug`);
-                if (!debugResponse.ok) {
-                    throw new Error(`Debug retornou ${debugResponse.status}`);
+                console.log('Tentando carregar de:', apiBase);
+                
+                // Primeiro testar conexão com endpoint simples
+                const testUrl = apiBase.replace('sequenciamento.php', 'teste.php');
+                console.log('📋 Testando com URL:', testUrl);
+                
+                const testResponse = await fetch(testUrl);
+                console.log('📊 Status do teste:', testResponse.status, testResponse.statusText);
+                
+                if (!testResponse.ok) {
+                    throw new Error(`Caminho teste retornou ${testResponse.status} - API pode estar inacessível`);
                 }
                 
                 // Agora buscar dados reais
-                const response = await fetch(`${apiBase}?action=listar&limit=50`);
+                const response = await fetch(apiBase + '?action=listar&limit=50');
                 
                 if (!response.ok) {
                     throw new Error(`API retornou ${response.status}: ${response.statusText}`);
@@ -635,7 +648,7 @@ $prgId = (int) ($_GET['id'] ?? 0);
                 try {
                     json = JSON.parse(text);
                 } catch (jsonErr) {
-                    console.error('Erro ao parsear JSON:', text.substring(0, 200));
+                    console.error('❌ Erro ao parsear JSON:', text.substring(0, 200));
                     throw new Error('Resposta inválida da API: ' + jsonErr.message);
                 }
 
@@ -673,9 +686,9 @@ $prgId = (int) ($_GET['id'] ?? 0);
                 }
 
             } catch (error) {
-                console.error('Erro ao carregar programações:', error);
+                console.error('❌ Erro ao carregar programações:', error);
                 document.getElementById('sidebarList').innerHTML = 
-                    `<div style="color: #dc2626; font-size: 12px; padding: 8px;">❌ Erro ao carregar: ${error.message}</div>`;
+                    `<div style="color: #dc2626; font-size: 12px; padding: 8px;">❌ Erro: ${error.message}<br><small>Verifique console (F12)</small></div>`;
             }
         }
 

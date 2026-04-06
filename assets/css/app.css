@@ -3093,6 +3093,12 @@ select {
     background: rgba(59, 130, 246, 0.15);
     padding: 2px 6px;
     border-radius: 3px;
+    position: relative;
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: 90px;
+    text-align: center;
+    white-space: nowrap;
 }
 
 .performance-timeline-header-date {
@@ -3102,6 +3108,12 @@ select {
     background: rgba(148, 163, 184, 0.1);
     padding: 2px 6px;
     border-radius: 3px;
+    position: relative;
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: 90px;
+    text-align: center;
+    white-space: nowrap;
 }
 
 .performance-timeline-header-shift {
@@ -3110,7 +3122,13 @@ select {
     color: rgba(71, 85, 105, 0.76);
     letter-spacing: 0.1px;
     margin-top: 1px;
-    white-space: nowrap;
+    position: relative;
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: 130px;
+    text-align: center;
+    white-space: normal;
+    line-height: 1.2;
 }
 
 .performance-timeline-header-info {

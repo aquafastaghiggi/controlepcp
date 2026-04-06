@@ -3052,6 +3052,15 @@ select {
     margin-left: -1px;
 }
 
+.performance-timeline-header-item.is-edge-start {
+    margin-left: 0;
+    align-items: flex-start;
+}
+
+.performance-timeline-header-item.is-edge-end {
+    align-items: flex-end;
+}
+
 .performance-timeline-header-item.is-selected {
     border-left-color: #2563eb;
     background: linear-gradient(to bottom, rgba(37, 99, 235, 0.25), rgba(37, 99, 235, 0));

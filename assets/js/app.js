@@ -5677,8 +5677,8 @@ function renderPerformanceTimeline(detail, options = {}) {
         <div class="performance-timeline-header-scale">
           ${highlightPct > 0 ? `<span class="performance-timeline-selection-range" style="width:${highlightPct.toFixed(4)}%;"></span>` : ''}
           <div class="performance-timeline-header-container">
-            ${dateHeaderItems.map((item) => `
-              <div class="performance-timeline-header-item${item.dateKey === selectedHeaderDate ? ' is-selected' : ''}" data-date-key="${item.dateKey}" style="left:${item.leftPct.toFixed(2)}%;">
+            ${dateHeaderItems.map((item, idx) => `
+              <div class="performance-timeline-header-item${item.dateKey === selectedHeaderDate ? ' is-selected' : ''}${idx === 0 ? ' is-edge-start' : ''}${idx === (dateHeaderItems.length - 1) ? ' is-edge-end' : ''}" data-date-key="${item.dateKey}" style="left:${item.leftPct.toFixed(2)}%;">
                 <div class="performance-timeline-header-label">${escapeHtml(item.weekday)}</div>
                 <div class="performance-timeline-header-date">${escapeHtml(item.formatted)}</div>
               </div>

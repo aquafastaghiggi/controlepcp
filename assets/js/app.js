@@ -5760,16 +5760,26 @@ function renderPerformanceTimeline(detail, options = {}) {
     }
 
     let highlightOps = null;
-    if (hasManualSelection && visibleOperationLines.length) {
-      const minStart = Math.min(...visibleOperationLines.map((op) => op.start?.getTime() || Infinity));
-      const maxEnd = Math.max(...visibleOperationLines.map((op) => op.end?.getTime() || -Infinity));
-      if (Number.isFinite(minStart) && Number.isFinite(maxEnd) && maxEnd >= minStart) {
-        const left = ((minStart - timelineStartMs) / timelineRangeMs) * 100;
-        const width = ((maxEnd - minStart) / timelineRangeMs) * 100;
-        highlightOps = {
-          leftPct: Math.max(0, Math.min(100, left)),
-          widthPct: Math.max(0, Math.min(100, width)),
-        };
+    if (hasManualSelection && visibleOperationLines.length && selectionStartMs !== null && selectionEndMs !== null) {
+      const selectionStartClamp = Math.max(selectionStartMs, timelineStartMs);
+      const selectionEndClamp = Math.min(selectionEndMs + 1, timelineEndMsClamped);
+      const opsInRange = visibleOperationLines.filter((op) => {
+        if (!op.start || !op.end) return false;
+        const startMs = op.start.getTime();
+        const endMs = op.end.getTime();
+        return endMs > selectionStartClamp && startMs < selectionEndClamp;
+      });
+      if (opsInRange.length) {
+        const minStart = Math.min(...opsInRange.map((op) => Math.max(op.start.getTime(), selectionStartClamp)));
+        const maxEnd = Math.max(...opsInRange.map((op) => Math.min(op.end.getTime(), selectionEndClamp)));
+        if (Number.isFinite(minStart) && Number.isFinite(maxEnd) && maxEnd > minStart) {
+          const left = ((minStart - timelineStartMs) / timelineRangeMs) * 100;
+          const width = ((maxEnd - minStart) / timelineRangeMs) * 100;
+          highlightOps = {
+            leftPct: Math.max(0, Math.min(100, left)),
+            widthPct: Math.max(0, Math.min(100, width)),
+          };
+        }
       }
     }
 

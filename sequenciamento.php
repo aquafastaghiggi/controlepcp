@@ -507,6 +507,19 @@ Auth::requireLogin();
             }
         }
 
+        // ====== HELPER: Parsear data do formato "YYYY-MM-DD HH:mm:ss" ======
+        function parseDataPHP(dataStr) {
+            if (!dataStr) return null;
+            // Converter "2026-04-06 16:00:00" para "2026-04-06T16:00:00"
+            const isoStr = dataStr.replace(' ', 'T');
+            const date = new Date(isoStr);
+            if (isNaN(date.getTime())) {
+                console.error('❌ Erro ao parsear data:', dataStr);
+                return null;
+            }
+            return date;
+        }
+
         // ====== RENDERIZAR TIMELINE ======
         async function renderTimeline() {
             try {
@@ -526,13 +539,23 @@ Auth::requireLogin();
 
                 console.log('✅ Timeline data:', json);
                 console.log('📊 Programações:', json.programacoes);
-                console.log('📅 Período:', json.data_ini, 'a', json.data_fim);
+                console.log('📅 Período raw:', json.data_ini, 'a', json.data_fim);
+
+                // Parsear datas
+                const dataIni = parseDataPHP(json.data_ini);
+                const dataFim = parseDataPHP(json.data_fim);
+                
+                if (!dataIni || !dataFim) {
+                    throw new Error('Datas inválidas na resposta da API');
+                }
+                
+                console.log('✅ Datas parseadas:', dataIni, dataFim);
 
                 // Renderizar cabeçalho de horas
-                renderTimelineHeader(json.data_ini, json.data_fim);
+                renderTimelineHeader(dataIni, dataFim);
 
                 // Renderizar linhas
-                renderTimelineRows(json.programacoes, json.data_ini, json.data_fim);
+                renderTimelineRows(json.programacoes, dataIni, dataFim);
 
             } catch (err) {
                 console.error('❌ Erro ao renderizar timeline:', err);
@@ -545,10 +568,7 @@ Auth::requireLogin();
         }
 
         // ====== RENDERIZAR CABEÇALHO ======
-        function renderTimelineHeader(dataIniStr, dataFimStr) {
-            const dataIni = new Date(dataIniStr);
-            const dataFim = new Date(dataFimStr);
-            
+        function renderTimelineHeader(dataIni, dataFim) {
             renderTimelineWeeks(dataIni, dataFim);
             
             const container = document.getElementById('timelineHeaderContent');
@@ -604,9 +624,7 @@ Auth::requireLogin();
         }
 
         // ====== RENDERIZAR LINHAS ======
-        function renderTimelineRows(programacoes, dataIniStr, dataFimStr) {
-            const dataIni = new Date(dataIniStr);
-            const dataFim = new Date(dataFimStr);
+        function renderTimelineRows(programacoes, dataIni, dataFim) {
             const duracao = dataFim - dataIni; // ms
 
             const container = document.getElementById('timelineBody');

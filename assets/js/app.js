@@ -3500,7 +3500,8 @@ async function loadPerformance() {
     openBtn?.addEventListener('click', () => {
       const id = programSelect.value;
       if (id && typeof window.openHistoryPreview === 'function') {
-        window.openHistoryPreview(id);
+        const dateKey = selectionState?.dateKey || null;
+        window.openHistoryPreview(id, dateKey);
       }
     });
 
@@ -6777,15 +6778,38 @@ function renderReleaseCenter() {
 window.renderReleaseCenter = renderReleaseCenter;
 window.loadReleaseCenter = loadReleaseCenter;
 
-async function openHistoryPreview(prgId) {
+async function openHistoryPreview(prgId, filterDateKey = null) {
   if (!prgId) return;
 
   try {
     const response = await fetch('/controlepcp/api/programacoes.php?id=' + encodeURIComponent(prgId));
     const payload = await response.json();
     const data = payload?.data || payload || {};
-    const itens = Array.isArray(data?.itens) ? data.itens : [];
-    const schedule = Array.isArray(data?.schedule) ? data.schedule : [];
+    let itens = Array.isArray(data?.itens) ? data.itens : [];
+    let schedule = Array.isArray(data?.schedule) ? data.schedule : [];
+
+    // Apply date filter if provided (sync with timeline)
+    if (filterDateKey) {
+      const filterDate = new Date(filterDateKey);
+      const filterEndDate = new Date(filterDate);
+      filterEndDate.setDate(filterEndDate.getDate() + 1); // Next day
+      
+      const filterStartMs = filterDate.getTime();
+      const filterEndMs = filterEndDate.getTime();
+      
+      schedule = schedule.filter((item) => {
+        const startDate = item?.sch_data_inicio ? new Date(item.sch_data_inicio).getTime() : 0;
+        const endRaw = item?.sch_fim_producao || item?.sch_data_inicio;
+        const endMatch = String(endRaw).match(/^(\d{4}-\d{2}-\d{2})/);
+        const endDateStr = endMatch ? endMatch[1] : item?.sch_data_inicio;
+        const endDate = endDateStr ? new Date(endDateStr).getTime() : 0;
+        
+        // Include if item starts or ends within filter range
+        return (startDate >= filterStartMs && startDate < filterEndMs) || 
+               (endDate >= filterStartMs && endDate < filterEndMs) ||
+               (startDate < filterStartMs && endDate >= filterEndMs);
+      });
+    }
 
     const opBySeq = new Map();
     itens.forEach((it) => {

@@ -150,6 +150,118 @@ const text = String(value ?? '');
 const text = String(value || '');
 ```
 
+### Etapa 6: Formato de Tempo e Layout Compactado (31/03 - 06/04/2026)
+**Commits**: 7 commits (abaixo)
+
+#### 6.1 - Formato de Tempo
+```javascript
+// Antes: `1511h 29m` (difícil de ler)
+// Depois: `1511:29` (HH:MM - mais compacto e profissional)
+const formatHourMin = (ms) => {
+  const totalMinutes = Math.round(ms / (1000 * 60));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+};
+```
+**Afeta**: Cards PRODUÇÃO, SETUP, TOTAL, DISPONÍVEL, OCIOSIDADE
+
+#### 6.2 - Compactação de Espaçamento (4 passes iterativas)
+**Pass 1**: Redução inicial
+```css
+.performance-timeline { gap: 8px; }
+.performance-timeline-summary { margin-top: -4px; }
+.performance-timeline-legend-enhanced { margin-top: 0; }
+```
+
+**Pass 2**: Eliminação de gaps
+```css
+.performance-timeline { gap: 0; }
+.performance-timeline-summary { margin-top: -8px; }
+.performance-timeline-legend-enhanced { margin-top: -6px; }
+```
+
+**Pass 3**: Compactação de padding/rows
+```css
+.performance-timeline-row { padding: 4px 14px; margin-bottom: 2px; }
+.performance-timeline-body { padding-top: 4px; }
+.performance-timeline-summary { margin-top: -12px; padding: 14px 16px; }
+.performance-timeline-legend-enhanced { margin-top: -10px; }
+```
+
+#### 6.3 - Ociosidade Card (Ocultação)
+```css
+.performance-timeline-summary .performance-timeline-summary-card:nth-child(5) {
+    display: none;
+}
+```
+**Resultado**: Card OCIOSIDADE removido da exibição
+
+#### 6.4 - Proporção Corrigida de Barras (Timeline)
+**Problema**: Setup e Produção mesma largura visual apesar de durações diferentes
+**Solução**:
+```javascript
+// Remover extensão artificial que forçava mesmo tamanho
+const renderEndMs = endMs; // Objeto: mantém duração real
+
+// Aplicar tamanho mínimo para visibilidade (3%)
+const MIN_BAR_WIDTH = 3;
+if (itemWidthPct > 0 && itemWidthPct < MIN_BAR_WIDTH) {
+  itemWidthPct = MIN_BAR_WIDTH;
+}
+// Anti-overflow
+if (itemStartPct + itemWidthPct > 100) {
+  itemStartPct = Math.max(0, 100 - itemWidthPct);
+}
+```
+**Resultado**: 
+- Setup (30min) = barra pequena
+- Produção (90min) = barra maior (3x tamanho)
+- Ambas visíveis mesmo em multi-dia
+
+#### 6.5 - Sincronização PDF ↔ Timeline
+**Problema**: PDF "Histórico de Programação" mostrava até 08/04, timeline até 07/04
+**Solução**: Filtrar dados do PDF pelo mesmo período selecionado no timeline
+```javascript
+async function openHistoryPreview(prgId, filterDateKey = null) {
+  // ... fetch data ...
+  
+  if (filterDateKey) {
+    const filterDate = new Date(filterDateKey);
+    const filterEndDate = new Date(filterDate);
+    filterEndDate.setDate(filterEndDate.getDate() + 1);
+    
+    schedule = schedule.filter((item) => {
+      // Include items that overlap with filter range
+      return (startDate >= filterStart && startDate < filterEnd) || 
+             (endDate >= filterStart && endDate < filterEnd) ||
+             (startDate < filterStart && endDate >= filterEnd);
+    });
+  }
+}
+```
+**Resultado**: PDF agora reflete período visível no gráfico
+
+#### 6.6 - Correção de Overlay de Título
+**Problema**: Negative margins extremas cortavam o título "TIPO DE OPERAÇÃO"
+**Solução**: Restaurar margins adequados
+```css
+.performance-timeline-title { margin-bottom: 4px; }
+.performance-timeline-summary { margin-top: 0px; }
+.performance-timeline-legend-enhanced { margin-top: 4px; }
+```
+
+### Commits Etapa 6
+1. **7be2675** - Fix: Change time summary format (XXXh YYm → HH:MM)
+2. **367da7a** - Compact timeline layout: Remove unnecessary white space
+3. **bb77094** - Further compact timeline layout: Maximize efficiency
+4. **9d6fb0b** - Maximum compaction: Eliminate gaps and overlap elements
+5. **9cc7151** - Extreme compaction: Reduce padding, minimize height
+6. **5394259** - Fix: Adjust negative margins to prevent title overlay
+7. **933a6d5** - Hide: Ociosidade card from performance summary
+8. **62fa12a** - Fix: Add minimum bar width for visibility
+9. **d0c76c9** - Fix: Synchronize PDF history with timeline
+
 ---
 
 ## Estrutura de Arquivos Relevantes
@@ -245,4 +357,5 @@ Se tiver dúvidas sobre:
 ---
 
 **Última atualização**: 6 de abril de 2026  
-**Commit base**: `52e7f8e` (Etapas 1-5 + FASE 0 concluídas)
+**Commit base**: `d0c76c9` (Etapas 1-6 concluídas - Timeline proporcional + PDF sincronizado)  
+**Status**: ✅ Todos os testes de sandbox passando

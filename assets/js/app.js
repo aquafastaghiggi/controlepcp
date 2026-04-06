@@ -5563,6 +5563,20 @@ function renderPerformanceTimeline(detail, options = {}) {
     // Listener para click nas barras do timeline
     container.addEventListener('click', (event) => {
       const timelineItem = event.target.closest('.performance-timeline-item');
+      if (timelineItem) {
+        // ========== ETAPA 7: Adicionar is-active ao clicar ==========
+        // Remover is-active de todos os items
+        container.querySelectorAll('.performance-timeline-item').forEach(item => {
+          item.classList.remove('is-active');
+        });
+        
+        // Adicionar is-active ao item clicado
+        timelineItem.classList.add('is-active');
+        
+        // Log para debug
+        console.log('Timeline item selecionado:', timelineItem.getAttribute('data-item-seq'));
+      }
+      
       if (timelineItem && window.__performanceAltState) {
         // Procurar o idx do item clicado
         const titleAttr = timelineItem.getAttribute('title');

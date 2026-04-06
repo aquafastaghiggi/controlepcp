@@ -2382,6 +2382,27 @@ select {
     z-index: 5;
 }
 
+/* ========== ETAPA 7: Estado Ativo (selecionado) ========== */
+.performance-timeline-item.is-active {
+    outline: 2px solid rgba(59, 130, 246, 0.8);
+    outline-offset: 2px;
+    box-shadow: 
+        0 0 0 1px rgba(59, 130, 246, 0.4),
+        0 0 6px rgba(59, 130, 246, 0.5),
+        0 0 12px rgba(59, 130, 246, 0.3),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.3);
+    z-index: 10;
+}
+
+.performance-timeline-item.is-active:hover {
+    outline-width: 3px;
+    box-shadow: 
+        0 0 0 1px rgba(59, 130, 246, 0.6),
+        0 0 8px rgba(59, 130, 246, 0.7),
+        0 0 16px rgba(59, 130, 246, 0.4),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.4);
+}
+
 /* Tooltip customizado ao hover */
 .performance-timeline-item::before {
     content: attr(data-item-seq) " ??? " attr(data-item-duration) "m";

@@ -5353,6 +5353,15 @@ function renderPerformanceTimeline(detail, options = {}) {
     return;
   }
 
+  // Debug: dados brutos usados pelo gráfico para comparação com o preview/PDF.
+  // Uso: renderizar o gráfico e conferir `window.__performanceTimelineLast` no console.
+  window.__performanceTimelineLast = {
+    prgId: String(detail?.programacao?.prg_id || detail?.programacao?.id || ''),
+    selection: (ensurePerformanceTimelineSelectionState() && ensurePerformanceTimelineSelectionState().dateKey) || null,
+    scheduleCount: scheduleRows.length,
+    schedule: scheduleRows,
+  };
+
   // Reutilizar helpers de renderPerformanceAlternative
   const parseLocalDateTime = (dateStr, timeStr) => {
     if (!dateStr || !timeStr) return null;
@@ -6830,6 +6839,17 @@ async function openHistoryPreview(prgId, filterDateKey = null) {
                (startDate < filterStartMs && endDate >= filterEndMs);
       });
     }
+
+    // Debug: manter a "fonte de verdade" do preview disponível para comparação com o gráfico.
+    // Uso: abrir o preview e conferir `window.__historyPreviewLast` no console.
+    window.__historyPreviewLast = {
+      prgId: String(prgId),
+      filterDateKey: filterDateKey ? String(filterDateKey) : null,
+      itensCount: Array.isArray(itens) ? itens.length : 0,
+      scheduleCount: Array.isArray(schedule) ? schedule.length : 0,
+      itens,
+      schedule,
+    };
 
     const opBySeq = new Map();
     itens.forEach((it) => {

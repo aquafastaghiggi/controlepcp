@@ -3499,8 +3499,20 @@ async function loadPerformance() {
 
     openBtn?.addEventListener('click', () => {
       const id = programSelect.value;
-      if (id && typeof window.openHistoryPreview === 'function') {
-        const dateKey = selectionState?.dateKey || null;
+      if (!id) return;
+
+      let dateKey = null;
+      if (typeof ensurePerformanceTimelineSelectionState === 'function') {
+        const state = ensurePerformanceTimelineSelectionState();
+        dateKey = state && state.dateKey ? String(state.dateKey) : null;
+      }
+
+      if (typeof openHistoryPreview === 'function') {
+        openHistoryPreview(id, dateKey);
+        return;
+      }
+
+      if (typeof window.openHistoryPreview === 'function') {
         window.openHistoryPreview(id, dateKey);
       }
     });

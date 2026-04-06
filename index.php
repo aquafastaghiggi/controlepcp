@@ -493,6 +493,53 @@ if ($rawFeatureFlags !== '') {
                     </div>
                     <div id="performance-summary" class="performance-summary muted"></div>
                     <div id="performance-kpis" class="performance-kpis"></div>
+                    
+                    <!-- ========== ETAPA 1: Dashboard de Status (Novo) ========== -->
+                    <div class="performance-status-dashboard">
+                        <div class="performance-status-item">
+                            <span class="performance-status-label">OP ATUAL</span>
+                            <span class="performance-status-value" id="performance-current-op">—</span>
+                        </div>
+                        <div class="performance-status-item">
+                            <span class="performance-status-label">PRÓXIMA OP</span>
+                            <span class="performance-status-value" id="performance-next-op">—</span>
+                        </div>
+                        <div class="performance-status-item">
+                            <span class="performance-status-label">STATUS</span>
+                            <span class="performance-status-badge" id="performance-status-badge">—</span>
+                        </div>
+                        <div class="performance-status-item">
+                            <span class="performance-status-label">% CONCLUSÃO</span>
+                            <span class="performance-status-value" id="performance-completion">—</span>
+                        </div>
+                        <div class="performance-status-item">
+                            <span class="performance-status-label">EFICIÊNCIA</span>
+                            <span class="performance-status-value" id="performance-efficiency">—</span>
+                        </div>
+                    </div>
+                    
+                    <!-- ========== ETAPA 4: Tabela de Contexto (Repositionado para topo) ========== -->
+                    <div class="performance-data-table-wrapper">
+                        <table class="performance-data-table">
+                            <thead>
+                                <tr>
+                                    <th>OP</th>
+                                    <th>SEQ</th>
+                                    <th>Qtd</th>
+                                    <th>Duração</th>
+                                    <th>Data</th>
+                                    <th>Início</th>
+                                    <th>Fim</th>
+                                </tr>
+                            </thead>
+                            <tbody id="performance-data-table-body">
+                                <tr>
+                                    <td colspan="7" class="text-muted">Nenhum dado selecionado</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    
                     <div id="performance-gantt" class="performance-gantt">
                         <div class="performance-gantt-block">
                             <div class="performance-gantt-title">Previsto A</div>
@@ -505,6 +552,7 @@ if ($rawFeatureFlags !== '') {
                             <div id="performance-gantt-b"></div>
                         </div>
                     </div>
+                    <!-- Gráfico Original (Dias em Linha) -->
                     <div id="performance-alt" class="performance-alt hidden">
                         <div id="performance-alt-indicator" class="performance-alt-indicator">
                             <label class="performance-alt-filter">
@@ -516,8 +564,93 @@ if ($rawFeatureFlags !== '') {
                                 <span>Setup</span>
                             </label>
                         </div>
+                        <div class="performance-alt-title">Layout alternativo em constru&ccedil;&atilde;o...</div>
                         <div class="performance-alt-body" id="performance-alt-body"></div>
                     </div>
+
+                    <!-- Novo Gráfico Timeline (Horizontal) - PARALELO -->
+                    <div id="performance-timeline" class="performance-timeline hidden">
+                        <div id="performance-timeline-controls" class="performance-timeline-controls">
+                            <label class="performance-timeline-filter">
+                                <input type="checkbox" id="performance-timeline-filter-prod" checked>
+                                <span>Produ&ccedil;&atilde;o</span>
+                            </label>
+                            <label class="performance-timeline-filter">
+                                <input type="checkbox" id="performance-timeline-filter-setup" checked>
+                                <span>Setup</span>
+                            </label>
+                        </div>
+                        <div class="performance-timeline-title">Linha de Tempo - Operações por Data</div>
+                        <!-- ========== ETAPA 5: Legenda Contextual Melhorada ========== -->
+                        <div class="performance-timeline-legend-enhanced">
+                            <div class="performance-timeline-legend-section">
+                                <div class="performance-timeline-legend-subtitle">Tipo de Operação</div>
+                                <div class="performance-timeline-legend-row">
+                                    <div class="performance-timeline-legend-item setup">
+                                        <span class="performance-timeline-legend-label">Setup</span>
+                                        <span class="performance-timeline-legend-desc">Ajuste/Troca de linha</span>
+                                    </div>
+                                    <div class="performance-timeline-legend-item prod">
+                                        <span class="performance-timeline-legend-label">Produção</span>
+                                        <span class="performance-timeline-legend-desc">Máquina rodando</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="performance-timeline-legend-section">
+                                <div class="performance-timeline-legend-subtitle">Status de Execução</div>
+                                <div class="performance-timeline-legend-row">
+                                    <div class="performance-timeline-legend-item-status green">
+                                        <span class="performance-timeline-legend-label">No Prazo</span>
+                                        <span class="performance-timeline-legend-desc">Execução conforme programado</span>
+                                    </div>
+                                    <div class="performance-timeline-legend-item-status yellow">
+                                        <span class="performance-timeline-legend-label">Atenção</span>
+                                        <span class="performance-timeline-legend-desc">Próximo de vencer ou gap &gt;30min</span>
+                                    </div>
+                                    <div class="performance-timeline-legend-item-status red">
+                                        <span class="performance-timeline-legend-label">Atraso</span>
+                                        <span class="performance-timeline-legend-desc">Fora do cronograma</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="performance-timeline-legend-section">
+                                <div class="performance-timeline-legend-subtitle">Indicadores</div>
+                                <div class="performance-timeline-legend-row">
+                                    <div class="performance-timeline-legend-item-indicator">
+                                        <span class="performance-timeline-legend-marker now"></span>
+                                        <span class="performance-timeline-legend-label">AGORA</span>
+                                        <span class="performance-timeline-legend-desc">Marcador de tempo real</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="performance-timeline-body" id="performance-timeline-body"></div>
+                        
+                        <!-- ========== ETAPA 4: Resumo de Tempos (Rodapé) ========== -->
+                        <div class="performance-timeline-summary">
+                            <div class="performance-timeline-summary-card">
+                                <span class="performance-timeline-summary-label">PRODUÇÃO</span>
+                                <span class="performance-timeline-summary-value" id="performance-summary-prod">—</span>
+                            </div>
+                            <div class="performance-timeline-summary-card">
+                                <span class="performance-timeline-summary-label">SETUP</span>
+                                <span class="performance-timeline-summary-value" id="performance-summary-setup">—</span>
+                            </div>
+                            <div class="performance-timeline-summary-card">
+                                <span class="performance-timeline-summary-label">TOTAL</span>
+                                <span class="performance-timeline-summary-value" id="performance-summary-total">—</span>
+                            </div>
+                            <div class="performance-timeline-summary-card">
+                                <span class="performance-timeline-summary-label">DISPONÍVEL</span>
+                                <span class="performance-timeline-summary-value" id="performance-summary-available">—</span>
+                            </div>
+                            <div class="performance-timeline-summary-card">
+                                <span class="performance-timeline-summary-label">OCIOSIDADE</span>
+                                <span class="performance-timeline-summary-value" id="performance-summary-idle">—</span>
+                            </div>
+                        </div>
+                    </div>
+
                     <div id="performance-daily" class="performance-daily"></div>
                 </section>
 

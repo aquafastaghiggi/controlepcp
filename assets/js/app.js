@@ -6900,24 +6900,80 @@ async function openHistoryPreview(prgId, filterDateKey = null) {
 
     // Apply date filter if provided (sync with timeline)
     if (filterDateKey) {
-      const filterDate = new Date(filterDateKey);
-      const filterEndDate = new Date(filterDate);
-      filterEndDate.setDate(filterEndDate.getDate() + 1); // Next day
-      
-      const filterStartMs = filterDate.getTime();
-      const filterEndMs = filterEndDate.getTime();
-      
+      const parts = String(filterDateKey).split('-');
+      const year = Number(parts[0]);
+      const month = Number(parts[1]) - 1;
+      const day = Number(parts[2]);
+
+      const filterStart = (parts.length === 3 && ![year, month, day].some((v) => Number.isNaN(v)))
+        ? new Date(year, month, day, 0, 0, 0, 0)
+        : null;
+      const filterEnd = filterStart ? new Date(year, month, day, 23, 59, 59, 999) : null;
+      const filterStartMs = filterStart ? filterStart.getTime() : null;
+      const filterEndMs = filterEnd ? filterEnd.getTime() : null;
+
+      const parseSqlDateTimeLoose = (value) => {
+        if (!value) return null;
+        try {
+          const text = String(value || '').trim();
+          if (!text) return null;
+          const normalized = text.includes('T') ? text : text.replace(' ', 'T');
+          const dt = new Date(normalized);
+          return Number.isNaN(dt.getTime()) ? null : dt;
+        } catch (e) {
+          return null;
+        }
+      };
+
+      const parseLocalDateTimeSafe = (dateStr, timeStr) => {
+        if (!dateStr || !timeStr) return null;
+        try {
+          const dt = new Date(`${dateStr}T${timeStr}`);
+          return Number.isNaN(dt.getTime()) ? null : dt;
+        } catch (e) {
+          return null;
+        }
+      };
+
+      const parseScheduleStart = (row) => (
+        parseSqlDateTimeLoose(row && row.sch_inicio_producao) ||
+        parseLocalDateTimeSafe(row && row.sch_data_inicio, row && row.sch_hora_inicio) ||
+        null
+      );
+
+      const parseScheduleEnd = (row, startDt) => {
+        const fimRaw = row && row.sch_fim_producao;
+        const dtFimSql = parseSqlDateTimeLoose(fimRaw);
+        if (dtFimSql) return dtFimSql;
+
+        const fimDateMatch = fimRaw ? String(fimRaw).match(/^(\d{4}-\d{2}-\d{2})/) : null;
+        const fimDateOnly = fimDateMatch ? fimDateMatch[1] : null;
+        if (fimDateOnly) {
+          const dtDateOnly = parseLocalDateTimeSafe(fimDateOnly, row && row.sch_hora_fim);
+          if (dtDateOnly) return dtDateOnly;
+        }
+
+        const durMinRaw = Number(row && row.sch_duracao_minutos);
+        if (startDt && Number.isFinite(durMinRaw)) {
+          return new Date(startDt.getTime() + (Math.max(0, Math.round(durMinRaw)) * 60000));
+        }
+
+        const endDt = parseLocalDateTimeSafe(row && row.sch_data_inicio, row && row.sch_hora_fim);
+        if (!endDt) return null;
+        if (startDt && endDt.getTime() <= startDt.getTime()) {
+          const adjusted = new Date(endDt.getTime());
+          adjusted.setDate(adjusted.getDate() + 1);
+          return adjusted;
+        }
+        return endDt;
+      };
+
       schedule = schedule.filter((item) => {
-        const startDate = item?.sch_data_inicio ? new Date(item.sch_data_inicio).getTime() : 0;
-        const endRaw = item?.sch_fim_producao || item?.sch_data_inicio;
-        const endMatch = String(endRaw).match(/^(\d{4}-\d{2}-\d{2})/);
-        const endDateStr = endMatch ? endMatch[1] : item?.sch_data_inicio;
-        const endDate = endDateStr ? new Date(endDateStr).getTime() : 0;
-        
-        // Include if item starts or ends within filter range
-        return (startDate >= filterStartMs && startDate < filterEndMs) || 
-               (endDate >= filterStartMs && endDate < filterEndMs) ||
-               (startDate < filterStartMs && endDate >= filterEndMs);
+        if (filterStartMs === null || filterEndMs === null) return true;
+        const s = parseScheduleStart(item);
+        const e = parseScheduleEnd(item, s);
+        if (!s || !e) return false;
+        return s.getTime() <= (filterEndMs + 1) && e.getTime() >= filterStartMs;
       });
     }
 
@@ -7409,22 +7465,100 @@ window.compareHistoryPreviewToTimeline = function compareHistoryPreviewToTimelin
     return null;
   }
 
+  const parseSqlDateTimeLoose = (value) => {
+    if (!value) return null;
+    try {
+      const text = String(value || '').trim();
+      if (!text) return null;
+      const normalized = text.includes('T') ? text : text.replace(' ', 'T');
+      const dt = new Date(normalized);
+      return Number.isNaN(dt.getTime()) ? null : dt;
+    } catch (e) {
+      return null;
+    }
+  };
+
+  const parseLocalDateTimeSafe = (dateStr, timeStr) => {
+    if (!dateStr || !timeStr) return null;
+    try {
+      const dt = new Date(`${dateStr}T${timeStr}`);
+      return Number.isNaN(dt.getTime()) ? null : dt;
+    } catch (e) {
+      return null;
+    }
+  };
+
+  const parseScheduleStart = (row) => (
+    parseSqlDateTimeLoose(row && row.sch_inicio_producao) ||
+    parseLocalDateTimeSafe(row && row.sch_data_inicio, row && row.sch_hora_inicio) ||
+    null
+  );
+
+  const parseScheduleEnd = (row, startDt) => {
+    const fimRaw = row && row.sch_fim_producao;
+    const dtFimSql = parseSqlDateTimeLoose(fimRaw);
+    if (dtFimSql) return dtFimSql;
+
+    const fimDateMatch = fimRaw ? String(fimRaw).match(/^(\d{4}-\d{2}-\d{2})/) : null;
+    const fimDateOnly = fimDateMatch ? fimDateMatch[1] : null;
+    if (fimDateOnly) {
+      const dtDateOnly = parseLocalDateTimeSafe(fimDateOnly, row && row.sch_hora_fim);
+      if (dtDateOnly) return dtDateOnly;
+    }
+
+    const durMinRaw = Number(row && row.sch_duracao_minutos);
+    if (startDt && Number.isFinite(durMinRaw)) {
+      return new Date(startDt.getTime() + (Math.max(0, Math.round(durMinRaw)) * 60000));
+    }
+
+    const endDt = parseLocalDateTimeSafe(row && row.sch_data_inicio, row && row.sch_hora_fim);
+    if (!endDt) return null;
+    if (startDt && endDt.getTime() <= startDt.getTime()) {
+      const adjusted = new Date(endDt.getTime());
+      adjusted.setDate(adjusted.getDate() + 1);
+      return adjusted;
+    }
+    return endDt;
+  };
+
+  const filterByDateKeyOverlap = (list, dateKey) => {
+    if (!dateKey) return list;
+    const parts = String(dateKey).split('-');
+    const year = Number(parts[0]);
+    const month = Number(parts[1]) - 1;
+    const day = Number(parts[2]);
+    if (parts.length !== 3 || [year, month, day].some((v) => Number.isNaN(v))) return list;
+    const start = new Date(year, month, day, 0, 0, 0, 0).getTime();
+    const end = new Date(year, month, day, 23, 59, 59, 999).getTime();
+    return (list || []).filter((item) => {
+      const s = parseScheduleStart(item);
+      const e = parseScheduleEnd(item, s);
+      if (!s || !e) return false;
+      return s.getTime() <= (end + 1) && e.getTime() >= start;
+    });
+  };
+
   const normalize = (item, idx) => {
     const seq = String(item && item.sch_sequencia != null ? item.sch_sequencia : '').trim();
     const tipo = String(item && item.sch_tipo != null ? item.sch_tipo : '').trim().toLowerCase();
-    const data = String(item && item.sch_data_inicio != null ? item.sch_data_inicio : '').trim();
-    const ini = String(item && item.sch_hora_inicio != null ? item.sch_hora_inicio : '').slice(0, 5);
-    const fimRaw = String(item && item.sch_fim_producao != null ? item.sch_fim_producao : '').trim();
-    const fim = fimRaw ? fimRaw.replace('T', ' ').slice(0, 16) : `${data} ${String(item && item.sch_hora_fim != null ? item.sch_hora_fim : '').slice(0, 5)}`.trim();
+    const startDt = parseScheduleStart(item);
+    const endDt = parseScheduleEnd(item, startDt);
+    const startLabel = startDt ? startDt.toISOString() : '';
+    const endLabel = endDt ? endDt.toISOString() : '';
     const dur = String(item && item.sch_duracao_minutos != null ? item.sch_duracao_minutos : '').trim();
     return {
       idx,
-      key: `${seq}|${tipo}|${data} ${ini}|${fim}|${dur}`,
+      key: `${seq}|${tipo}|${startLabel}|${endLabel}|${dur}`,
     };
   };
 
-  const hpList = Array.isArray(hp.schedule) ? hp.schedule.map((it, i) => normalize(it, i)) : [];
-  const tlList = Array.isArray(tl.schedule) ? tl.schedule.map((it, i) => normalize(it, i)) : [];
+  const hpRaw = Array.isArray(hp.schedule) ? hp.schedule : [];
+  const tlRaw = Array.isArray(tl.schedule) ? tl.schedule : [];
+  const hpFiltered = filterByDateKeyOverlap(hpRaw, hp.filterDateKey);
+  const tlFiltered = filterByDateKeyOverlap(tlRaw, tl.selection);
+
+  const hpList = hpFiltered.map((it, i) => normalize(it, i));
+  const tlList = tlFiltered.map((it, i) => normalize(it, i));
 
   const max = Math.max(hpList.length, tlList.length);
   const mismatches = [];
@@ -7437,9 +7571,18 @@ window.compareHistoryPreviewToTimeline = function compareHistoryPreviewToTimelin
     }
   }
 
+  const setA = new Set(hpList.map((x) => x.key));
+  const setB = new Set(tlList.map((x) => x.key));
+  let missingInTimeline = 0;
+  let missingInPreview = 0;
+  setA.forEach((k) => { if (!setB.has(k)) missingInTimeline++; });
+  setB.forEach((k) => { if (!setA.has(k)) missingInPreview++; });
+
   const summary = {
     preview: { prgId: hp.prgId, filterDateKey: hp.filterDateKey, count: hpList.length },
     timeline: { prgId: tl.prgId, selection: tl.selection, count: tlList.length },
+    missingInTimeline,
+    missingInPreview,
     mismatchCountSample: mismatches.length,
     mismatches,
   };

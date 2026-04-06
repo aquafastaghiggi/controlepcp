@@ -5491,7 +5491,7 @@ function renderPerformanceTimeline(detail, options = {}) {
 
   scheduleRows.filter(filterPredicate).forEach((row, idx) => {
     const start = parseLocalDateTime(row?.sch_data_inicio, row?.sch_hora_inicio) || parseLocalDateTimeFromSql(row?.sch_inicio_producao);
-    const end = parseLocalDateTime(row?.sch_data_inicio, row?.sch_hora_fim) || parseLocalDateTimeFromSql(row?.sch_fim_producao);
+    const end = parseLocalDateTimeFromSql(row?.sch_fim_producao) || parseLocalDateTime(row?.sch_data_inicio, row?.sch_hora_fim);
     if (!start || !end) return;
 
     const seqKey = String(row?.sch_sequencia || '').trim();
@@ -5521,7 +5521,7 @@ function renderPerformanceTimeline(detail, options = {}) {
         const parsed = rowsSubset
           .map((rowItem) => {
             const startVal = parseLocalDateTime(rowItem?.sch_data_inicio, rowItem?.sch_hora_inicio) || parseLocalDateTimeFromSql(rowItem?.sch_inicio_producao);
-            const endVal = parseLocalDateTime(rowItem?.sch_data_inicio, rowItem?.sch_hora_fim) || parseLocalDateTimeFromSql(rowItem?.sch_fim_producao);
+            const endVal = parseLocalDateTimeFromSql(rowItem?.sch_fim_producao) || parseLocalDateTime(rowItem?.sch_data_inicio, rowItem?.sch_hora_fim);
             if (!startVal || !endVal) return null;
             return { start: startVal, end: endVal };
           })
@@ -5669,8 +5669,8 @@ function renderPerformanceTimeline(detail, options = {}) {
           <div class="performance-timeline-row-bars" style="position:relative; flex:1;">
             <div class="performance-timeline-bar-container">
               ${op.items.map((item) => {
-        const itemStart = parseLocalDateTime(item?.sch_data_inicio, item?.sch_hora_inicio) || parseLocalDateTimeFromSql(item?.sch_inicio_producao);
-        const itemEnd = parseLocalDateTime(item?.sch_data_inicio, item?.sch_hora_fim) || parseLocalDateTimeFromSql(item?.sch_fim_producao);
+         const itemStart = parseLocalDateTime(item?.sch_data_inicio, item?.sch_hora_inicio) || parseLocalDateTimeFromSql(item?.sch_inicio_producao);
+        const itemEnd = parseLocalDateTimeFromSql(item?.sch_fim_producao) || parseLocalDateTime(item?.sch_data_inicio, item?.sch_hora_fim);
         if (!itemStart || !itemEnd) return '';
         const isS = String(item?.sch_tipo || '').trim().toLowerCase() === 'setup';
         const startMs = itemStart.getTime();
@@ -5706,17 +5706,20 @@ function renderPerformanceTimeline(detail, options = {}) {
           ? `${itemStartTimeCompact}→${itemEndTimeCompact}` 
           : `${dateCompact} ${itemStartTimeCompact}→${itemEndTimeCompact}`;
         
-        const durMin = Math.round((itemEnd.getTime() - itemStart.getTime()) / 60000);
+        const durMinRaw = Number(item && item.sch_duracao_minutos);
+        const durMin = Number.isFinite(durMinRaw)
+          ? Math.max(0, Math.round(durMinRaw))
+          : Math.max(0, Math.round((itemEnd.getTime() - itemStart.getTime()) / 60000));
         const itemSeq = item?.sch_sequencia ? String(item.sch_sequencia).trim() : 'Setup';
         
-        // Formatação de duração: 1m, 1h 19m, etc
-        const formatDuration = (minutes) => {
-          if (minutes < 60) return `${minutes}m`;
-          const h = Math.floor(minutes / 60);
-          const m = minutes % 60;
-          return m > 0 ? `${h}h ${m}m` : `${h}h`;
+        // Formatação de duração (fiel ao preview): HH:MM
+        const formatDurationHHMM = (minutes) => {
+          const min = Math.max(0, Math.round(Number(minutes) || 0));
+          const h = Math.floor(min / 60);
+          const m = min % 60;
+          return `${pad2(h)}:${pad2(m)}`;
         };
-        const durFormatted = formatDuration(durMin);
+        const durFormatted = formatDurationHHMM(durMin);
         
         // ========== ETAPA 2: Detectar status (anomalias) ==========
         const statusClass = getItemStatusClass(itemStart, itemEnd, isS);

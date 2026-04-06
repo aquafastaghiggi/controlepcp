@@ -2484,7 +2484,7 @@ select {
 
 /* Tooltip customizado ao hover */
 .performance-timeline-item::before {
-    content: attr(data-item-seq) " - " attr(data-item-duration) "m";
+    content: attr(data-item-seq) " - " attr(data-item-duration-label);
     position: absolute;
     bottom: calc(100% + 8px);
     left: 50%;

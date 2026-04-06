@@ -2197,7 +2197,7 @@ select {
 .performance-timeline {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 8px;
     padding: 20px;
     background: rgba(248, 250, 252, 0.5);
     border-radius: 10px;
@@ -2704,7 +2704,7 @@ select {
     display: grid;
     grid-template-columns: repeat(5, 1fr);
     gap: 12px;
-    margin-top: 20px;
+    margin-top: 0;
     padding: 16px;
     background: linear-gradient(135deg, rgba(59, 130, 246, 0.06) 0%, rgba(99, 102, 241, 0.03) 100%);
     border: 1px solid rgba(59, 130, 246, 0.12);

@@ -615,11 +615,32 @@ $prgId = (int) ($_GET['id'] ?? 0);
          */
         async function carregarProgramacoes() {
             try {
+                // Primeiro testar conexão
+                const debugResponse = await fetch(`${apiBase}?action=debug`);
+                if (!debugResponse.ok) {
+                    throw new Error(`Debug retornou ${debugResponse.status}`);
+                }
+                
+                // Agora buscar dados reais
                 const response = await fetch(`${apiBase}?action=listar&limit=50`);
-                const json = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(`API retornou ${response.status}: ${response.statusText}`);
+                }
+                
+                const text = await response.text();
+                
+                // Verificar se é JSON válido
+                let json;
+                try {
+                    json = JSON.parse(text);
+                } catch (jsonErr) {
+                    console.error('Erro ao parsear JSON:', text.substring(0, 200));
+                    throw new Error('Resposta inválida da API: ' + jsonErr.message);
+                }
 
                 if (!json.sucesso || !json.data) {
-                    throw new Error('Erro ao buscar programações');
+                    throw new Error(json.erro || 'Erro ao buscar programações');
                 }
 
                 const programacoes = json.data;

@@ -5624,7 +5624,12 @@ function renderPerformanceTimeline(detail, options = {}) {
     const selectionEndMs = selectionEndDate ? selectionEndDate.getTime() : maxDate;
 
     const visibleOperationLines = operationLines.filter((op) => op.start.getTime() <= selectionEndMs);
-    const timelineStartMs = earliestStartMs;
+
+    // Ancorar a régua no início do dia para evitar "sumir" o primeiro dia no header
+    // quando a primeira operação começa após 00:00 (ex.: 27/03 08:26).
+    const startDay = new Date(earliestStartMs);
+    startDay.setHours(0, 0, 0, 0);
+    const timelineStartMs = startDay.getTime();
     const timelineEndMsClamped = hasManualSelection
       ? Math.max(selectionEndMs, timelineStartMs + 1)
       : maxDate;

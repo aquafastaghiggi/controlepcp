@@ -1,0 +1,22 @@
+# Ignorar codig.config.php (credenciais locais)
+config.php
+
+# Ignorar .env files
+.env
+.env.local
+.env.*.local
+
+# Cache e logs
+*.log
+*.cache
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

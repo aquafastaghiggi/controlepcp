@@ -581,13 +581,47 @@ if ($rawFeatureFlags !== '') {
                             </label>
                         </div>
                         <div class="performance-timeline-title">Linha de Tempo - Operações por Data</div>
-                        <!-- ========== ETAPA 6: Legenda Visual ========== -->
-                        <div class="performance-timeline-legend">
-                            <div class="performance-timeline-legend-item setup">
-                                <span>Setup</span>
+                        <!-- ========== ETAPA 5: Legenda Contextual Melhorada ========== -->
+                        <div class="performance-timeline-legend-enhanced">
+                            <div class="performance-timeline-legend-section">
+                                <div class="performance-timeline-legend-subtitle">Tipo de Operação</div>
+                                <div class="performance-timeline-legend-row">
+                                    <div class="performance-timeline-legend-item setup">
+                                        <span class="performance-timeline-legend-label">Setup</span>
+                                        <span class="performance-timeline-legend-desc">Ajuste/Troca de linha</span>
+                                    </div>
+                                    <div class="performance-timeline-legend-item prod">
+                                        <span class="performance-timeline-legend-label">Produção</span>
+                                        <span class="performance-timeline-legend-desc">Máquina rodando</span>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="performance-timeline-legend-item prod">
-                                <span>Produção</span>
+                            <div class="performance-timeline-legend-section">
+                                <div class="performance-timeline-legend-subtitle">Status de Execução</div>
+                                <div class="performance-timeline-legend-row">
+                                    <div class="performance-timeline-legend-item-status green">
+                                        <span class="performance-timeline-legend-label">No Prazo</span>
+                                        <span class="performance-timeline-legend-desc">Execução conforme programado</span>
+                                    </div>
+                                    <div class="performance-timeline-legend-item-status yellow">
+                                        <span class="performance-timeline-legend-label">Atenção</span>
+                                        <span class="performance-timeline-legend-desc">Próximo de vencer ou gap &gt;30min</span>
+                                    </div>
+                                    <div class="performance-timeline-legend-item-status red">
+                                        <span class="performance-timeline-legend-label">Atraso</span>
+                                        <span class="performance-timeline-legend-desc">Fora do cronograma</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="performance-timeline-legend-section">
+                                <div class="performance-timeline-legend-subtitle">Indicadores</div>
+                                <div class="performance-timeline-legend-row">
+                                    <div class="performance-timeline-legend-item-indicator">
+                                        <span class="performance-timeline-legend-marker now"></span>
+                                        <span class="performance-timeline-legend-label">AGORA</span>
+                                        <span class="performance-timeline-legend-desc">Marcador de tempo real</span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         <div class="performance-timeline-body" id="performance-timeline-body"></div>

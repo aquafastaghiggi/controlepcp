@@ -493,6 +493,29 @@ if ($rawFeatureFlags !== '') {
                     </div>
                     <div id="performance-summary" class="performance-summary muted"></div>
                     <div id="performance-kpis" class="performance-kpis"></div>
+                    
+                    <!-- ========== ETAPA 4: Tabela de Contexto (Repositionado para topo) ========== -->
+                    <div class="performance-data-table-wrapper">
+                        <table class="performance-data-table">
+                            <thead>
+                                <tr>
+                                    <th>Seq</th>
+                                    <th>SKU</th>
+                                    <th>Qtd</th>
+                                    <th>Duração</th>
+                                    <th>Data</th>
+                                    <th>Início</th>
+                                    <th>Fim</th>
+                                </tr>
+                            </thead>
+                            <tbody id="performance-data-table-body">
+                                <tr>
+                                    <td colspan="7" class="text-muted">Nenhum dado selecionado</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    
                     <div id="performance-gantt" class="performance-gantt">
                         <div class="performance-gantt-block">
                             <div class="performance-gantt-title">Previsto A</div>
@@ -544,28 +567,6 @@ if ($rawFeatureFlags !== '') {
                             </div>
                         </div>
                         <div class="performance-timeline-body" id="performance-timeline-body"></div>
-                    </div>
-
-                    <!-- ========== ETAPA 4: Tabela de Contexto (Repositionado) ========== -->
-                    <div class="performance-data-table-wrapper">
-                        <table class="performance-data-table">
-                            <thead>
-                                <tr>
-                                    <th>Seq</th>
-                                    <th>SKU</th>
-                                    <th>Qtd</th>
-                                    <th>Duração</th>
-                                    <th>Data</th>
-                                    <th>Início</th>
-                                    <th>Fim</th>
-                                </tr>
-                            </thead>
-                            <tbody id="performance-data-table-body">
-                                <tr>
-                                    <td colspan="7" class="text-muted">Nenhum dado selecionado</td>
-                                </tr>
-                            </tbody>
-                        </table>
                     </div>
 
                     <div id="performance-daily" class="performance-daily"></div>

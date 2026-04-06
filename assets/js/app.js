@@ -274,7 +274,7 @@
     }
 
     function escapeHtml(value) {
-        const text = String(value ?? '');
+        const text = String(value || '');
         const map = {
             '&': '&amp;',
             '<': '&lt;',
@@ -336,7 +336,7 @@
                 description: product?.description || '',
                 reference_setup: product?.reference_setup || product?.description || '',
                 line: product?.line || 'L2',
-                rate_per_hour: product?.rate_per_hour ?? 0,
+                rate_per_hour: product?.rate_per_hour || 0,
                 unit: product?.unit || 'cx',
             };
         });
@@ -4595,55 +4595,35 @@ function renderPerformanceGantt(detail, options = {}) {
     `;
   }).join('');
 
-  const tickPositions = tickDates.map((t, i) => {
-    const tickDate = t instanceof Date ? t : new Date(t);
-    const tickMs = tickDate instanceof Date ? tickDate.getTime() : NaN;
-    const dateLabel = formatDateShortPt(tickDate);
-    const weekdayLabel = formatWeekDayShortPt(tickDate);
-    const timeLabel = formatTimeOnlyPt(tickDate);
-    const position = Number.isFinite(tickMs) && rangeMs > 0
-      ? Math.max(0, Math.min(100, ((tickMs - startMs) / rangeMs) * 100))
-      : (tickCountForPosition ? (i / tickCountForPosition) * 100 : 0);
-    const isFocusTick = focusMs && Number.isFinite(tickMs) && Math.abs(tickMs - focusMs) < (24 * 60 * 60 * 1000);
-    return {
-      dateLabel,
-      weekdayLabel,
-      timeLabel,
-      position,
-      isFocusTick,
-    };
-  });
-
-  const tickHtml = tickPositions.map(({ dateLabel, weekdayLabel, timeLabel, position, isFocusTick }) => `
+  const tickHtml = tickDates.map((t, i) => {
+    const dateLabel = formatDateShortPt(t);
+    const weekdayLabel = formatWeekDayShortPt(t);
+    const timeLabel = formatTimeOnlyPt(t);
+    const position = tickCountForPosition ? (i / tickCountForPosition) * 100 : 0;
+    const isFocusTick = focusMs && Math.abs(t.getTime() - focusMs) < (24 * 60 * 60 * 1000);
+    return `
       <div class="performance-gantt-tick${isFocusTick ? ' is-focus' : ''}" style="left:${position}%">
         <div class="performance-gantt-tick-date">${escapeHtml(dateLabel)}</div>
         <div class="performance-gantt-tick-weekday">${escapeHtml(weekdayLabel)}</div>
         <div class="performance-gantt-tick-time">${escapeHtml(timeLabel)}</div>
       </div>
-    `).join('');
-
-  const gridLineHtml = tickPositions.map(({ position }) => `
-      <div class="performance-gantt-grid-line" style="left:${position}%"></div>
-    `).join('');
+    `;
+  }).join('');
 
   const selectedIdx = window.__performanceGanttState.selectedByContainer[containerId];
 
   const rowHtml = visibleRows.map((r) => {
     const left = ((r.start.getTime() - startMs) / rangeMs) * 100;
     const width = Math.max(0.6, ((r.end.getTime() - r.start.getTime()) / rangeMs) * 100);
-    const endPosition = Math.min(100, left + width);
     const seqLabel = r.seq ? `${r.seq}` : 'Produ\u00e7\u00e3o';
     const labelMain = r.isSetup ? 'Setup' : `${seqLabel}${r.skuName ? ' - ' + r.skuName : ''}`;
     const labelSub = '';
     const title = `${labelMain}${labelSub ? ' - ' + labelSub : ''}\n${formatDateTimeShortPt(r.start)} \u2192 ${formatDateTimeShortPt(r.end)}\nDura\u00e7\u00e3o: ${formatDurationMinutesToHHMM(r.durMin)}`;
     const selected = selectedIdx !== undefined && selectedIdx !== null && String(selectedIdx) === String(r.idx);
-    const tooltipText = `${formatDateTimeShortPt(r.start)} \u2192 ${formatDateTimeShortPt(r.end)}`;
 
     const isFocusRow = focusMs && Math.abs(r.start.getTime() - focusMs) < (60 * 60 * 1000);
     return `
-      <div class="performance-gantt-row ${selected ? 'is-selected' : ''} ${isFocusRow ? 'is-focus' : ''}" tabindex="0" role="button" aria-selected="${selected ? 'true' : 'false'}" data-gantt-row="${escapeHtml(String(r.idx))}" data-gantt-container="${escapeHtml(containerId)}" style="--row-start:${left}%; --row-end:${endPosition}%;">
-        <div class="performance-gantt-row-guide" aria-hidden="true"></div>
-        <div class="performance-gantt-row-tooltip">${escapeHtml(tooltipText)}</div>
+      <div class="performance-gantt-row ${selected ? 'is-selected' : ''} ${isFocusRow ? 'is-focus' : ''}" tabindex="0" role="button" aria-selected="${selected ? 'true' : 'false'}" data-gantt-row="${escapeHtml(String(r.idx))}" data-gantt-container="${escapeHtml(containerId)}">
         <div class="performance-gantt-label">
           <div class="performance-gantt-label-main">${escapeHtml(labelMain)}</div>
           <div class="performance-gantt-label-sub">${escapeHtml(labelSub)}</div>
@@ -4667,7 +4647,6 @@ function renderPerformanceGantt(detail, options = {}) {
         <div class="performance-gantt-axis-label"></div>
         <div class="performance-gantt-axis performance-gantt-axis-track">${tickHtml}</div>
       </div>
-      <div class="performance-gantt-grid-lines">${gridLineHtml}</div>
       <div class="performance-gantt-rows">${rowHtml}</div>
     </div>
     <div class="performance-gantt-detail" data-gantt-detail="${escapeHtml(containerId)}">${buildPerformanceGanttDetailHtml(selectedRow)}</div>
@@ -4907,20 +4886,12 @@ function renderPerformanceAlternative(detail) {
                   const duration = Number(item?.sch_duracao_minutos) || 0;
                   const qty = item?.sch_quantidade ? `Qty ${item.sch_quantidade}` : '';
                   const title = `${item.label}\\n${formatDateTimeShortPt(item.start)} → ${formatDateTimeShortPt(item.end)}\\n${qty}${qty ? ' • ' : ''}${duration ? `${Math.floor(duration / 60)}h${duration % 60}m` : ''}`;
+                  // Mostrar texto dentro da barra com thresholds conservadores
+                  // Setup: 15% (texto curto) | Produção: 30% (texto potencialmente longo)
+                  const showTextInBar = item.isSetup ? widthPct >= 15 : widthPct >= 30;
                   const barTextRaw = item.isSetup ? 'Setup' : stripSeqPrefix(item.label);
-                  const mode = (() => {
-                    if (!barTextRaw) return 'none';
-                    if (item.isSetup) {
-                      if (widthPct >= 10) return 'always';
-                      if (widthPct >= 6) return 'hover';
-                      return 'none';
-                    }
-                    if (widthPct >= 18) return 'always';
-                    if (widthPct >= 8) return 'hover';
-                    return 'none';
-                  })();
-                  const barTextHtml = mode !== 'none'
-                    ? `<span class="performance-alt-item-bar-text" data-mode="${escapeHtml(mode)}">${escapeHtml(barTextRaw)}</span>`
+                  const barTextHtml = showTextInBar && barTextRaw
+                    ? `<span class="performance-alt-item-bar-text">${escapeHtml(barTextRaw)}</span>`
                     : '';
                   return `
                     <div class="performance-alt-item ${item.isSetup ? 'is-setup' : ''}${isLate ? ' is-late' : ''}" data-alt-idx="${item.idx}" data-seq="${escapeHtml(item.seq || '')}" data-op="${escapeHtml(item.op || '')}" data-bar-left="${leftPct}" data-bar-width="${widthPct}" title="${escapeHtml(title)}">
@@ -5011,14 +4982,6 @@ function renderPerformanceAlternative(detail) {
         <div>Escala horizontal</div>
         <strong>Largura = duração</strong>
         <small>Posição e extremidades mostram o horário dentro do turno</small>
-      </div>
-      <div class="performance-alt-indicator-item is-tag-guide">
-        <div>Tags</div>
-        <strong class="performance-alt-tag-guide-line">
-          <span class="performance-alt-tag-sample is-desvio">• Desvio +00:10</span>
-          <span class="performance-alt-day-badge is-compact-badge">Compacto</span>
-        </strong>
-        <small>Desvio = diferença entre realizado e previsto. Compacto = dia com alta densidade de itens (&gt;= 6).</small>
       </div>
     `;
   }
@@ -5172,6 +5135,810 @@ function renderPerformanceAltConnectors() {
   });
 }
 
+function ensurePerformanceTimelineSelectionState() {
+  if (!window.__performanceTimelineSelection) {
+    window.__performanceTimelineSelection = { dateKey: null };
+  }
+  return window.__performanceTimelineSelection;
+}
+
+function updatePerformanceTimelineSelection(dateKey) {
+  const state = ensurePerformanceTimelineSelectionState();
+  const normalized = dateKey ? String(dateKey).trim() : null;
+  if (state.dateKey === normalized) {
+    return false;
+  }
+  state.dateKey = normalized;
+  return true;
+}
+
+// ========== ETAPA 1: Função para Atualizar Dashboard de Status ==========
+function updatePerformanceStatusDashboard(operationLines, detail) {
+  const now = new Date();
+  let currentOp = null;
+  let nextOp = null;
+  
+  // Processa todas as operações para encontrar a atual e próxima
+  operationLines.forEach((op, idx) => {
+    // Se a operação ainda não começou
+    if (op.start > now && !nextOp) {
+      nextOp = op;
+    }
+    // Se a operação está rodando agora
+    if (op.start <= now && op.end > now) {
+      currentOp = op;
+    }
+  });
+  
+  // Determinar status
+  let statusClass = 'status-ok';
+  let statusText = 'NO PRAZO';
+  
+  if (!currentOp && nextOp) {
+    const diffMs = nextOp.start.getTime() - now.getTime();
+    const diffMinutes = diffMs / (1000 * 60);
+    if (diffMinutes < 30) {
+      statusClass = 'status-warning';
+      statusText = 'ATENÇÃO';
+    }
+  } else if (currentOp) {
+    const diffMs = currentOp.end.getTime() - now.getTime();
+    const diffMinutes = diffMs / (1000 * 60);
+    if (diffMinutes < 15) {
+      statusClass = 'status-warning';
+      statusText = 'ATENÇÃO';
+    }
+  } else if (!currentOp && !nextOp) {
+    statusClass = 'status-alert';
+    statusText = 'CONCLUÍDO';
+  } else if (!currentOp && nextOp) {
+    const diffMs = nextOp.start.getTime() - now.getTime();
+    if (diffMs < 0) {
+      statusClass = 'status-alert';
+      statusText = 'ATRASO';
+    }
+  }
+  
+  // Buscar eficiência do detail
+  const efficiency = detail?.programacao?.prg_eficiencia ?? '--';
+  
+  // Atualizar elementos do dashboard
+  const currentOpEl = document.getElementById('performance-current-op');
+  const nextOpEl = document.getElementById('performance-next-op');
+  const statusBadgeEl = document.getElementById('performance-status-badge');
+  const completionEl = document.getElementById('performance-completion');
+  const efficiencyEl = document.getElementById('performance-efficiency');
+  
+  if (currentOpEl) {
+    currentOpEl.textContent = currentOp ? `OP ${currentOp.numProgramacao || '—'}` : '—';
+  }
+  if (nextOpEl) {
+    nextOpEl.textContent = nextOp ? `OP ${nextOp.numProgramacao || '—'}` : '—';
+  }
+  if (statusBadgeEl) {
+    statusBadgeEl.textContent = statusText;
+    statusBadgeEl.className = `performance-status-badge ${statusClass}`;
+  }
+  if (completionEl) {
+    completionEl.textContent = '100%';
+  }
+  if (efficiencyEl) {
+    efficiencyEl.textContent = `${efficiency}%`;
+  }
+}
+
+// ========== ETAPA 4: Função para Atualizar Resumo de Tempos ==========
+function updatePerformanceTimeSummary(operationLines) {
+  let totalProdMs = 0;      // Total em ms de produção
+  let totalSetupMs = 0;     // Total em ms de setup
+  let totalMs = 0;          // Total geral
+  
+  operationLines.forEach((op) => {
+    // Percorrer items de cada operação
+    if (op.items && Array.isArray(op.items)) {
+      op.items.forEach((item) => {
+        const itemStart = op.start;
+        const itemEnd = op.end;
+        
+        if (itemStart && itemEnd) {
+          const durationMs = itemEnd.getTime() - itemStart.getTime();
+          const isSetup = String(item?.sch_tipo || '').trim().toLowerCase() === 'setup';
+          
+          if (isSetup) {
+            totalSetupMs += durationMs;
+          } else {
+            totalProdMs += durationMs;
+          }
+          totalMs += durationMs;
+        }
+      });
+    }
+  });
+  
+  // Converter para horas e minutos (formato HH:MM)
+  const formatHourMin = (ms) => {
+    const totalMinutes = Math.round(ms / (1000 * 60));
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+  };
+  
+  const prodFormatted = formatHourMin(totalProdMs);
+  const setupFormatted = formatHourMin(totalSetupMs);
+  const totalFormatted = formatHourMin(totalMs);
+  
+  // Calcular horário disponível (24h)
+  const availableMs = 24 * 60 * 60 * 1000; // 24 horas em ms
+  const availableFormatted = formatHourMin(availableMs);
+  
+  // Ociosidade = disponível - total
+  const idleMs = availableMs - totalMs;
+  const idleFormatted = formatHourMin(idleMs);
+  
+  // Atualizar elements
+  const prodEl = document.getElementById('performance-summary-prod');
+  const setupEl = document.getElementById('performance-summary-setup');
+  const totalEl = document.getElementById('performance-summary-total');
+  const availableEl = document.getElementById('performance-summary-available');
+  const idleEl = document.getElementById('performance-summary-idle');
+  
+  if (prodEl) prodEl.textContent = prodFormatted;
+  if (setupEl) setupEl.textContent = setupFormatted;
+  if (totalEl) totalEl.textContent = totalFormatted;
+  if (availableEl) availableEl.textContent = availableFormatted;
+  if (idleEl) idleEl.textContent = idleFormatted;
+  
+  console.log(`📊 Resumo - Produção: ${prodFormatted}, Setup: ${setupFormatted}, Total: ${totalFormatted}, Ociosidade: ${idleFormatted}`);
+}
+
+// ========== ETAPA 2: Função para Detectar Status de Item (Anomalias) ==========
+function getItemStatusClass(itemStart, itemEnd, isSetup) {
+  const now = new Date();
+  
+  // Item completado
+  if (itemEnd < now) {
+    return 'is-on-time'; // Completado no prazo
+  }
+  
+  // Item em execução
+  if (itemStart <= now && itemEnd > now) {
+    const diffMs = itemEnd.getTime() - now.getTime();
+    const diffMinutes = diffMs / (1000 * 60);
+    
+    // Faltam menos de 15 minutos para terminar
+    if (diffMinutes < 15) {
+      return 'is-warning';
+    }
+    return 'is-on-time';
+  }
+  
+  // Item não iniciado
+  if (itemStart > now) {
+    const diffMs = itemStart.getTime() - now.getTime();
+    const diffMinutes = diffMs / (1000 * 60);
+    
+    // Setup não iniciado no horário correto (detectar atraso)
+    if (isSetup && diffMinutes < 0) {
+      return 'is-alert';
+    }
+    
+    // Próxima exécução em menos de 30 minutos
+    if (diffMinutes < 30) {
+      return 'is-warning';
+    }
+    return 'is-on-time';
+  }
+  
+  return 'is-on-time';
+}
+
+function renderPerformanceTimeline(detail, options = {}) {
+  const containerId = options?.containerId || 'performance-timeline';
+  const bodyId = options?.bodyId || 'performance-timeline-body';
+  const container = document.getElementById(containerId);
+  const body = document.getElementById(bodyId);
+  if (!container || !body) return;
+
+  console.log('DEBUG renderPerformanceTimeline - detail:', detail);
+  console.log('DEBUG renderPerformanceTimeline - detail.programacao:', detail?.programacao);
+  const programacaoOp = detail?.programacao?.prg_numero_op || '';
+  console.log('DEBUG programacaoOp:', programacaoOp);
+  const detailOpMap = buildPerformanceOpMap(detail);
+
+  const scheduleRows = detail?.schedule || [];
+  if (!scheduleRows.length) {
+    body.innerHTML = '<div class="muted">Nenhum evento válido encontrado.</div>';
+    container.classList.add('hidden');
+    return;
+  }
+
+  // Reutilizar helpers de renderPerformanceAlternative
+  const parseLocalDateTime = (dateStr, timeStr) => {
+    if (!dateStr || !timeStr) return null;
+    try {
+      const dt = new Date(`${dateStr}T${timeStr}`);
+      return Number.isNaN(dt.getTime()) ? null : dt;
+    } catch (e) {
+      return null;
+    }
+  };
+
+  const parseLocalDateTimeFromSql = (sqlDateTimeStr) => {
+    if (!sqlDateTimeStr) return null;
+    try {
+      const normalized = String(sqlDateTimeStr || '').replace(' ', 'T');
+      const dt = new Date(normalized);
+      return Number.isNaN(dt.getTime()) ? null : dt;
+    } catch (e) {
+      return null;
+    }
+  };
+
+  const formatTimeOnlyPt = (dateObj) => {
+    if (!dateObj || Number.isNaN(dateObj.getTime())) return '--:--';
+    return `${String(dateObj.getHours()).padStart(2, '0')}:${String(dateObj.getMinutes()).padStart(2, '0')}`;
+  };
+
+  const formatDateOnlyPtShort = (dateObj) => {
+    if (!dateObj || Number.isNaN(dateObj.getTime())) return '--/--';
+    return `${String(dateObj.getDate()).padStart(2, '0')}/${String(dateObj.getMonth() + 1).padStart(2, '0')}`;
+  };
+
+  const formatWeekdayShortPt = (dateKey) => {
+    if (!dateKey) return '';
+    try {
+      const dt = new Date(`${dateKey}T00:00`);
+      const days = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
+      return days[dt.getDay()] || '';
+    } catch (e) {
+      return '';
+    }
+  };
+
+  const toDateKeyLocal = (dateObj) => {
+    if (!dateObj || Number.isNaN(dateObj.getTime())) return '';
+    const y = dateObj.getFullYear();
+    const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const d = String(dateObj.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+
+  const formatDateKeyPt = (dateKey) => {
+    if (!dateKey) return '';
+    const parts = dateKey.split('-');
+    if (parts.length !== 3) return dateKey;
+    return `${parts[2]}/${parts[1]}`;
+  };
+
+  const parseDateKeyToEndOfDay = (dateKey) => {
+    if (!dateKey) return null;
+    const parts = String(dateKey).split('-');
+    if (parts.length !== 3) return null;
+    const year = Number(parts[0]);
+    const month = Number(parts[1]) - 1;
+    const day = Number(parts[2]);
+    if ([year, month, day].some((value) => Number.isNaN(value))) {
+      return null;
+    }
+    const dt = new Date(year, month, day, 23, 59, 59, 999);
+    return Number.isNaN(dt.getTime()) ? null : dt;
+  };
+
+  const toMin = (start, end) => {
+    if (!start || !end) return 0;
+    return Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000));
+  };
+
+  const formatDurationMinutesToHHMM = (totalMinutes) => {
+    const min = Math.abs(Math.floor(totalMinutes || 0));
+    const h = Math.floor(min / 60);
+    const m = min % 60;
+    return `${h}h${m}m`;
+  };
+
+  const escapeHtml = (text) => {
+    if (!text) return '';
+    const map = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#039;',
+    };
+    return String(text).replace(/[&<>"']/g, (char) => map[char]);
+  };
+
+  const stripSeqPrefix = (value) => String(value || '').replace(/^\s*\d+\s*-\s*/g, '').trim();
+
+  // Coleta informações operacionais
+  const opMap = new Map();
+  scheduleRows.forEach((row) => {
+    const seq = String(row?.sch_sequencia || '').trim();
+    if (seq && !opMap.has(seq)) {
+      opMap.set(seq, seq);
+    }
+  });
+
+  // Agrupa por operação (seq)
+  const showProd = document.getElementById('performance-timeline-filter-prod')?.checked ?? true;
+  const showSetup = document.getElementById('performance-timeline-filter-setup')?.checked ?? true;
+  const filterPredicate = (row) => {
+    const isSetup = String(row?.sch_tipo || '').trim().toLowerCase() === 'setup';
+    if (isSetup && !showSetup) return false;
+    if (!isSetup && !showProd) return false;
+    return true;
+  };
+
+  const operationLines = [];
+  const seenSeqs = new Set();
+
+  scheduleRows.filter(filterPredicate).forEach((row, idx) => {
+    const start = parseLocalDateTime(row?.sch_data_inicio, row?.sch_hora_inicio) || parseLocalDateTimeFromSql(row?.sch_inicio_producao);
+    const end = parseLocalDateTime(row?.sch_data_inicio, row?.sch_hora_fim) || parseLocalDateTimeFromSql(row?.sch_fim_producao);
+    if (!start || !end) return;
+
+    const seqKey = String(row?.sch_sequencia || '').trim();
+    const isSetup = String(row?.sch_tipo || '').trim().toLowerCase() === 'setup';
+    const label = row?.sch_sequencia ? `${row.sch_sequencia} - ${row.sch_descricao}` : row.sch_descricao || 'Produção';
+
+    if (!seenSeqs.has(seqKey)) {
+      seenSeqs.add(seqKey);
+      const items = scheduleRows.filter((r) => String(r?.sch_sequencia || '').trim() === seqKey);
+      const itemsFiltered = items.filter(filterPredicate);
+      if (itemsFiltered.length === 0) return;
+
+      const op = String(itemsFiltered.find((r) => String(r?.sch_sequencia || '').trim() === seqKey)?.sch_sequencia || '').trim();
+      const firstItem = itemsFiltered.find((r) => String(r?.sch_sequencia || '').trim() === seqKey);
+      const detailOpNumber = String(detailOpMap.get(seqKey) ?? '').trim();
+      const fallbackOpNumber = String(
+        firstItem?.prg_itens_op ||
+        firstItem?.sch_numero_programacao ||
+        firstItem?.prg_numero_op ||
+        firstItem?.numero_programacao ||
+        ''
+      ).trim();
+      const numProgramacao = detailOpNumber || fallbackOpNumber;
+      const prodLabel = stripSeqPrefix(itemsFiltered.find((r) => !String(r?.sch_tipo || '').trim().toLowerCase().includes('setup'))?.sch_descricao || label);
+      const computeRange = (rowsSubset) => {
+        const parsed = rowsSubset
+          .map((rowItem) => {
+            const startVal = parseLocalDateTime(rowItem?.sch_data_inicio, rowItem?.sch_hora_inicio) || parseLocalDateTimeFromSql(rowItem?.sch_inicio_producao);
+            const endVal = parseLocalDateTime(rowItem?.sch_data_inicio, rowItem?.sch_hora_fim) || parseLocalDateTimeFromSql(rowItem?.sch_fim_producao);
+            if (!startVal || !endVal) return null;
+            return { start: startVal, end: endVal };
+          })
+          .filter(Boolean);
+        if (!parsed.length) return null;
+        const startMs = Math.min(...parsed.map((entry) => entry.start.getTime()));
+        const endMs = Math.max(...parsed.map((entry) => entry.end.getTime()));
+        const duration = parsed.reduce((sum, entry) => sum + toMin(entry.start, entry.end), 0);
+        return {
+          start: new Date(startMs),
+          end: new Date(endMs),
+          duration,
+        };
+      };
+
+      const buildRow = (type, rowsSubset, rowLabel) => {
+        if (!rowsSubset.length) return null;
+        const range = computeRange(rowsSubset);
+        if (!range) return null;
+        const isSetup = type === 'setup';
+        return {
+          seq: seqKey,
+          op,
+          numProgramacao,
+          label: rowLabel,
+          type,
+          start: range.start,
+          end: range.end,
+          prodMin: isSetup ? 0 : range.duration,
+          setupMin: isSetup ? range.duration : 0,
+          items: rowsSubset,
+        };
+      };
+
+      const productionRows = itemsFiltered.filter((r) => String(r?.sch_tipo || '').trim().toLowerCase() !== 'setup');
+      const setupRows = itemsFiltered.filter((r) => String(r?.sch_tipo || '').trim().toLowerCase() === 'setup');
+
+      const prodLine = buildRow('prod', productionRows, prodLabel);
+      const setupLine = buildRow('setup', setupRows, 'Setup');
+
+      if (prodLine) {
+        operationLines.push(prodLine);
+      }
+      if (setupLine) {
+        operationLines.push(setupLine);
+      }
+    }
+  });
+
+  // Renderizar timelines
+  if (!operationLines.length) {
+    body.innerHTML = '<div class="muted">Nenhuma operação encontrada com os filtros aplicados.</div>';
+  } else {
+    const earliestStartMs = Math.min(...operationLines.map((op) => op.start.getTime()));
+    const maxDate = Math.max(...operationLines.map((op) => op.end.getTime()));
+    const selectionState = ensurePerformanceTimelineSelectionState();
+    const hasManualSelection = Boolean(selectionState.dateKey);
+    const selectionDateKey = selectionState.dateKey;
+    const selectionEndDate = hasManualSelection ? parseDateKeyToEndOfDay(selectionDateKey) : null;
+    const selectionEndMs = selectionEndDate ? selectionEndDate.getTime() : maxDate;
+
+    const visibleOperationLines = operationLines.filter((op) => op.start.getTime() <= selectionEndMs);
+    const timelineStartMs = earliestStartMs;
+    const timelineEndMsClamped = hasManualSelection
+      ? Math.max(selectionEndMs, timelineStartMs + 1)
+      : maxDate;
+    const timelineRangeMs = Math.max(1, timelineEndMsClamped - timelineStartMs);
+
+    // Gerar datas únicas para o header
+    const minDateObj = new Date(timelineStartMs);
+    const maxDateObj = new Date(timelineEndMsClamped);
+    const dateHeaderItems = [];
+    const currentDate = new Date(minDateObj);
+    currentDate.setHours(0, 0, 0, 0);
+
+    while (currentDate <= maxDateObj) {
+      const dateKey = toDateKeyLocal(currentDate);
+      const weekday = formatWeekdayShortPt(dateKey);
+      const formatted = formatDateKeyPt(dateKey);
+      const leftPct = ((currentDate.getTime() - timelineStartMs) / timelineRangeMs) * 100;
+      dateHeaderItems.push({
+        dateKey,
+        weekday,
+        formatted,
+        leftPct,
+        dateObj: new Date(currentDate),
+      });
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    const defaultDateKey = dateHeaderItems.length ? dateHeaderItems[dateHeaderItems.length - 1].dateKey : null;
+    const selectedHeaderDate = selectionState.dateKey || defaultDateKey;
+    const highlightPct = hasManualSelection ? Math.max(0, Math.min(100, ((selectionEndMs - timelineStartMs) / timelineRangeMs) * 100)) : 0;
+
+    // ========== ETAPA 3: Calcular posição do marcador "AGORA" ==========
+    const now = new Date();
+    const nowMs = now.getTime();
+    const isNowInRange = nowMs >= timelineStartMs && nowMs <= timelineEndMsClamped;
+    const nowPct = isNowInRange ? ((nowMs - timelineStartMs) / timelineRangeMs) * 100 : -1;
+    
+    // Armazenar para o intervalo acessar depois
+    window.__performanceTimelineRange = { timelineStartMs, timelineEndMsClamped, timelineRangeMs };
+
+    // Renderizar header de datas
+    const headerHtml = `
+      <div class="performance-timeline-header">
+        <div class="performance-timeline-header-spacer"></div>
+        <div class="performance-timeline-header-scale">
+          ${highlightPct > 0 ? `<span class="performance-timeline-selection-range" style="width:${highlightPct.toFixed(4)}%;"></span>` : ''}
+          <div class="performance-timeline-header-container">
+            ${dateHeaderItems.map((item) => `
+              <div class="performance-timeline-header-item${item.dateKey === selectedHeaderDate ? ' is-selected' : ''}" data-date-key="${item.dateKey}" style="left:${item.leftPct.toFixed(2)}%;">
+                <div class="performance-timeline-header-label">${escapeHtml(item.weekday)}</div>
+                <div class="performance-timeline-header-date">${escapeHtml(item.formatted)}</div>
+              </div>
+            `).join('')}
+            ${isNowInRange ? `<span class="performance-timeline-now-marker" style="left:${nowPct.toFixed(2)}%;"><span class="performance-timeline-now-label">AGORA</span></span>` : ''}
+          </div>
+        </div>
+        <div class="performance-timeline-header-info">
+          <button class="performance-timeline-reset" type="button" aria-label="Mostrar todas as datas">Mostrar tudo</button>
+        </div>
+      </div>
+    `;
+
+    const lines = visibleOperationLines.map((op) => {
+      const opNumber = op.numProgramacao || programacaoOp || '';
+      const opStartPct = ((op.start.getTime() - timelineStartMs) / timelineRangeMs) * 100;
+      const clampedOpEndMs = Math.min(op.end.getTime(), timelineEndMsClamped);
+      const opWidthPct = Math.max(0, ((clampedOpEndMs - op.start.getTime()) / timelineRangeMs) * 100);
+      const startDateKey = toDateKeyLocal(op.start);
+      const endDateKey = toDateKeyLocal(op.end);
+      const startWeekday = formatWeekdayShortPt(startDateKey);
+      const startDateFormatted = formatDateKeyPt(startDateKey);
+      const startTime = formatTimeOnlyPt(op.start);
+      const endTime = formatTimeOnlyPt(op.end);
+
+      return `
+        <div class="performance-timeline-row-wrapper">
+          <div class="performance-timeline-row-op-info">OP: ${escapeHtml(opNumber || '—')} / Seq ${escapeHtml(op.seq)}</div>
+          <div class="performance-timeline-row">
+            <div class="performance-timeline-row-header">
+              <div class="performance-timeline-row-seq">${escapeHtml(op.label)}</div>
+            </div>
+          <div class="performance-timeline-row-bars" style="position:relative; flex:1;">
+            <div class="performance-timeline-bar-container">
+              ${op.items.map((item) => {
+        const itemStart = parseLocalDateTime(item?.sch_data_inicio, item?.sch_hora_inicio) || parseLocalDateTimeFromSql(item?.sch_inicio_producao);
+        const itemEnd = parseLocalDateTime(item?.sch_data_inicio, item?.sch_hora_fim) || parseLocalDateTimeFromSql(item?.sch_fim_producao);
+        if (!itemStart || !itemEnd) return '';
+        const isS = String(item?.sch_tipo || '').trim().toLowerCase() === 'setup';
+        const startMs = itemStart.getTime();
+        const endMs = Math.min(itemEnd.getTime(), timelineEndMsClamped);
+        const clampedStartMs = Math.max(startMs, timelineStartMs);
+        if (endMs <= clampedStartMs) return '';
+        const shouldExtendToSelectedDate = hasManualSelection
+          && Number.isFinite(selectionEndMs)
+          && clampedStartMs < selectionEndMs;
+        const renderEndMs = shouldExtendToSelectedDate
+          ? Math.max(endMs, selectionEndMs)
+          : endMs;
+        const itemStartPct = ((clampedStartMs - timelineStartMs) / timelineRangeMs) * 100;
+        const itemWidthPct = Math.max(0, ((Math.min(renderEndMs, timelineEndMsClamped) - clampedStartMs) / timelineRangeMs) * 100);
+        const itemStartTime = formatTimeOnlyPt(itemStart);
+        const itemEndTime = formatTimeOnlyPt(itemEnd);
+        
+        // Opção A+B: Formato adaptativo com horários sem segundos
+        const itemStartTimeCompact = itemStartTime.split(':').slice(0, 2).join(':'); // HH:MM
+        const itemEndTimeCompact = itemEndTime.split(':').slice(0, 2).join(':'); // HH:MM
+        const startDateKeyItem = toDateKeyLocal(itemStart); // YYYY-MM-DD
+        const dateParts = startDateKeyItem.split('-'); // [YYYY, MM, DD]
+        const dateCompact = `${parseInt(dateParts[2])}/${parseInt(dateParts[1])}`; // DD/M (sem zeros)
+        
+        // Se barra é fina (<5%), mostrar só horários; senão, mostrar data + horários
+        const labelContent = itemWidthPct < 5 
+          ? `${itemStartTimeCompact}→${itemEndTimeCompact}` 
+          : `${dateCompact} ${itemStartTimeCompact}→${itemEndTimeCompact}`;
+        
+        const durMin = Math.round((itemEnd.getTime() - itemStart.getTime()) / 60000);
+        const itemSeq = item?.sch_sequencia ? String(item.sch_sequencia).trim() : 'Setup';
+        
+        // Formatação de duração: 1m, 1h 19m, etc
+        const formatDuration = (minutes) => {
+          if (minutes < 60) return `${minutes}m`;
+          const h = Math.floor(minutes / 60);
+          const m = minutes % 60;
+          return m > 0 ? `${h}h ${m}m` : `${h}h`;
+        };
+        const durFormatted = formatDuration(durMin);
+        
+        // ========== ETAPA 2: Detectar status (anomalias) ==========
+        const statusClass = getItemStatusClass(itemStart, itemEnd, isS);
+        
+        // Label visível na barra (adaptado ao tamanho)
+        const seqLabel = itemWidthPct < 8 ? itemSeq : `${itemSeq}`;
+        const barLabel = itemWidthPct < 15 ? `${durFormatted}` : `${itemSeq} • ${durFormatted}`;
+        
+        return `<span class="performance-timeline-item ${isS ? 'is-setup' : 'is-prod'} ${statusClass}" style="left:${itemStartPct.toFixed(4)}%; width:${itemWidthPct.toFixed(4)}%; --timeline-start-ms:${clampedStartMs}; --timeline-end-ms:${endMs}; --timeline-range-ms:${timelineRangeMs};" data-item-start="${clampedStartMs}" data-item-end="${endMs}" data-item-type="${isS ? 'setup' : 'prod'}" data-item-date="${startDateKeyItem}" data-item-seq="${escapeHtml(itemSeq)}" data-item-duration="${durMin}" data-item-desc="${escapeHtml(item.sch_descricao || '')}" title="${escapeHtml(item.sch_descricao || '')} ${itemStartTime} → ${itemEndTime}"><span class="performance-timeline-item-label">${labelContent}</span><span class="performance-timeline-item-info">${barLabel}</span></span>`;
+      }).join('')}
+            </div>
+          </div>
+          <div class="performance-timeline-row-info">
+            <small>${startWeekday} ${startDateFormatted} ${startTime}</small>
+            <small>→</small>
+            <small>${formatDateKeyPt(endDateKey)} ${endTime}</small>
+          </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    const contentHtml = visibleOperationLines.length ? lines : '<div class="muted">Nenhuma operação encontrada no período selecionado.</div>';
+    body.innerHTML = headerHtml + contentHtml;
+    
+    // Limpa classes de destaque legadas para manter foco no comprimento das barras
+    const allItems = body.querySelectorAll('.performance-timeline-item');
+    allItems.forEach((item) => {
+      item.classList.remove('is-selected-day-bar', 'is-outside-day-bar', 'is-selected-date', 'is-faded');
+    });
+    
+    const headerScaleEl = container.querySelector('.performance-timeline-header-scale');
+    if (headerScaleEl) {
+      headerScaleEl.addEventListener('click', (event) => {
+        const target = event.target.closest('.performance-timeline-header-item');
+        if (!target) return;
+        const key = target.getAttribute('data-date-key') || '';
+        if (!key) return;
+        if (updatePerformanceTimelineSelection(key)) {
+          renderPerformanceTimeline(detail, options);
+        }
+      });
+    }
+    const resetButton = container.querySelector('.performance-timeline-reset');
+    if (resetButton) {
+      resetButton.addEventListener('click', () => {
+        updatePerformanceTimelineSelection(null);
+        renderPerformanceTimeline(detail, options);
+      });
+    }
+  }
+
+  container.classList.remove('hidden');
+  
+  // ========== ETAPA 1: Atualizar Dashboard de Status ==========
+  updatePerformanceStatusDashboard(operationLines, detail);
+
+  // ========== ETAPA 4: Atualizar Resumo de Tempos ==========
+  updatePerformanceTimeSummary(operationLines);
+
+  // ========== ETAPA 2: Detectar e destacar gaps entre operações ==========
+  const detectAndHighlightGaps = () => {
+    operationLines.forEach((op, idx) => {
+      if (idx < operationLines.length - 1) {
+        const currentOpEnd = op.end.getTime();
+        const nextOpStart = operationLines[idx + 1].start.getTime();
+        const gapMs = nextOpStart - currentOpEnd;
+        const gapMinutes = gapMs / (1000 * 60);
+        
+        // Se gap > 30 min, adicionar badge/alerta
+        if (gapMinutes > 30) {
+          console.log(`⏱️ Gap detectado entre OP ${op.numProgramacao} e ${operationLines[idx + 1].numProgramacao}: ${Math.round(gapMinutes)}min`);
+        }
+      }
+    });
+  };
+  detectAndHighlightGaps();
+
+  // ========== ETAPA 3: Atualizar continuamente marcador "AGORA" em tempo real ==========
+  const updateNowMarker = () => {
+    const nowMarker = body.querySelector('.performance-timeline-now-marker');
+    if (!nowMarker) return;
+    
+    const range = window.__performanceTimelineRange;
+    if (!range) return;
+    
+    const nowMs = new Date().getTime();
+    const isNowInRange = nowMs >= range.timelineStartMs && nowMs <= range.timelineEndMsClamped;
+    
+    if (isNowInRange) {
+      const newNowPct = ((nowMs - range.timelineStartMs) / range.timelineRangeMs) * 100;
+      
+      if (newNowPct >= 0 && newNowPct <= 100) {
+        nowMarker.style.left = `${newNowPct.toFixed(2)}%`;
+      }
+    }
+  };
+  
+  // Atualizar a cada 10 segundos (ou pode ser 30s/1min conforme preferência)
+  if (window.__performanceNowMarkerInterval) {
+    clearInterval(window.__performanceNowMarkerInterval);
+  }
+  window.__performanceNowMarkerInterval = setInterval(updateNowMarker, 10000); // 10 segundos
+
+  // ========== ETAPA 7: Listener de click SEMPRE acionado (fora do check de listener) ==========
+  // Adicionar listeners para clique nas barras (sem check, sempre atualiza)
+  container.removeEventListener('click', window.__performanceTimelineClickHandler);
+  window.__performanceTimelineClickHandler = (event) => {
+    const timelineItem = event.target.closest('.performance-timeline-item');
+    if (timelineItem) {
+      // Remover is-active de todos os items
+      container.querySelectorAll('.performance-timeline-item').forEach(item => {
+        item.classList.remove('is-active');
+      });
+      
+      // Adicionar is-active ao item clicado
+      timelineItem.classList.add('is-active');
+      
+      // Log para debug
+      console.log('Timeline item selecionado:', timelineItem.getAttribute('data-item-seq'));
+      
+      // ========== ETAPA 8: Populate tabela ao clicar ==========
+      const itemSeq = timelineItem.getAttribute('data-item-seq') || '';
+      const itemDuration = timelineItem.getAttribute('data-item-duration') || '0';
+      const itemDesc = timelineItem.getAttribute('data-item-desc') || '';
+      const itemType = timelineItem.getAttribute('data-item-type') || 'prod';
+      const itemDate = timelineItem.getAttribute('data-item-date') || '';
+      const itemStart = timelineItem.getAttribute('data-item-start') || '0';
+      const itemEnd = timelineItem.getAttribute('data-item-end') || '0';
+      
+      // Formatar data e horários
+      const formatTimeFromMs = (ms) => {
+        const dt = new Date(Number(ms));
+        if (Number.isNaN(dt.getTime())) return '--:--';
+        return `${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`;
+      };
+      
+      const formatDateFromKey = (key) => {
+        if (!key) return '--/--';
+        const parts = String(key).split('-');
+        if (parts.length !== 3) return key;
+        return `${parts[2]}/${parts[1]}`;
+      };
+      
+      const safeHtml = (text) => {
+        const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+        return String(text || '').replace(/[&<>"']/g, (ch) => map[ch] || ch);
+      };
+      
+      const startTime = formatTimeFromMs(itemStart);
+      const endTime = formatTimeFromMs(itemEnd);
+      const formattedDate = formatDateFromKey(itemDate);
+      
+      // Extrair número da OP a partir do elemento pai
+      let opNumber = '—';
+      const timelineWrapper = timelineItem.closest('.performance-timeline-row-wrapper');
+      if (timelineWrapper) {
+        const opInfoElement = timelineWrapper.querySelector('.performance-timeline-row-op-info');
+        if (opInfoElement) {
+          const opText = opInfoElement.textContent; // "OP: 201613 / Seq 25"
+          const opMatch = opText.match(/OP:\s*(\d+)/);
+          if (opMatch && opMatch[1]) {
+            opNumber = opMatch[1];
+          }
+        }
+      }
+      
+      // Preencher tabela
+      const tableBody = document.getElementById('performance-data-table-body');
+      if (tableBody) {
+        // Limpar tabela
+        tableBody.innerHTML = `
+          <tr>
+            <td>${safeHtml(opNumber) || '—'}</td>
+            <td>${safeHtml(itemSeq) || '—'}</td>
+            <td>1</td>
+            <td>${itemDuration}m</td>
+            <td>${formattedDate}</td>
+            <td>${startTime}</td>
+            <td>${endTime}</td>
+          </tr>
+        `;
+      }
+      
+      // ========== ETAPA 8: Atualizar KPIs ==========
+      const kpisContainer = document.getElementById('performance-kpis');
+      if (kpisContainer) {
+        const kpiDuration = kpisContainer.querySelector('[data-kpi="duration"]');
+        const kpiStart = kpisContainer.querySelector('[data-kpi="start"]');
+        const kpiEnd = kpisContainer.querySelector('[data-kpi="end"]');
+        const kpiType = kpisContainer.querySelector('[data-kpi="type"]');
+        
+        if (kpiDuration) kpiDuration.textContent = `${itemDuration}m`;
+        if (kpiStart) kpiStart.textContent = startTime;
+        if (kpiEnd) kpiEnd.textContent = endTime;
+        if (kpiType) kpiType.textContent = itemType === 'setup' ? 'Setup' : 'Produção';
+      }
+    }
+    
+    if (timelineItem && window.__performanceAltState) {
+      // Procurar o idx do item clicado
+      const titleAttr = timelineItem.getAttribute('title');
+      const itemDescription = titleAttr ? titleAttr.split(' ')[0] : '';
+      
+      // Tentar encontrar o item no estado
+      const altBody = document.getElementById('performance-alt-body');
+      if (altBody) {
+        const items = Array.from(altBody.querySelectorAll('[data-alt-idx]'));
+        const matchedItem = items.find((item) => {
+          const label = item.querySelector('.performance-alt-item-label');
+          return label && label.textContent.includes(itemDescription);
+        });
+        
+        if (matchedItem) {
+          const idx = matchedItem.getAttribute('data-alt-idx');
+          setPerformanceGanttSelection('performance-gantt-a', idx);
+          updatePerformanceAltSummary();
+          highlightAlternativeSelection(idx);
+        }
+      }
+    }
+  };
+  container.addEventListener('click', window.__performanceTimelineClickHandler);
+
+  // Adicionar listeners para filtros e interatividade
+  if (container.dataset.timelineListener !== '1') {
+    container.dataset.timelineListener = '1';
+    document.getElementById('performance-timeline-filter-prod')?.addEventListener('change', () => renderPerformanceTimeline(detail, options));
+    document.getElementById('performance-timeline-filter-setup')?.addEventListener('change', () => renderPerformanceTimeline(detail, options));
+
+    // Sincronizar hover no timeline com arquivo antigo
+    container.addEventListener('mouseover', (event) => {
+      const timelineItem = event.target.closest('.performance-timeline-item');
+      if (timelineItem) {
+        timelineItem.classList.add('is-hover');
+      }
+    });
+
+    container.addEventListener('mouseout', (event) => {
+      const timelineItem = event.target.closest('.performance-timeline-item');
+      if (timelineItem) {
+        timelineItem.classList.remove('is-hover');
+      }
+    });
+  }
+}
 
 function highlightAlternativeSelection(selectedIdx) {
   const body = document.getElementById('performance-alt-body');
@@ -5524,6 +6291,12 @@ function loadAndRenderPerformanceGantt(programId, compareProgramId = '') {
 
       renderPerformanceKpis(detailA, detailB);
       renderPerformanceDaily(detailA, detailB);
+      const timelinePrimary = document.getElementById('performance-timeline');
+      const altContainer = document.getElementById('performance-alt');
+      const altIndicator = document.getElementById('performance-alt-indicator');
+      if (timelinePrimary) timelinePrimary.classList.add('hidden');
+      if (altContainer) altContainer.classList.remove('hidden');
+      if (altIndicator) altIndicator.style.display = 'none';
       const scheduleTicksA = collectScheduleTickDates(detailA?.schedule);
       renderPerformanceGantt(detailA, {
         containerId: 'performance-gantt-a',
@@ -5534,7 +6307,10 @@ function loadAndRenderPerformanceGantt(programId, compareProgramId = '') {
         skuNameMap: skuNameMapA,
         tickDates: scheduleTicksA,
       });
-      renderPerformanceAlternative(detailA);
+      renderPerformanceTimeline(detailA, {
+        containerId: 'performance-alt',
+        bodyId: 'performance-alt-body',
+      });
 
       if (idB && detailB) {
         if (blockB) blockB.classList.remove('is-hidden');

@@ -17,30 +17,30 @@ try {
     error_log('✅ Bootstrap carregado');
     
     // Tentar conectar
-    error_log('3️⃣ Obtendo Connection...');
-    $conn = \App\Database\Connection::getInstance();
-    error_log('✅ Connection obtido');
+    error_log('3️⃣ Obtendo PDO via Connection::get()...');
+    $pdo = \App\Database\Connection::get();
+    error_log('✅ PDO obtido');
     
     // Teste simples SELECT
     error_log('4️⃣ Testando query simples...');
-    $result = $conn->query("SELECT 1 as ok");
+    $stmt = $pdo->query("SELECT 1 as ok");
     error_log('✅ Query executada');
     
-    if ($result) {
-        $row = $result->fetch_assoc();
+    if ($stmt) {
+        $row = $stmt->fetch();
         error_log('✅ Resultado: ' . json_encode($row));
     }
     
     // Contar prg_programas
     error_log('5️⃣ Contando prg_programas...');
-    $result2 = $conn->query("SELECT COUNT(*) as total FROM prg_programas");
-    $row2 = $result2->fetch_assoc();
+    $stmt2 = $pdo->query("SELECT COUNT(*) as total FROM prg_programas");
+    $row2 = $stmt2->fetch();
     error_log('✅ Total prg_programas: ' . $row2['total']);
     
     // Contar sch_linhas
     error_log('6️⃣ Contando sch_linhas...');
-    $result3 = $conn->query("SELECT COUNT(*) as total FROM sch_linhas");
-    $row3 = $result3->fetch_assoc();
+    $stmt3 = $pdo->query("SELECT COUNT(*) as total FROM sch_linhas");
+    $row3 = $stmt3->fetch();
     error_log('✅ Total sch_linhas: ' . $row3['total']);
     
     // Resposta de sucesso

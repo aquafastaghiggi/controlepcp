@@ -77,7 +77,7 @@ try {
             break;
 
         case 'listar':
-            handleListar($repo);
+            handleListar();
             break;
 
         case 'detalhe':
@@ -112,7 +112,7 @@ try {
 /**
  * Listar programações que têm schedule (histórico)
  */
-function handleListar(ProgramacaoRepository $repo): void
+function handleListar(): void
 {
     error_log('🔵 handleListar() iniciado');
     
@@ -125,10 +125,10 @@ function handleListar(ProgramacaoRepository $repo): void
     // Buscar programações que têm schedule
     try {
         error_log('🟡 Obtendo conexão PDO...');
-        $pdo = $repo->getConnection();
+        $pdo = \App\Database\Connection::get();
         error_log('✅ PDO obtido com sucesso');
         
-        // Query simplificada sem DISTINCT + GROUP BY problemático
+        // Query com JOIN entre programações e schedule
         $sql = "
             SELECT 
                 p.prg_id,

@@ -5465,6 +5465,30 @@ function renderPerformanceTimeline(detail, options = {}) {
 
   const stripSeqPrefix = (value) => String(value || '').replace(/^\s*\d+\s*-\s*/g, '').trim();
 
+  const scheduleGroupKey = (row, idx) => {
+    const pick = (value) => String(value != null ? value : '').trim();
+    const candidates = [
+      pick(row && row.sch_sequencia),
+      pick(row && row.prg_sequencia),
+      pick(row && row.prg_itens_sequencia),
+      pick(row && row.prg_seq),
+      pick(row && row.sch_seq),
+    ];
+
+    for (let i = 0; i < candidates.length; i++) {
+      if (candidates[i]) return candidates[i];
+    }
+
+    const typeRaw = pick(row && row.sch_tipo).toLowerCase();
+    return `__${typeRaw || 'row'}__${String(idx)}`;
+  };
+
+  const scheduleEntries = scheduleRows.map((row, idx) => ({
+    row,
+    idx,
+    key: scheduleGroupKey(row, idx),
+  }));
+
   // Coleta informações operacionais
   const opMap = new Map();
   scheduleRows.forEach((row) => {
@@ -5489,23 +5513,27 @@ function renderPerformanceTimeline(detail, options = {}) {
   const operationLines = [];
   const seenSeqs = new Set();
 
-  scheduleRows.filter(filterPredicate).forEach((row, idx) => {
+  scheduleEntries.filter((entry) => filterPredicate(entry.row)).forEach((entry) => {
+    const row = entry.row;
+    const idx = entry.idx;
     const start = parseLocalDateTime(row?.sch_data_inicio, row?.sch_hora_inicio) || parseLocalDateTimeFromSql(row?.sch_inicio_producao);
     const end = parseLocalDateTimeFromSql(row?.sch_fim_producao) || parseLocalDateTime(row?.sch_data_inicio, row?.sch_hora_fim);
     if (!start || !end) return;
 
-    const seqKey = String(row?.sch_sequencia || '').trim();
+    const seqKey = entry.key;
     const isSetup = String(row?.sch_tipo || '').trim().toLowerCase() === 'setup';
     const label = row?.sch_sequencia ? `${row.sch_sequencia} - ${row.sch_descricao}` : row.sch_descricao || 'Produção';
 
     if (!seenSeqs.has(seqKey)) {
       seenSeqs.add(seqKey);
-      const items = scheduleRows.filter((r) => String(r?.sch_sequencia || '').trim() === seqKey);
+      const items = scheduleEntries
+        .filter((itemEntry) => itemEntry.key === seqKey)
+        .map((itemEntry) => itemEntry.row);
       const itemsFiltered = items.filter(filterPredicate);
       if (itemsFiltered.length === 0) return;
 
-      const op = String(itemsFiltered.find((r) => String(r?.sch_sequencia || '').trim() === seqKey)?.sch_sequencia || '').trim();
-      const firstItem = itemsFiltered.find((r) => String(r?.sch_sequencia || '').trim() === seqKey);
+      const firstItem = itemsFiltered[0];
+      const op = String(firstItem?.sch_sequencia || '').trim();
       const detailOpNumberRaw = detailOpMap.get(seqKey);
       const detailOpNumber = String(detailOpNumberRaw != null ? detailOpNumberRaw : '').trim();
       const fallbackOpNumber = String(

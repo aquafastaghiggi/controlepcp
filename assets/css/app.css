@@ -2384,23 +2384,26 @@ select {
 
 /* ========== ETAPA 7: Estado Ativo (selecionado) ========== */
 .performance-timeline-item.is-active {
-    outline: 2px solid rgba(59, 130, 246, 0.8);
-    outline-offset: 2px;
+    outline: 3px solid rgba(59, 130, 246, 1);
+    outline-offset: 3px;
     box-shadow: 
-        0 0 0 1px rgba(59, 130, 246, 0.4),
-        0 0 6px rgba(59, 130, 246, 0.5),
-        0 0 12px rgba(59, 130, 246, 0.3),
-        inset 0 0 0 1px rgba(255, 255, 255, 0.3);
+        0 0 0 1px rgba(59, 130, 246, 0.6),
+        0 0 8px rgba(59, 130, 246, 0.8),
+        0 0 16px rgba(59, 130, 246, 0.6),
+        0 0 24px rgba(59, 130, 246, 0.4);
     z-index: 10;
+    filter: drop-shadow(0 0 4px rgba(59, 130, 246, 0.8));
 }
 
 .performance-timeline-item.is-active:hover {
-    outline-width: 3px;
+    outline: 4px solid rgba(59, 130, 246, 1);
+    outline-offset: 4px;
     box-shadow: 
-        0 0 0 1px rgba(59, 130, 246, 0.6),
-        0 0 8px rgba(59, 130, 246, 0.7),
-        0 0 16px rgba(59, 130, 246, 0.4),
-        inset 0 0 0 1px rgba(255, 255, 255, 0.4);
+        0 0 0 2px rgba(59, 130, 246, 0.8),
+        0 0 12px rgba(59, 130, 246, 1),
+        0 0 20px rgba(59, 130, 246, 0.8),
+        0 0 32px rgba(59, 130, 246, 0.6);
+    filter: drop-shadow(0 0 6px rgba(59, 130, 246, 1));
 }
 
 /* Tooltip customizado ao hover */

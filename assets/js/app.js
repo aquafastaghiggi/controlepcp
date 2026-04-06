@@ -3499,8 +3499,21 @@ async function loadPerformance() {
 
     openBtn?.addEventListener('click', () => {
       const id = programSelect.value;
-      if (id && typeof window.openHistoryPreview === 'function') {
-        window.openHistoryPreview(id);
+      if (!id) return;
+
+      let dateKey = null;
+      if (typeof ensurePerformanceTimelineSelectionState === 'function') {
+        const state = ensurePerformanceTimelineSelectionState();
+        dateKey = state && state.dateKey ? String(state.dateKey) : null;
+      }
+
+      if (typeof openHistoryPreview === 'function') {
+        openHistoryPreview(id, dateKey);
+        return;
+      }
+
+      if (typeof window.openHistoryPreview === 'function') {
+        window.openHistoryPreview(id, dateKey);
       }
     });
 
@@ -5159,7 +5172,8 @@ function updatePerformanceStatusDashboard(operationLines, detail) {
   let nextOp = null;
   
   // Processa todas as operações para encontrar a atual e próxima
-  operationLines.forEach((op, idx) => {
+  const prodLines = (operationLines || []).filter((op) => op && op.type !== 'setup');
+  prodLines.forEach((op, idx) => {
     // Se a operação ainda não começou
     if (op.start > now && !nextOp) {
       nextOp = op;
@@ -5352,6 +5366,15 @@ function renderPerformanceTimeline(detail, options = {}) {
     return;
   }
 
+  // Debug: dados brutos usados pelo gráfico para comparação com o preview/PDF.
+  // Uso: renderizar o gráfico e conferir `window.__performanceTimelineLast` no console.
+  window.__performanceTimelineLast = {
+    prgId: String(detail?.programacao?.prg_id || detail?.programacao?.id || ''),
+    selection: (ensurePerformanceTimelineSelectionState() && ensurePerformanceTimelineSelectionState().dateKey) || null,
+    scheduleCount: scheduleRows.length,
+    schedule: scheduleRows,
+  };
+
   // Reutilizar helpers de renderPerformanceAlternative
   const parseLocalDateTime = (dateStr, timeStr) => {
     if (!dateStr || !timeStr) return null;
@@ -5374,14 +5397,19 @@ function renderPerformanceTimeline(detail, options = {}) {
     }
   };
 
+  const pad2 = (value) => {
+    const text = String(value);
+    return text.length === 1 ? `0${text}` : text;
+  };
+
   const formatTimeOnlyPt = (dateObj) => {
     if (!dateObj || Number.isNaN(dateObj.getTime())) return '--:--';
-    return `${String(dateObj.getHours()).padStart(2, '0')}:${String(dateObj.getMinutes()).padStart(2, '0')}`;
+    return `${pad2(dateObj.getHours())}:${pad2(dateObj.getMinutes())}`;
   };
 
   const formatDateOnlyPtShort = (dateObj) => {
     if (!dateObj || Number.isNaN(dateObj.getTime())) return '--/--';
-    return `${String(dateObj.getDate()).padStart(2, '0')}/${String(dateObj.getMonth() + 1).padStart(2, '0')}`;
+    return `${pad2(dateObj.getDate())}/${pad2(dateObj.getMonth() + 1)}`;
   };
 
   const formatWeekdayShortPt = (dateKey) => {
@@ -5398,8 +5426,8 @@ function renderPerformanceTimeline(detail, options = {}) {
   const toDateKeyLocal = (dateObj) => {
     if (!dateObj || Number.isNaN(dateObj.getTime())) return '';
     const y = dateObj.getFullYear();
-    const m = String(dateObj.getMonth() + 1).padStart(2, '0');
-    const d = String(dateObj.getDate()).padStart(2, '0');
+    const m = pad2(dateObj.getMonth() + 1);
+    const d = pad2(dateObj.getDate());
     return `${y}-${m}-${d}`;
   };
 
@@ -5421,6 +5449,20 @@ function renderPerformanceTimeline(detail, options = {}) {
       return null;
     }
     const dt = new Date(year, month, day, 23, 59, 59, 999);
+    return Number.isNaN(dt.getTime()) ? null : dt;
+  };
+
+  const parseDateKeyToStartOfDay = (dateKey) => {
+    if (!dateKey) return null;
+    const parts = String(dateKey).split('-');
+    if (parts.length !== 3) return null;
+    const year = Number(parts[0]);
+    const month = Number(parts[1]) - 1;
+    const day = Number(parts[2]);
+    if ([year, month, day].some((value) => Number.isNaN(value))) {
+      return null;
+    }
+    const dt = new Date(year, month, day, 0, 0, 0, 0);
     return Number.isNaN(dt.getTime()) ? null : dt;
   };
 
@@ -5450,18 +5492,69 @@ function renderPerformanceTimeline(detail, options = {}) {
 
   const stripSeqPrefix = (value) => String(value || '').replace(/^\s*\d+\s*-\s*/g, '').trim();
 
-  // Coleta informações operacionais
-  const opMap = new Map();
-  scheduleRows.forEach((row) => {
-    const seq = String(row?.sch_sequencia || '').trim();
-    if (seq && !opMap.has(seq)) {
-      opMap.set(seq, seq);
+  const parseSqlDateTimeLoose = (value) => {
+    if (!value) return null;
+    try {
+      const text = String(value || '').trim();
+      if (!text) return null;
+      const normalized = text.includes('T') ? text : text.replace(' ', 'T');
+      const dt = new Date(normalized);
+      return Number.isNaN(dt.getTime()) ? null : dt;
+    } catch (e) {
+      return null;
     }
-  });
+  };
 
-  // Agrupa por operação (seq)
-  const showProd = document.getElementById('performance-timeline-filter-prod')?.checked ?? true;
-  const showSetup = document.getElementById('performance-timeline-filter-setup')?.checked ?? true;
+  const parseScheduleStart = (row) => {
+    const dtSql = parseSqlDateTimeLoose(row && row.sch_inicio_producao);
+    if (dtSql) return dtSql;
+    return parseLocalDateTime(row && row.sch_data_inicio, row && row.sch_hora_inicio) || null;
+  };
+
+  const parseScheduleEnd = (row, startDt) => {
+    const fimRaw = row && row.sch_fim_producao;
+    const dtFimSql = parseSqlDateTimeLoose(fimRaw);
+    if (dtFimSql) return dtFimSql;
+
+    // Se vier só a data no `sch_fim_producao`, usar o horário de `sch_hora_fim`.
+    const fimDateMatch = fimRaw ? String(fimRaw).match(/^(\d{4}-\d{2}-\d{2})/) : null;
+    const fimDateOnly = fimDateMatch ? fimDateMatch[1] : null;
+    if (fimDateOnly) {
+      const dtDateOnly = parseLocalDateTime(fimDateOnly, row && row.sch_hora_fim);
+      if (dtDateOnly) return dtDateOnly;
+    }
+
+    // Preferir duração (quando disponível) para evitar erros em virada de dia.
+    const durMinRaw = Number(row && row.sch_duracao_minutos);
+    if (startDt && Number.isFinite(durMinRaw)) {
+      return new Date(startDt.getTime() + (Math.max(0, Math.round(durMinRaw)) * 60000));
+    }
+
+    const endDt = parseLocalDateTime(row && row.sch_data_inicio, row && row.sch_hora_fim);
+    if (!endDt) return null;
+
+    // Ajuste simples de virada de dia (ex.: 08:26 -> 00:08 do dia seguinte).
+    if (startDt && endDt.getTime() <= startDt.getTime()) {
+      const adjusted = new Date(endDt.getTime());
+      adjusted.setDate(adjusted.getDate() + 1);
+      return adjusted;
+    }
+
+    return endDt;
+  };
+
+  const formatDurationHHMM = (minutes) => {
+    const min = Math.max(0, Math.round(Number(minutes) || 0));
+    const h = Math.floor(min / 60);
+    const m = min % 60;
+    return `${pad2(h)}:${pad2(m)}`;
+  };
+
+  // Filtros visíveis do card (fallback para filtros antigos da timeline)
+  const showProdEl = document.getElementById('performance-show-prod') || document.getElementById('performance-timeline-filter-prod');
+  const showSetupEl = document.getElementById('performance-show-setup') || document.getElementById('performance-timeline-filter-setup');
+  const showProd = showProdEl ? !!showProdEl.checked : true;
+  const showSetup = showSetupEl ? !!showSetupEl.checked : true;
   const filterPredicate = (row) => {
     const isSetup = String(row?.sch_tipo || '').trim().toLowerCase() === 'setup';
     if (isSetup && !showSetup) return false;
@@ -5469,89 +5562,62 @@ function renderPerformanceTimeline(detail, options = {}) {
     return true;
   };
 
-  const operationLines = [];
-  const seenSeqs = new Set();
+  // Etapa 2: montar linhas diretamente do schedule (mesma base do preview/PDF)
+  // Uma linha por item, ordenada por início, para manter Setup/Produção na ordem correta.
+  const operationLines = scheduleRows
+    .map((row, idx) => {
+      if (!filterPredicate(row)) return null;
 
-  scheduleRows.filter(filterPredicate).forEach((row, idx) => {
-    const start = parseLocalDateTime(row?.sch_data_inicio, row?.sch_hora_inicio) || parseLocalDateTimeFromSql(row?.sch_inicio_producao);
-    const end = parseLocalDateTime(row?.sch_data_inicio, row?.sch_hora_fim) || parseLocalDateTimeFromSql(row?.sch_fim_producao);
-    if (!start || !end) return;
+      const start = parseScheduleStart(row);
+      const end = parseScheduleEnd(row, start);
+      if (!start || !end) return null;
 
-    const seqKey = String(row?.sch_sequencia || '').trim();
-    const isSetup = String(row?.sch_tipo || '').trim().toLowerCase() === 'setup';
-    const label = row?.sch_sequencia ? `${row.sch_sequencia} - ${row.sch_descricao}` : row.sch_descricao || 'Produção';
+      const tipoRaw = String(row?.sch_tipo || '').trim().toLowerCase();
+      const isSetup = tipoRaw === 'setup';
+      const seqKey = String(row?.sch_sequencia || '').trim();
+      const sku = String(row?.sch_sku || '').trim();
+      const desc = String(row?.sch_descricao || '').trim();
 
-    if (!seenSeqs.has(seqKey)) {
-      seenSeqs.add(seqKey);
-      const items = scheduleRows.filter((r) => String(r?.sch_sequencia || '').trim() === seqKey);
-      const itemsFiltered = items.filter(filterPredicate);
-      if (itemsFiltered.length === 0) return;
+      const mappedOp = (!isSetup && seqKey) ? String(detailOpMap.get(seqKey) || '').trim() : '';
+      const fallbackOp = (!isSetup)
+        ? String(row?.prg_itens_op || row?.sch_numero_programacao || row?.prg_numero_op || row?.numero_programacao || '').trim()
+        : '';
+      const numProgramacao = mappedOp || fallbackOp;
 
-      const op = String(itemsFiltered.find((r) => String(r?.sch_sequencia || '').trim() === seqKey)?.sch_sequencia || '').trim();
-      const firstItem = itemsFiltered.find((r) => String(r?.sch_sequencia || '').trim() === seqKey);
-      const detailOpNumber = String(detailOpMap.get(seqKey) ?? '').trim();
-      const fallbackOpNumber = String(
-        firstItem?.prg_itens_op ||
-        firstItem?.sch_numero_programacao ||
-        firstItem?.prg_numero_op ||
-        firstItem?.numero_programacao ||
-        ''
-      ).trim();
-      const numProgramacao = detailOpNumber || fallbackOpNumber;
-      const prodLabel = stripSeqPrefix(itemsFiltered.find((r) => !String(r?.sch_tipo || '').trim().toLowerCase().includes('setup'))?.sch_descricao || label);
-      const computeRange = (rowsSubset) => {
-        const parsed = rowsSubset
-          .map((rowItem) => {
-            const startVal = parseLocalDateTime(rowItem?.sch_data_inicio, rowItem?.sch_hora_inicio) || parseLocalDateTimeFromSql(rowItem?.sch_inicio_producao);
-            const endVal = parseLocalDateTime(rowItem?.sch_data_inicio, rowItem?.sch_hora_fim) || parseLocalDateTimeFromSql(rowItem?.sch_fim_producao);
-            if (!startVal || !endVal) return null;
-            return { start: startVal, end: endVal };
-          })
-          .filter(Boolean);
-        if (!parsed.length) return null;
-        const startMs = Math.min(...parsed.map((entry) => entry.start.getTime()));
-        const endMs = Math.max(...parsed.map((entry) => entry.end.getTime()));
-        const duration = parsed.reduce((sum, entry) => sum + toMin(entry.start, entry.end), 0);
-        return {
-          start: new Date(startMs),
-          end: new Date(endMs),
-          duration,
-        };
+      const durMinRaw = Number(row?.sch_duracao_minutos);
+      const durMin = Number.isFinite(durMinRaw)
+        ? Math.max(0, Math.round(durMinRaw))
+        : Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000));
+
+      const label = isSetup
+        ? 'Setup'
+        : (stripSeqPrefix(desc) || desc || sku || 'Produção');
+
+      return {
+        idx,
+        seq: seqKey,
+        sku,
+        numProgramacao,
+        label,
+        type: isSetup ? 'setup' : 'prod',
+        start,
+        end,
+        durMin,
+        durLabel: formatDurationHHMM(durMin),
+        items: [row],
       };
-
-      const buildRow = (type, rowsSubset, rowLabel) => {
-        if (!rowsSubset.length) return null;
-        const range = computeRange(rowsSubset);
-        if (!range) return null;
-        const isSetup = type === 'setup';
-        return {
-          seq: seqKey,
-          op,
-          numProgramacao,
-          label: rowLabel,
-          type,
-          start: range.start,
-          end: range.end,
-          prodMin: isSetup ? 0 : range.duration,
-          setupMin: isSetup ? range.duration : 0,
-          items: rowsSubset,
-        };
-      };
-
-      const productionRows = itemsFiltered.filter((r) => String(r?.sch_tipo || '').trim().toLowerCase() !== 'setup');
-      const setupRows = itemsFiltered.filter((r) => String(r?.sch_tipo || '').trim().toLowerCase() === 'setup');
-
-      const prodLine = buildRow('prod', productionRows, prodLabel);
-      const setupLine = buildRow('setup', setupRows, 'Setup');
-
-      if (prodLine) {
-        operationLines.push(prodLine);
-      }
-      if (setupLine) {
-        operationLines.push(setupLine);
-      }
-    }
-  });
+    })
+    .filter(Boolean)
+    .sort((a, b) => {
+      const sa = a.start ? a.start.getTime() : 0;
+      const sb = b.start ? b.start.getTime() : 0;
+      if (sa !== sb) return sa - sb;
+      const ea = a.end ? a.end.getTime() : 0;
+      const eb = b.end ? b.end.getTime() : 0;
+      if (ea !== eb) return ea - eb;
+      if (a.type !== b.type) return a.type === 'setup' ? -1 : 1;
+      return (a.idx || 0) - (b.idx || 0);
+    });
 
   // Renderizar timelines
   if (!operationLines.length) {
@@ -5562,41 +5628,160 @@ function renderPerformanceTimeline(detail, options = {}) {
     const selectionState = ensurePerformanceTimelineSelectionState();
     const hasManualSelection = Boolean(selectionState.dateKey);
     const selectionDateKey = selectionState.dateKey;
+    const selectionStartDate = hasManualSelection ? parseDateKeyToStartOfDay(selectionDateKey) : null;
     const selectionEndDate = hasManualSelection ? parseDateKeyToEndOfDay(selectionDateKey) : null;
-    const selectionEndMs = selectionEndDate ? selectionEndDate.getTime() : maxDate;
+    const selectionStartMs = selectionStartDate ? selectionStartDate.getTime() : null;
+    const selectionEndMs = selectionEndDate ? selectionEndDate.getTime() : null;
 
-    const visibleOperationLines = operationLines.filter((op) => op.start.getTime() <= selectionEndMs);
-    const timelineStartMs = earliestStartMs;
-    const timelineEndMsClamped = hasManualSelection
-      ? Math.max(selectionEndMs, timelineStartMs + 1)
-      : maxDate;
+    // Quando uma data é selecionada, filtrar linhas do gráfico pelo mesmo critério do preview:
+    // incluir itens que sobrepõem o intervalo do dia selecionado.
+    const visibleOperationLines = (hasManualSelection && selectionStartMs !== null && selectionEndMs !== null)
+      ? operationLines.filter((op) => (
+          op &&
+          op.start &&
+          op.end &&
+          op.start.getTime() <= (selectionEndMs + 1) &&
+          op.end.getTime() >= selectionStartMs
+        ))
+      : operationLines.slice();
+
+    // Ancorar a régua no início do dia para evitar "sumir" o primeiro dia no header
+    // quando a primeira operação começa após 00:00 (ex.: 27/03 08:26).
+    const startDay = new Date(earliestStartMs);
+    startDay.setHours(0, 0, 0, 0);
+    const timelineStartMs = startDay.getTime();
+    const timelineEndMsClamped = Math.max(maxDate, timelineStartMs + 1);
     const timelineRangeMs = Math.max(1, timelineEndMsClamped - timelineStartMs);
 
-    // Gerar datas únicas para o header
-    const minDateObj = new Date(timelineStartMs);
-    const maxDateObj = new Date(timelineEndMsClamped);
-    const dateHeaderItems = [];
-    const currentDate = new Date(minDateObj);
-    currentDate.setHours(0, 0, 0, 0);
+    // Header: mostrar apenas datas relevantes (mesma lógica do preview/PDF).
+    // Em vez de listar todos os dias do intervalo (inclui DOM sem eventos), usamos
+    // apenas os dias em que existe item iniciando no schedule.
+    const shiftIntervals = (typeof collectPerformanceShiftIntervals === 'function')
+      ? collectPerformanceShiftIntervals(scheduleRows)
+      : [];
 
-    while (currentDate <= maxDateObj) {
-      const dateKey = toDateKeyLocal(currentDate);
-      const weekday = formatWeekdayShortPt(dateKey);
-      const formatted = formatDateKeyPt(dateKey);
-      const leftPct = ((currentDate.getTime() - timelineStartMs) / timelineRangeMs) * 100;
-      dateHeaderItems.push({
-        dateKey,
-        weekday,
-        formatted,
-        leftPct,
-        dateObj: new Date(currentDate),
+    const shiftTextByDateKey = {};
+    const productionOperationsByDate = new Map();
+    operationLines.forEach((op) => {
+      if (!op || op.type === 'setup' || !op.start) return;
+      const key = toDateKeyLocal(op.start);
+      if (!key) return;
+      const list = productionOperationsByDate.get(key) || [];
+      list.push(op);
+      productionOperationsByDate.set(key, list);
+    });
+
+    const normalizeShiftTime = (value) => {
+      const text = String(value || '').trim();
+      if (!text) return '';
+      const match = text.match(/^(\d{2}:\d{2})/);
+      if (match) return match[1];
+      return text.length >= 5 ? text.slice(0, 5) : '';
+    };
+
+    if (Array.isArray(shiftIntervals) && shiftIntervals.length) {
+      shiftIntervals.forEach((interval) => {
+        const dateKey = interval && interval.dateKey ? String(interval.dateKey) : '';
+        if (!dateKey) return;
+
+        const startText = normalizeShiftTime(interval.start);
+        const endText = normalizeShiftTime(interval.end);
+        if (!startText || !endText) return;
+
+        const operations = productionOperationsByDate.get(dateKey);
+        const hasProductionInShift = Array.isArray(operations) && operations.some((op) => isWithinShift(op, interval));
+        if (!hasProductionInShift) return;
+
+        const token = `${startText}-${endText}`;
+        if (!shiftTextByDateKey[dateKey]) {
+          shiftTextByDateKey[dateKey] = [];
+        }
+        if (!shiftTextByDateKey[dateKey].includes(token)) {
+          shiftTextByDateKey[dateKey].push(token);
+        }
       });
-      currentDate.setDate(currentDate.getDate() + 1);
     }
+
+    const formatShiftSummaryByDateKey = (dateKey) => {
+      const key = String(dateKey || '');
+      const list = shiftTextByDateKey[key];
+      if (!Array.isArray(list) || !list.length) return '';
+      return list.join(' / ');
+    };
+    const tickDateKeysSet = new Set();
+    operationLines.forEach((op) => {
+      if (!op || !op.start) return;
+      const key = toDateKeyLocal(op.start);
+      if (key) tickDateKeysSet.add(key);
+    });
+    if (hasManualSelection && selectionDateKey) {
+      tickDateKeysSet.add(String(selectionDateKey));
+    }
+
+    const tickDateKeys = Array.from(tickDateKeysSet).sort((a, b) => String(a).localeCompare(String(b)));
+    const dateHeaderItems = tickDateKeys
+      .map((dateKey) => {
+        const dateObj = parseDateKeyToStartOfDay(dateKey);
+        if (!dateObj) return null;
+        const weekday = formatWeekdayShortPt(dateKey);
+        const formatted = formatDateKeyPt(dateKey);
+        const leftPct = ((dateObj.getTime() - timelineStartMs) / timelineRangeMs) * 100;
+        const shiftText = formatShiftSummaryByDateKey(dateKey);
+
+        return {
+          dateKey,
+          weekday,
+          formatted,
+          leftPct,
+          dateObj,
+          shiftText,
+        };
+      })
+      .filter(Boolean);
 
     const defaultDateKey = dateHeaderItems.length ? dateHeaderItems[dateHeaderItems.length - 1].dateKey : null;
     const selectedHeaderDate = selectionState.dateKey || defaultDateKey;
-    const highlightPct = hasManualSelection ? Math.max(0, Math.min(100, ((selectionEndMs - timelineStartMs) / timelineRangeMs) * 100)) : 0;
+    const highlightStartPct = (hasManualSelection && selectionStartMs !== null)
+      ? Math.max(0, Math.min(100, ((selectionStartMs - timelineStartMs) / timelineRangeMs) * 100))
+      : 0;
+    const highlightEndPct = (hasManualSelection && selectionEndMs !== null)
+      ? Math.max(0, Math.min(100, (((selectionEndMs + 1) - timelineStartMs) / timelineRangeMs) * 100))
+      : 0;
+    let highlightWidthPct = hasManualSelection ? Math.max(0, highlightEndPct - highlightStartPct) : 0;
+
+    const selectedHeaderIndex = dateHeaderItems.findIndex((item) => item.dateKey === selectedHeaderDate);
+    const selectedHeaderItem = selectedHeaderIndex >= 0 ? dateHeaderItems[selectedHeaderIndex] : null;
+    const highlightTickLeftPct = selectedHeaderItem ? selectedHeaderItem.leftPct : highlightStartPct;
+    let highlightTickWidthPct = highlightWidthPct;
+    if (selectedHeaderItem && selectedHeaderIndex >= 0 && selectedHeaderIndex < dateHeaderItems.length - 1) {
+      const nextItem = dateHeaderItems[selectedHeaderIndex + 1];
+      const nextGap = Math.max(0, nextItem.leftPct - selectedHeaderItem.leftPct);
+      highlightTickWidthPct = Math.max(highlightTickWidthPct, nextGap);
+    }
+
+    let highlightOps = null;
+    if (hasManualSelection && visibleOperationLines.length && selectionStartMs !== null && selectionEndMs !== null) {
+      const selectionStartClamp = Math.max(selectionStartMs, timelineStartMs);
+      const selectionEndClamp = Math.min(selectionEndMs + 1, timelineEndMsClamped);
+      const opsInRange = visibleOperationLines.filter((op) => {
+        if (!op.start || !op.end) return false;
+        const startMs = op.start.getTime();
+        const endMs = op.end.getTime();
+        return endMs > selectionStartClamp && startMs < selectionEndClamp;
+      });
+      if (opsInRange.length) {
+        const minStart = Math.min(...opsInRange.map((op) => Math.max(op.start.getTime(), selectionStartClamp)));
+        const maxEnd = Math.max(...opsInRange.map((op) => Math.min(op.end.getTime(), selectionEndClamp)));
+        if (Number.isFinite(minStart) && Number.isFinite(maxEnd) && maxEnd > minStart) {
+          const left = ((minStart - timelineStartMs) / timelineRangeMs) * 100;
+          const width = ((maxEnd - minStart) / timelineRangeMs) * 100;
+          highlightOps = {
+            leftPct: Math.max(0, Math.min(100, left)),
+            widthPct: Math.max(0, Math.min(100, width)),
+          };
+        }
+      }
+    }
 
     // ========== ETAPA 3: Calcular posição do marcador "AGORA" ==========
     const now = new Date();
@@ -5607,19 +5792,25 @@ function renderPerformanceTimeline(detail, options = {}) {
     // Armazenar para o intervalo acessar depois
     window.__performanceTimelineRange = { timelineStartMs, timelineEndMsClamped, timelineRangeMs };
 
+    const highlightRender = highlightOps ? highlightOps : {
+      leftPct: highlightTickLeftPct,
+      widthPct: highlightTickWidthPct,
+    };
+
     // Renderizar header de datas
     const headerHtml = `
-      <div class="performance-timeline-header">
-        <div class="performance-timeline-header-spacer"></div>
-        <div class="performance-timeline-header-scale">
-          ${highlightPct > 0 ? `<span class="performance-timeline-selection-range" style="width:${highlightPct.toFixed(4)}%;"></span>` : ''}
-          <div class="performance-timeline-header-container">
-            ${dateHeaderItems.map((item) => `
-              <div class="performance-timeline-header-item${item.dateKey === selectedHeaderDate ? ' is-selected' : ''}" data-date-key="${item.dateKey}" style="left:${item.leftPct.toFixed(2)}%;">
-                <div class="performance-timeline-header-label">${escapeHtml(item.weekday)}</div>
-                <div class="performance-timeline-header-date">${escapeHtml(item.formatted)}</div>
-              </div>
-            `).join('')}
+        <div class="performance-timeline-header">
+          <div class="performance-timeline-header-spacer"></div>
+          <div class="performance-timeline-header-scale">
+            ${highlightRender.widthPct > 0 ? `<span class="performance-timeline-selection-range" style="left:${highlightRender.leftPct.toFixed(4)}%; width:${highlightRender.widthPct.toFixed(4)}%;"></span>` : ''}
+           <div class="performance-timeline-header-container">
+              ${dateHeaderItems.map((item, idx) => `
+                <div class="performance-timeline-header-item${item.dateKey === selectedHeaderDate ? ' is-selected' : ''}${idx === 0 ? ' is-edge-start' : ''}${idx === (dateHeaderItems.length - 1) ? ' is-edge-end' : ''}" data-date-key="${item.dateKey}" style="left:${item.leftPct.toFixed(2)}%;">
+                  <div class="performance-timeline-header-label">${escapeHtml(item.weekday)}</div>
+                  <div class="performance-timeline-header-date">${escapeHtml(item.formatted)}</div>
+                  ${item.shiftText ? `<div class="performance-timeline-header-shift">${escapeHtml(item.shiftText)}</div>` : ''}
+                </div>
+             `).join('')}
             ${isNowInRange ? `<span class="performance-timeline-now-marker" style="left:${nowPct.toFixed(2)}%;"><span class="performance-timeline-now-label">AGORA</span></span>` : ''}
           </div>
         </div>
@@ -5630,7 +5821,12 @@ function renderPerformanceTimeline(detail, options = {}) {
     `;
 
     const lines = visibleOperationLines.map((op) => {
-      const opNumber = op.numProgramacao || programacaoOp || '';
+      const opNumber = op.type === 'setup'
+        ? ''
+        : (op.numProgramacao || programacaoOp || '');
+      const opInfoHtml = op.type === 'setup'
+        ? 'Setup'
+        : ('OP: ' + escapeHtml(opNumber || '—') + ' / Seq ' + escapeHtml(op.seq || '—') + (op.sku ? (' / SKU ' + escapeHtml(op.sku)) : ''));
       const opStartPct = ((op.start.getTime() - timelineStartMs) / timelineRangeMs) * 100;
       const clampedOpEndMs = Math.min(op.end.getTime(), timelineEndMsClamped);
       const opWidthPct = Math.max(0, ((clampedOpEndMs - op.start.getTime()) / timelineRangeMs) * 100);
@@ -5643,7 +5839,7 @@ function renderPerformanceTimeline(detail, options = {}) {
 
       return `
         <div class="performance-timeline-row-wrapper">
-          <div class="performance-timeline-row-op-info">OP: ${escapeHtml(opNumber || '—')} / Seq ${escapeHtml(op.seq)}</div>
+          <div class="performance-timeline-row-op-info">${opInfoHtml}</div>
           <div class="performance-timeline-row">
             <div class="performance-timeline-row-header">
               <div class="performance-timeline-row-seq">${escapeHtml(op.label)}</div>
@@ -5651,22 +5847,28 @@ function renderPerformanceTimeline(detail, options = {}) {
           <div class="performance-timeline-row-bars" style="position:relative; flex:1;">
             <div class="performance-timeline-bar-container">
               ${op.items.map((item) => {
-        const itemStart = parseLocalDateTime(item?.sch_data_inicio, item?.sch_hora_inicio) || parseLocalDateTimeFromSql(item?.sch_inicio_producao);
-        const itemEnd = parseLocalDateTime(item?.sch_data_inicio, item?.sch_hora_fim) || parseLocalDateTimeFromSql(item?.sch_fim_producao);
+         const itemStart = parseScheduleStart(item);
+        const itemEnd = parseScheduleEnd(item);
         if (!itemStart || !itemEnd) return '';
         const isS = String(item?.sch_tipo || '').trim().toLowerCase() === 'setup';
         const startMs = itemStart.getTime();
         const endMs = Math.min(itemEnd.getTime(), timelineEndMsClamped);
         const clampedStartMs = Math.max(startMs, timelineStartMs);
         if (endMs <= clampedStartMs) return '';
-        const shouldExtendToSelectedDate = hasManualSelection
-          && Number.isFinite(selectionEndMs)
-          && clampedStartMs < selectionEndMs;
-        const renderEndMs = shouldExtendToSelectedDate
-          ? Math.max(endMs, selectionEndMs)
-          : endMs;
-        const itemStartPct = ((clampedStartMs - timelineStartMs) / timelineRangeMs) * 100;
-        const itemWidthPct = Math.max(0, ((Math.min(renderEndMs, timelineEndMsClamped) - clampedStartMs) / timelineRangeMs) * 100);
+        // Use real end time for accurate proportional bar width
+        const renderEndMs = endMs;
+        let itemStartPct = ((clampedStartMs - timelineStartMs) / timelineRangeMs) * 100;
+        let itemWidthPct = Math.max(0, ((Math.min(renderEndMs, timelineEndMsClamped) - clampedStartMs) / timelineRangeMs) * 100);
+        
+        // Apply minimum width for visibility (at least 3% of timeline)
+        const MIN_BAR_WIDTH = 3;
+        if (itemWidthPct > 0 && itemWidthPct < MIN_BAR_WIDTH) {
+          itemWidthPct = MIN_BAR_WIDTH;
+        }
+        // If bar would overflow, adjust start position
+        if (itemStartPct + itemWidthPct > 100) {
+          itemStartPct = Math.max(0, 100 - itemWidthPct);
+        }
         const itemStartTime = formatTimeOnlyPt(itemStart);
         const itemEndTime = formatTimeOnlyPt(itemEnd);
         
@@ -5682,26 +5884,36 @@ function renderPerformanceTimeline(detail, options = {}) {
           ? `${itemStartTimeCompact}→${itemEndTimeCompact}` 
           : `${dateCompact} ${itemStartTimeCompact}→${itemEndTimeCompact}`;
         
-        const durMin = Math.round((itemEnd.getTime() - itemStart.getTime()) / 60000);
-        const itemSeq = item?.sch_sequencia ? String(item.sch_sequencia).trim() : 'Setup';
+        const durMinRaw = Number(item && item.sch_duracao_minutos);
+        const durMin = Number.isFinite(durMinRaw)
+          ? Math.max(0, Math.round(durMinRaw))
+          : Math.max(0, Math.round((itemEnd.getTime() - itemStart.getTime()) / 60000));
+        const itemSeq = item?.sch_sequencia ? String(item.sch_sequencia).trim() : '';
         
-        // Formatação de duração: 1m, 1h 19m, etc
-        const formatDuration = (minutes) => {
-          if (minutes < 60) return `${minutes}m`;
-          const h = Math.floor(minutes / 60);
-          const m = minutes % 60;
-          return m > 0 ? `${h}h ${m}m` : `${h}h`;
+        // Formatação de duração (fiel ao preview): HH:MM
+        const formatDurationHHMM = (minutes) => {
+          const min = Math.max(0, Math.round(Number(minutes) || 0));
+          const h = Math.floor(min / 60);
+          const m = min % 60;
+          return `${pad2(h)}:${pad2(m)}`;
         };
-        const durFormatted = formatDuration(durMin);
+        const durFormatted = formatDurationHHMM(durMin);
         
         // ========== ETAPA 2: Detectar status (anomalias) ==========
         const statusClass = getItemStatusClass(itemStart, itemEnd, isS);
         
         // Label visível na barra (adaptado ao tamanho)
         const seqLabel = itemWidthPct < 8 ? itemSeq : `${itemSeq}`;
-        const barLabel = itemWidthPct < 15 ? `${durFormatted}` : `${itemSeq} • ${durFormatted}`;
+        const seqLabelForBar = itemSeq || (isS ? 'Setup' : '');
+        const barLabel = itemWidthPct < 15
+          ? `${durFormatted}`
+          : (seqLabelForBar ? `${seqLabelForBar} • ${durFormatted}` : `${durFormatted}`);
         
-        return `<span class="performance-timeline-item ${isS ? 'is-setup' : 'is-prod'} ${statusClass}" style="left:${itemStartPct.toFixed(4)}%; width:${itemWidthPct.toFixed(4)}%; --timeline-start-ms:${clampedStartMs}; --timeline-end-ms:${endMs}; --timeline-range-ms:${timelineRangeMs};" data-item-start="${clampedStartMs}" data-item-end="${endMs}" data-item-type="${isS ? 'setup' : 'prod'}" data-item-date="${startDateKeyItem}" data-item-seq="${escapeHtml(itemSeq)}" data-item-duration="${durMin}" data-item-desc="${escapeHtml(item.sch_descricao || '')}" title="${escapeHtml(item.sch_descricao || '')} ${itemStartTime} → ${itemEndTime}"><span class="performance-timeline-item-label">${labelContent}</span><span class="performance-timeline-item-info">${barLabel}</span></span>`;
+        const ariaLabel = `${isS ? 'Setup' : 'Producao'} - OP ${opNumber || '—'} - Seq ${itemSeq} - ${stripSeqPrefix(item.sch_descricao || '') || '-'} - ${startDateKeyItem ? formatDateKeyPt(startDateKeyItem) + ' ' : ''}Inicio ${itemStartTimeCompact}, fim ${itemEndTimeCompact} - Duracao ${durFormatted}`;
+        const qtyText = item && item.sch_quantidade != null ? String(item.sch_quantidade) : '';
+        const startDateLabel = startDateKeyItem ? formatDateKeyPt(startDateKeyItem) : '';
+        const titleDate = startDateLabel ? `${startDateLabel} ` : '';
+        return `<span class="performance-timeline-item ${isS ? 'is-setup' : 'is-prod'} ${statusClass}" role="button" tabindex="0" aria-pressed="false" aria-label="${escapeHtml(ariaLabel)}" style="left:${itemStartPct.toFixed(4)}%; width:${itemWidthPct.toFixed(4)}%; --timeline-start-ms:${clampedStartMs}; --timeline-end-ms:${endMs}; --timeline-range-ms:${timelineRangeMs};" data-item-start="${clampedStartMs}" data-item-end="${endMs}" data-item-op="${escapeHtml(opNumber || '')}" data-item-type="${isS ? 'setup' : 'prod'}" data-item-date="${startDateKeyItem}" data-item-seq="${escapeHtml(itemSeq)}" data-item-qty="${escapeHtml(qtyText)}" data-item-duration="${durMin}" data-item-duration-label="${escapeHtml(durFormatted)}" data-item-desc="${escapeHtml(item.sch_descricao || '')}" title="${titleDate}${escapeHtml(item.sch_descricao || '')} ${itemStartTime} → ${itemEndTime}"><span class="performance-timeline-item-label">${labelContent}</span><span class="performance-timeline-item-info">${barLabel}</span></span>`;
       }).join('')}
             </div>
           </div>
@@ -5755,16 +5967,17 @@ function renderPerformanceTimeline(detail, options = {}) {
 
   // ========== ETAPA 2: Detectar e destacar gaps entre operações ==========
   const detectAndHighlightGaps = () => {
-    operationLines.forEach((op, idx) => {
-      if (idx < operationLines.length - 1) {
+    const gapLines = (operationLines || []).filter((op) => op && op.type !== 'setup');
+    gapLines.forEach((op, idx) => {
+      if (idx < gapLines.length - 1) {
         const currentOpEnd = op.end.getTime();
-        const nextOpStart = operationLines[idx + 1].start.getTime();
+        const nextOpStart = gapLines[idx + 1].start.getTime();
         const gapMs = nextOpStart - currentOpEnd;
         const gapMinutes = gapMs / (1000 * 60);
         
         // Se gap > 30 min, adicionar badge/alerta
         if (gapMinutes > 30) {
-          console.log(`⏱️ Gap detectado entre OP ${op.numProgramacao} e ${operationLines[idx + 1].numProgramacao}: ${Math.round(gapMinutes)}min`);
+          console.log(`⏱️ Gap detectado entre OP ${op.numProgramacao} e ${gapLines[idx + 1].numProgramacao}: ${Math.round(gapMinutes)}min`);
         }
       }
     });
@@ -5806,18 +6019,21 @@ function renderPerformanceTimeline(detail, options = {}) {
       // Remover is-active de todos os items
       container.querySelectorAll('.performance-timeline-item').forEach(item => {
         item.classList.remove('is-active');
+        item.setAttribute('aria-pressed', 'false');
       });
       
       // Adicionar is-active ao item clicado
       timelineItem.classList.add('is-active');
-      
-      // Log para debug
-      console.log('Timeline item selecionado:', timelineItem.getAttribute('data-item-seq'));
+      timelineItem.setAttribute('aria-pressed', 'true');
+      if (typeof timelineItem.focus === 'function') timelineItem.focus();
       
       // ========== ETAPA 8: Populate tabela ao clicar ==========
       const itemSeq = timelineItem.getAttribute('data-item-seq') || '';
       const itemDuration = timelineItem.getAttribute('data-item-duration') || '0';
+      const itemDurationLabel = timelineItem.getAttribute('data-item-duration-label') || `${itemDuration}m`;
+      const itemQty = timelineItem.getAttribute('data-item-qty') || '';
       const itemDesc = timelineItem.getAttribute('data-item-desc') || '';
+      const opNumber = timelineItem.getAttribute('data-item-op') || '—';
       const itemType = timelineItem.getAttribute('data-item-type') || 'prod';
       const itemDate = timelineItem.getAttribute('data-item-date') || '';
       const itemStart = timelineItem.getAttribute('data-item-start') || '0';
@@ -5827,7 +6043,7 @@ function renderPerformanceTimeline(detail, options = {}) {
       const formatTimeFromMs = (ms) => {
         const dt = new Date(Number(ms));
         if (Number.isNaN(dt.getTime())) return '--:--';
-        return `${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`;
+        return `${pad2(dt.getHours())}:${pad2(dt.getMinutes())}`;
       };
       
       const formatDateFromKey = (key) => {
@@ -5846,20 +6062,6 @@ function renderPerformanceTimeline(detail, options = {}) {
       const endTime = formatTimeFromMs(itemEnd);
       const formattedDate = formatDateFromKey(itemDate);
       
-      // Extrair número da OP a partir do elemento pai
-      let opNumber = '—';
-      const timelineWrapper = timelineItem.closest('.performance-timeline-row-wrapper');
-      if (timelineWrapper) {
-        const opInfoElement = timelineWrapper.querySelector('.performance-timeline-row-op-info');
-        if (opInfoElement) {
-          const opText = opInfoElement.textContent; // "OP: 201613 / Seq 25"
-          const opMatch = opText.match(/OP:\s*(\d+)/);
-          if (opMatch && opMatch[1]) {
-            opNumber = opMatch[1];
-          }
-        }
-      }
-      
       // Preencher tabela
       const tableBody = document.getElementById('performance-data-table-body');
       if (tableBody) {
@@ -5868,8 +6070,8 @@ function renderPerformanceTimeline(detail, options = {}) {
           <tr>
             <td>${safeHtml(opNumber) || '—'}</td>
             <td>${safeHtml(itemSeq) || '—'}</td>
-            <td>1</td>
-            <td>${itemDuration}m</td>
+            <td>${safeHtml(itemQty) || '—'}</td>
+            <td>${safeHtml(itemDurationLabel) || '—'}</td>
             <td>${formattedDate}</td>
             <td>${startTime}</td>
             <td>${endTime}</td>
@@ -5885,7 +6087,7 @@ function renderPerformanceTimeline(detail, options = {}) {
         const kpiEnd = kpisContainer.querySelector('[data-kpi="end"]');
         const kpiType = kpisContainer.querySelector('[data-kpi="type"]');
         
-        if (kpiDuration) kpiDuration.textContent = `${itemDuration}m`;
+        if (kpiDuration) kpiDuration.textContent = `${itemDurationLabel}`;
         if (kpiStart) kpiStart.textContent = startTime;
         if (kpiEnd) kpiEnd.textContent = endTime;
         if (kpiType) kpiType.textContent = itemType === 'setup' ? 'Setup' : 'Produção';
@@ -5917,11 +6119,32 @@ function renderPerformanceTimeline(detail, options = {}) {
   };
   container.addEventListener('click', window.__performanceTimelineClickHandler);
 
+  container.removeEventListener('keydown', window.__performanceTimelineKeydownHandler);
+  window.__performanceTimelineKeydownHandler = (event) => {
+    const key = event && typeof event.key === 'string' ? event.key : '';
+    const keyCode = event && typeof event.keyCode === 'number' ? event.keyCode : 0;
+    const isEnter = key === 'Enter' || keyCode === 13;
+    const isSpace = key === ' ' || key === 'Spacebar' || keyCode === 32;
+    if (!isEnter && !isSpace) return;
+
+    const target = event && event.target ? event.target : null;
+    const timelineItem = target && typeof target.closest === 'function'
+      ? target.closest('.performance-timeline-item')
+      : null;
+    if (!timelineItem) return;
+
+    event.preventDefault();
+    if (typeof timelineItem.click === 'function') timelineItem.click();
+  };
+  container.addEventListener('keydown', window.__performanceTimelineKeydownHandler);
+
   // Adicionar listeners para filtros e interatividade
   if (container.dataset.timelineListener !== '1') {
     container.dataset.timelineListener = '1';
-    document.getElementById('performance-timeline-filter-prod')?.addEventListener('change', () => renderPerformanceTimeline(detail, options));
-    document.getElementById('performance-timeline-filter-setup')?.addEventListener('change', () => renderPerformanceTimeline(detail, options));
+    const prodFilterEl = document.getElementById('performance-timeline-filter-prod');
+    const setupFilterEl = document.getElementById('performance-timeline-filter-setup');
+    if (prodFilterEl) prodFilterEl.addEventListener('change', () => renderPerformanceTimeline(detail, options));
+    if (setupFilterEl) setupFilterEl.addEventListener('change', () => renderPerformanceTimeline(detail, options));
 
     // Sincronizar hover no timeline com arquivo antigo
     container.addEventListener('mouseover', (event) => {
@@ -6771,15 +6994,105 @@ function renderReleaseCenter() {
 window.renderReleaseCenter = renderReleaseCenter;
 window.loadReleaseCenter = loadReleaseCenter;
 
-async function openHistoryPreview(prgId) {
+async function openHistoryPreview(prgId, filterDateKey = null) {
   if (!prgId) return;
 
   try {
     const response = await fetch('/controlepcp/api/programacoes.php?id=' + encodeURIComponent(prgId));
     const payload = await response.json();
     const data = payload?.data || payload || {};
-    const itens = Array.isArray(data?.itens) ? data.itens : [];
-    const schedule = Array.isArray(data?.schedule) ? data.schedule : [];
+    let itens = Array.isArray(data?.itens) ? data.itens : [];
+    let schedule = Array.isArray(data?.schedule) ? data.schedule : [];
+
+    // Apply date filter if provided (sync with timeline)
+    if (filterDateKey) {
+      const parts = String(filterDateKey).split('-');
+      const year = Number(parts[0]);
+      const month = Number(parts[1]) - 1;
+      const day = Number(parts[2]);
+
+      const filterStart = (parts.length === 3 && ![year, month, day].some((v) => Number.isNaN(v)))
+        ? new Date(year, month, day, 0, 0, 0, 0)
+        : null;
+      const filterEnd = filterStart ? new Date(year, month, day, 23, 59, 59, 999) : null;
+      const filterStartMs = filterStart ? filterStart.getTime() : null;
+      const filterEndMs = filterEnd ? filterEnd.getTime() : null;
+
+      const parseSqlDateTimeLoose = (value) => {
+        if (!value) return null;
+        try {
+          const text = String(value || '').trim();
+          if (!text) return null;
+          const normalized = text.includes('T') ? text : text.replace(' ', 'T');
+          const dt = new Date(normalized);
+          return Number.isNaN(dt.getTime()) ? null : dt;
+        } catch (e) {
+          return null;
+        }
+      };
+
+      const parseLocalDateTimeSafe = (dateStr, timeStr) => {
+        if (!dateStr || !timeStr) return null;
+        try {
+          const dt = new Date(`${dateStr}T${timeStr}`);
+          return Number.isNaN(dt.getTime()) ? null : dt;
+        } catch (e) {
+          return null;
+        }
+      };
+
+      const parseScheduleStart = (row) => (
+        parseSqlDateTimeLoose(row && row.sch_inicio_producao) ||
+        parseLocalDateTimeSafe(row && row.sch_data_inicio, row && row.sch_hora_inicio) ||
+        null
+      );
+
+      const parseScheduleEnd = (row, startDt) => {
+        const fimRaw = row && row.sch_fim_producao;
+        const dtFimSql = parseSqlDateTimeLoose(fimRaw);
+        if (dtFimSql) return dtFimSql;
+
+        const fimDateMatch = fimRaw ? String(fimRaw).match(/^(\d{4}-\d{2}-\d{2})/) : null;
+        const fimDateOnly = fimDateMatch ? fimDateMatch[1] : null;
+        if (fimDateOnly) {
+          const dtDateOnly = parseLocalDateTimeSafe(fimDateOnly, row && row.sch_hora_fim);
+          if (dtDateOnly) return dtDateOnly;
+        }
+
+        const durMinRaw = Number(row && row.sch_duracao_minutos);
+        if (startDt && Number.isFinite(durMinRaw)) {
+          return new Date(startDt.getTime() + (Math.max(0, Math.round(durMinRaw)) * 60000));
+        }
+
+        const endDt = parseLocalDateTimeSafe(row && row.sch_data_inicio, row && row.sch_hora_fim);
+        if (!endDt) return null;
+        if (startDt && endDt.getTime() <= startDt.getTime()) {
+          const adjusted = new Date(endDt.getTime());
+          adjusted.setDate(adjusted.getDate() + 1);
+          return adjusted;
+        }
+        return endDt;
+      };
+
+      schedule = schedule.filter((item) => {
+        if (filterStartMs === null || filterEndMs === null) return true;
+        const s = parseScheduleStart(item);
+        const e = parseScheduleEnd(item, s);
+        if (!s || !e) return false;
+        return s.getTime() <= (filterEndMs + 1) && e.getTime() >= filterStartMs;
+      });
+    }
+
+    // Debug: manter a "fonte de verdade" do preview disponível para comparação com o gráfico.
+    // Uso: abrir o preview e conferir `window.__historyPreviewLast` no console.
+    window.__historyPreviewLast = {
+      prgId: String(prgId),
+      filterDateKey: filterDateKey ? String(filterDateKey) : null,
+      itensCount: Array.isArray(itens) ? itens.length : 0,
+      scheduleCount: Array.isArray(schedule) ? schedule.length : 0,
+      itens,
+      schedule,
+    };
 
     const opBySeq = new Map();
     itens.forEach((it) => {
@@ -7245,6 +7558,144 @@ async function openHistoryPreview(prgId) {
     console.error('Erro ao carregar preview', error);
   }
 }
+
+// Comparador rápido (debug) entre o JSON do preview e o JSON usado no gráfico.
+// Uso: depois de abrir o preview e renderizar o gráfico, execute no console:
+// `window.compareHistoryPreviewToTimeline()`
+window.compareHistoryPreviewToTimeline = function compareHistoryPreviewToTimeline() {
+  const hp = window.__historyPreviewLast;
+  const tl = window.__performanceTimelineLast;
+
+  if (!hp || !tl) {
+    console.warn('Dados insuficientes: gere o preview e renderize o gráfico antes de comparar.');
+    return null;
+  }
+
+  const parseSqlDateTimeLoose = (value) => {
+    if (!value) return null;
+    try {
+      const text = String(value || '').trim();
+      if (!text) return null;
+      const normalized = text.includes('T') ? text : text.replace(' ', 'T');
+      const dt = new Date(normalized);
+      return Number.isNaN(dt.getTime()) ? null : dt;
+    } catch (e) {
+      return null;
+    }
+  };
+
+  const parseLocalDateTimeSafe = (dateStr, timeStr) => {
+    if (!dateStr || !timeStr) return null;
+    try {
+      const dt = new Date(`${dateStr}T${timeStr}`);
+      return Number.isNaN(dt.getTime()) ? null : dt;
+    } catch (e) {
+      return null;
+    }
+  };
+
+  const parseScheduleStart = (row) => (
+    parseSqlDateTimeLoose(row && row.sch_inicio_producao) ||
+    parseLocalDateTimeSafe(row && row.sch_data_inicio, row && row.sch_hora_inicio) ||
+    null
+  );
+
+  const parseScheduleEnd = (row, startDt) => {
+    const fimRaw = row && row.sch_fim_producao;
+    const dtFimSql = parseSqlDateTimeLoose(fimRaw);
+    if (dtFimSql) return dtFimSql;
+
+    const fimDateMatch = fimRaw ? String(fimRaw).match(/^(\d{4}-\d{2}-\d{2})/) : null;
+    const fimDateOnly = fimDateMatch ? fimDateMatch[1] : null;
+    if (fimDateOnly) {
+      const dtDateOnly = parseLocalDateTimeSafe(fimDateOnly, row && row.sch_hora_fim);
+      if (dtDateOnly) return dtDateOnly;
+    }
+
+    const durMinRaw = Number(row && row.sch_duracao_minutos);
+    if (startDt && Number.isFinite(durMinRaw)) {
+      return new Date(startDt.getTime() + (Math.max(0, Math.round(durMinRaw)) * 60000));
+    }
+
+    const endDt = parseLocalDateTimeSafe(row && row.sch_data_inicio, row && row.sch_hora_fim);
+    if (!endDt) return null;
+    if (startDt && endDt.getTime() <= startDt.getTime()) {
+      const adjusted = new Date(endDt.getTime());
+      adjusted.setDate(adjusted.getDate() + 1);
+      return adjusted;
+    }
+    return endDt;
+  };
+
+  const filterByDateKeyOverlap = (list, dateKey) => {
+    if (!dateKey) return list;
+    const parts = String(dateKey).split('-');
+    const year = Number(parts[0]);
+    const month = Number(parts[1]) - 1;
+    const day = Number(parts[2]);
+    if (parts.length !== 3 || [year, month, day].some((v) => Number.isNaN(v))) return list;
+    const start = new Date(year, month, day, 0, 0, 0, 0).getTime();
+    const end = new Date(year, month, day, 23, 59, 59, 999).getTime();
+    return (list || []).filter((item) => {
+      const s = parseScheduleStart(item);
+      const e = parseScheduleEnd(item, s);
+      if (!s || !e) return false;
+      return s.getTime() <= (end + 1) && e.getTime() >= start;
+    });
+  };
+
+  const normalize = (item, idx) => {
+    const seq = String(item && item.sch_sequencia != null ? item.sch_sequencia : '').trim();
+    const tipo = String(item && item.sch_tipo != null ? item.sch_tipo : '').trim().toLowerCase();
+    const startDt = parseScheduleStart(item);
+    const endDt = parseScheduleEnd(item, startDt);
+    const startLabel = startDt ? startDt.toISOString() : '';
+    const endLabel = endDt ? endDt.toISOString() : '';
+    const dur = String(item && item.sch_duracao_minutos != null ? item.sch_duracao_minutos : '').trim();
+    return {
+      idx,
+      key: `${seq}|${tipo}|${startLabel}|${endLabel}|${dur}`,
+    };
+  };
+
+  const hpRaw = Array.isArray(hp.schedule) ? hp.schedule : [];
+  const tlRaw = Array.isArray(tl.schedule) ? tl.schedule : [];
+  const hpFiltered = filterByDateKeyOverlap(hpRaw, hp.filterDateKey);
+  const tlFiltered = filterByDateKeyOverlap(tlRaw, tl.selection);
+
+  const hpList = hpFiltered.map((it, i) => normalize(it, i));
+  const tlList = tlFiltered.map((it, i) => normalize(it, i));
+
+  const max = Math.max(hpList.length, tlList.length);
+  const mismatches = [];
+  for (let i = 0; i < max; i++) {
+    const a = hpList[i] ? hpList[i].key : null;
+    const b = tlList[i] ? tlList[i].key : null;
+    if (a !== b) {
+      mismatches.push({ i, preview: a, timeline: b });
+      if (mismatches.length >= 25) break;
+    }
+  }
+
+  const setA = new Set(hpList.map((x) => x.key));
+  const setB = new Set(tlList.map((x) => x.key));
+  let missingInTimeline = 0;
+  let missingInPreview = 0;
+  setA.forEach((k) => { if (!setB.has(k)) missingInTimeline++; });
+  setB.forEach((k) => { if (!setA.has(k)) missingInPreview++; });
+
+  const summary = {
+    preview: { prgId: hp.prgId, filterDateKey: hp.filterDateKey, count: hpList.length },
+    timeline: { prgId: tl.prgId, selection: tl.selection, count: tlList.length },
+    missingInTimeline,
+    missingInPreview,
+    mismatchCountSample: mismatches.length,
+    mismatches,
+  };
+
+  console.log('compareHistoryPreviewToTimeline:', summary);
+  return summary;
+};
 
 
 

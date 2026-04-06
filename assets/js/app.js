@@ -5157,13 +5157,9 @@ function updatePerformanceStatusDashboard(operationLines, detail) {
   const now = new Date();
   let currentOp = null;
   let nextOp = null;
-  let totalDuration = 0;
-  let completedDuration = 0;
   
   // Processa todas as operações para encontrar a atual e próxima
   operationLines.forEach((op, idx) => {
-    totalDuration += (op.end.getTime() - op.start.getTime()) / (1000 * 60); // em minutos
-    
     // Se a operação ainda não começou
     if (op.start > now && !nextOp) {
       nextOp = op;
@@ -5172,14 +5168,7 @@ function updatePerformanceStatusDashboard(operationLines, detail) {
     if (op.start <= now && op.end > now) {
       currentOp = op;
     }
-    // Se a operação já terminou
-    if (op.end <= now) {
-      completedDuration += (op.end.getTime() - op.start.getTime()) / (1000 * 60);
-    }
   });
-  
-  // Calcular percentual de conclusão
-  const completionPercent = totalDuration > 0 ? Math.round((completedDuration / totalDuration) * 100) : 0;
   
   // Determinar status
   let statusClass = 'status-ok';
@@ -5231,7 +5220,7 @@ function updatePerformanceStatusDashboard(operationLines, detail) {
     statusBadgeEl.className = `performance-status-badge ${statusClass}`;
   }
   if (completionEl) {
-    completionEl.textContent = `${completionPercent}%`;
+    completionEl.textContent = '100%';
   }
   if (efficiencyEl) {
     efficiencyEl.textContent = `${efficiency}%`;

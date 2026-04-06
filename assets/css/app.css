@@ -2539,6 +2539,26 @@ select {
     animation: pulse-alert 2s infinite;
 }
 
+/* Setup com status específico (não usar verde, manter laranja) */
+.performance-timeline-item.is-setup.is-on-time {
+    background: linear-gradient(90deg, #EA580C, #D94600) !important;
+    border: 2px solid #D94600 !important;
+    box-shadow: 0 2px 6px rgba(234, 88, 12, 0.3) !important;
+}
+
+.performance-timeline-item.is-setup.is-warning {
+    background: linear-gradient(90deg, rgba(255, 140, 0, 0.98), rgba(230, 100, 0, 0.98)) !important;
+    border: 2px solid rgba(230, 100, 0, 0.95) !important;
+    box-shadow: 0 2px 8px rgba(255, 140, 0, 0.5) !important;
+}
+
+.performance-timeline-item.is-setup.is-alert {
+    background: linear-gradient(90deg, rgba(255, 100, 0, 0.98), rgba(220, 50, 0, 0.98)) !important;
+    border: 2px solid rgba(220, 50, 0, 0.95) !important;
+    box-shadow: 0 2px 8px rgba(255, 100, 0, 0.6) !important;
+    animation: pulse-alert 2s infinite;
+}
+
 @keyframes pulse-alert {
     0%, 100% {
         opacity: 0.95;

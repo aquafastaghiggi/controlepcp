@@ -5653,27 +5653,36 @@ function renderPerformanceTimeline(detail, options = {}) {
     const timelineEndMsClamped = Math.max(maxDate, timelineStartMs + 1);
     const timelineRangeMs = Math.max(1, timelineEndMsClamped - timelineStartMs);
 
-    // Gerar datas únicas para o header
-    const minDateObj = new Date(timelineStartMs);
-    const maxDateObj = new Date(timelineEndMsClamped);
-    const dateHeaderItems = [];
-    const currentDate = new Date(minDateObj);
-    currentDate.setHours(0, 0, 0, 0);
-
-    while (currentDate <= maxDateObj) {
-      const dateKey = toDateKeyLocal(currentDate);
-      const weekday = formatWeekdayShortPt(dateKey);
-      const formatted = formatDateKeyPt(dateKey);
-      const leftPct = ((currentDate.getTime() - timelineStartMs) / timelineRangeMs) * 100;
-      dateHeaderItems.push({
-        dateKey,
-        weekday,
-        formatted,
-        leftPct,
-        dateObj: new Date(currentDate),
-      });
-      currentDate.setDate(currentDate.getDate() + 1);
+    // Header: mostrar apenas datas relevantes (mesma lógica do preview/PDF).
+    // Em vez de listar todos os dias do intervalo (inclui DOM sem eventos), usamos
+    // apenas os dias em que existe item iniciando no schedule.
+    const tickDateKeysSet = new Set();
+    operationLines.forEach((op) => {
+      if (!op || !op.start) return;
+      const key = toDateKeyLocal(op.start);
+      if (key) tickDateKeysSet.add(key);
+    });
+    if (hasManualSelection && selectionDateKey) {
+      tickDateKeysSet.add(String(selectionDateKey));
     }
+
+    const tickDateKeys = Array.from(tickDateKeysSet).sort((a, b) => String(a).localeCompare(String(b)));
+    const dateHeaderItems = tickDateKeys
+      .map((dateKey) => {
+        const dateObj = parseDateKeyToStartOfDay(dateKey);
+        if (!dateObj) return null;
+        const weekday = formatWeekdayShortPt(dateKey);
+        const formatted = formatDateKeyPt(dateKey);
+        const leftPct = ((dateObj.getTime() - timelineStartMs) / timelineRangeMs) * 100;
+        return {
+          dateKey,
+          weekday,
+          formatted,
+          leftPct,
+          dateObj,
+        };
+      })
+      .filter(Boolean);
 
     const defaultDateKey = dateHeaderItems.length ? dateHeaderItems[dateHeaderItems.length - 1].dateKey : null;
     const selectedHeaderDate = selectionState.dateKey || defaultDateKey;

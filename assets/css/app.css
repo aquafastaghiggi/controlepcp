@@ -3005,7 +3005,10 @@ select {
 
 .performance-timeline-selection-range {
     position: absolute;
-    inset: 0;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 100%;
     background: rgba(37, 99, 235, 0.15);
     border-radius: 6px;
     pointer-events: none;

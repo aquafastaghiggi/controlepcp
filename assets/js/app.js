@@ -5452,6 +5452,20 @@ function renderPerformanceTimeline(detail, options = {}) {
     return Number.isNaN(dt.getTime()) ? null : dt;
   };
 
+  const parseDateKeyToStartOfDay = (dateKey) => {
+    if (!dateKey) return null;
+    const parts = String(dateKey).split('-');
+    if (parts.length !== 3) return null;
+    const year = Number(parts[0]);
+    const month = Number(parts[1]) - 1;
+    const day = Number(parts[2]);
+    if ([year, month, day].some((value) => Number.isNaN(value))) {
+      return null;
+    }
+    const dt = new Date(year, month, day, 0, 0, 0, 0);
+    return Number.isNaN(dt.getTime()) ? null : dt;
+  };
+
   const toMin = (start, end) => {
     if (!start || !end) return 0;
     return Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000));
@@ -5614,19 +5628,29 @@ function renderPerformanceTimeline(detail, options = {}) {
     const selectionState = ensurePerformanceTimelineSelectionState();
     const hasManualSelection = Boolean(selectionState.dateKey);
     const selectionDateKey = selectionState.dateKey;
+    const selectionStartDate = hasManualSelection ? parseDateKeyToStartOfDay(selectionDateKey) : null;
     const selectionEndDate = hasManualSelection ? parseDateKeyToEndOfDay(selectionDateKey) : null;
-    const selectionEndMs = selectionEndDate ? selectionEndDate.getTime() : maxDate;
+    const selectionStartMs = selectionStartDate ? selectionStartDate.getTime() : null;
+    const selectionEndMs = selectionEndDate ? selectionEndDate.getTime() : null;
 
-    const visibleOperationLines = operationLines.filter((op) => op.start.getTime() <= selectionEndMs);
+    // Quando uma data é selecionada, filtrar linhas do gráfico pelo mesmo critério do preview:
+    // incluir itens que sobrepõem o intervalo do dia selecionado.
+    const visibleOperationLines = (hasManualSelection && selectionStartMs !== null && selectionEndMs !== null)
+      ? operationLines.filter((op) => (
+          op &&
+          op.start &&
+          op.end &&
+          op.start.getTime() <= (selectionEndMs + 1) &&
+          op.end.getTime() >= selectionStartMs
+        ))
+      : operationLines.slice();
 
     // Ancorar a régua no início do dia para evitar "sumir" o primeiro dia no header
     // quando a primeira operação começa após 00:00 (ex.: 27/03 08:26).
     const startDay = new Date(earliestStartMs);
     startDay.setHours(0, 0, 0, 0);
     const timelineStartMs = startDay.getTime();
-    const timelineEndMsClamped = hasManualSelection
-      ? Math.max(selectionEndMs, timelineStartMs + 1)
-      : maxDate;
+    const timelineEndMsClamped = Math.max(maxDate, timelineStartMs + 1);
     const timelineRangeMs = Math.max(1, timelineEndMsClamped - timelineStartMs);
 
     // Gerar datas únicas para o header
@@ -5653,7 +5677,13 @@ function renderPerformanceTimeline(detail, options = {}) {
 
     const defaultDateKey = dateHeaderItems.length ? dateHeaderItems[dateHeaderItems.length - 1].dateKey : null;
     const selectedHeaderDate = selectionState.dateKey || defaultDateKey;
-    const highlightPct = hasManualSelection ? Math.max(0, Math.min(100, ((selectionEndMs - timelineStartMs) / timelineRangeMs) * 100)) : 0;
+    const highlightStartPct = (hasManualSelection && selectionStartMs !== null)
+      ? Math.max(0, Math.min(100, ((selectionStartMs - timelineStartMs) / timelineRangeMs) * 100))
+      : 0;
+    const highlightEndPct = (hasManualSelection && selectionEndMs !== null)
+      ? Math.max(0, Math.min(100, (((selectionEndMs + 1) - timelineStartMs) / timelineRangeMs) * 100))
+      : 0;
+    const highlightWidthPct = hasManualSelection ? Math.max(0, highlightEndPct - highlightStartPct) : 0;
 
     // ========== ETAPA 3: Calcular posição do marcador "AGORA" ==========
     const now = new Date();
@@ -5666,16 +5696,16 @@ function renderPerformanceTimeline(detail, options = {}) {
 
     // Renderizar header de datas
     const headerHtml = `
-      <div class="performance-timeline-header">
-        <div class="performance-timeline-header-spacer"></div>
-        <div class="performance-timeline-header-scale">
-          ${highlightPct > 0 ? `<span class="performance-timeline-selection-range" style="width:${highlightPct.toFixed(4)}%;"></span>` : ''}
-          <div class="performance-timeline-header-container">
-            ${dateHeaderItems.map((item, idx) => `
-              <div class="performance-timeline-header-item${item.dateKey === selectedHeaderDate ? ' is-selected' : ''}${idx === 0 ? ' is-edge-start' : ''}${idx === (dateHeaderItems.length - 1) ? ' is-edge-end' : ''}" data-date-key="${item.dateKey}" style="left:${item.leftPct.toFixed(2)}%;">
-                <div class="performance-timeline-header-label">${escapeHtml(item.weekday)}</div>
-                <div class="performance-timeline-header-date">${escapeHtml(item.formatted)}</div>
-              </div>
+        <div class="performance-timeline-header">
+          <div class="performance-timeline-header-spacer"></div>
+          <div class="performance-timeline-header-scale">
+           ${highlightWidthPct > 0 ? `<span class="performance-timeline-selection-range" style="left:${highlightStartPct.toFixed(4)}%; width:${highlightWidthPct.toFixed(4)}%;"></span>` : ''}
+           <div class="performance-timeline-header-container">
+             ${dateHeaderItems.map((item, idx) => `
+               <div class="performance-timeline-header-item${item.dateKey === selectedHeaderDate ? ' is-selected' : ''}${idx === 0 ? ' is-edge-start' : ''}${idx === (dateHeaderItems.length - 1) ? ' is-edge-end' : ''}" data-date-key="${item.dateKey}" style="left:${item.leftPct.toFixed(2)}%;">
+                 <div class="performance-timeline-header-label">${escapeHtml(item.weekday)}</div>
+                 <div class="performance-timeline-header-date">${escapeHtml(item.formatted)}</div>
+               </div>
             `).join('')}
             ${isNowInRange ? `<span class="performance-timeline-now-marker" style="left:${nowPct.toFixed(2)}%;"><span class="performance-timeline-now-label">AGORA</span></span>` : ''}
           </div>

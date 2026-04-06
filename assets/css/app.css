@@ -2738,6 +2738,11 @@ select {
     font-family: 'Courier New', monospace;
 }
 
+/* Hide Ociosidade card */
+.performance-timeline-summary .performance-timeline-summary-card:nth-child(5) {
+    display: none;
+}
+
 /* ========== ETAPA 5: Legenda Contextual Melhorada ========== */
 .performance-timeline-legend-enhanced {
     display: grid;

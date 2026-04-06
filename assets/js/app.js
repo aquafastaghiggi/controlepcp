@@ -5227,6 +5227,70 @@ function updatePerformanceStatusDashboard(operationLines, detail) {
   }
 }
 
+// ========== ETAPA 4: Função para Atualizar Resumo de Tempos ==========
+function updatePerformanceTimeSummary(operationLines) {
+  let totalProdMs = 0;      // Total em ms de produção
+  let totalSetupMs = 0;     // Total em ms de setup
+  let totalMs = 0;          // Total geral
+  
+  operationLines.forEach((op) => {
+    // Percorrer items de cada operação
+    if (op.items && Array.isArray(op.items)) {
+      op.items.forEach((item) => {
+        const itemStart = op.start;
+        const itemEnd = op.end;
+        
+        if (itemStart && itemEnd) {
+          const durationMs = itemEnd.getTime() - itemStart.getTime();
+          const isSetup = String(item?.sch_tipo || '').trim().toLowerCase() === 'setup';
+          
+          if (isSetup) {
+            totalSetupMs += durationMs;
+          } else {
+            totalProdMs += durationMs;
+          }
+          totalMs += durationMs;
+        }
+      });
+    }
+  });
+  
+  // Converter para horas e minutos
+  const formatHourMin = (ms) => {
+    const totalMinutes = Math.round(ms / (1000 * 60));
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return `${hours}h ${minutes}m`;
+  };
+  
+  const prodFormatted = formatHourMin(totalProdMs);
+  const setupFormatted = formatHourMin(totalSetupMs);
+  const totalFormatted = formatHourMin(totalMs);
+  
+  // Calcular horário disponível (24h)
+  const availableMs = 24 * 60 * 60 * 1000; // 24 horas em ms
+  const availableFormatted = formatHourMin(availableMs);
+  
+  // Ociosidade = disponível - total
+  const idleMs = availableMs - totalMs;
+  const idleFormatted = formatHourMin(idleMs);
+  
+  // Atualizar elements
+  const prodEl = document.getElementById('performance-summary-prod');
+  const setupEl = document.getElementById('performance-summary-setup');
+  const totalEl = document.getElementById('performance-summary-total');
+  const availableEl = document.getElementById('performance-summary-available');
+  const idleEl = document.getElementById('performance-summary-idle');
+  
+  if (prodEl) prodEl.textContent = prodFormatted;
+  if (setupEl) setupEl.textContent = setupFormatted;
+  if (totalEl) totalEl.textContent = totalFormatted;
+  if (availableEl) availableEl.textContent = availableFormatted;
+  if (idleEl) idleEl.textContent = idleFormatted;
+  
+  console.log(`📊 Resumo - Produção: ${prodFormatted}, Setup: ${setupFormatted}, Total: ${totalFormatted}, Ociosidade: ${idleFormatted}`);
+}
+
 // ========== ETAPA 2: Função para Detectar Status de Item (Anomalias) ==========
 function getItemStatusClass(itemStart, itemEnd, isSetup) {
   const now = new Date();
@@ -5685,6 +5749,9 @@ function renderPerformanceTimeline(detail, options = {}) {
   
   // ========== ETAPA 1: Atualizar Dashboard de Status ==========
   updatePerformanceStatusDashboard(operationLines, detail);
+
+  // ========== ETAPA 4: Atualizar Resumo de Tempos ==========
+  updatePerformanceTimeSummary(operationLines);
 
   // ========== ETAPA 2: Detectar e destacar gaps entre operações ==========
   const detectAndHighlightGaps = () => {

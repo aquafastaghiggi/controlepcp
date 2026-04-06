@@ -2699,6 +2699,44 @@ select {
     transition: opacity 120ms ease;
 }
 
+/* ========== ETAPA 4: Resumo de Tempos (Rodapé) ========== */
+.performance-timeline-summary {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+    margin-top: 20px;
+    padding: 16px;
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.06) 0%, rgba(99, 102, 241, 0.03) 100%);
+    border: 1px solid rgba(59, 130, 246, 0.12);
+    border-radius: 12px;
+}
+
+.performance-timeline-summary-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.8);
+    border: 1px solid rgba(59, 130, 246, 0.15);
+    border-radius: 8px;
+    text-align: center;
+}
+
+.performance-timeline-summary-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: rgba(71, 85, 105, 0.75);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.performance-timeline-summary-value {
+    font-size: 16px;
+    font-weight: 800;
+    color: rgba(15, 23, 42, 0.95);
+    font-family: 'Courier New', monospace;
+}
+
 .performance-timeline-item.is-hover {
     opacity: 1;
     z-index: 8;

@@ -591,6 +591,30 @@ if ($rawFeatureFlags !== '') {
                             </div>
                         </div>
                         <div class="performance-timeline-body" id="performance-timeline-body"></div>
+                        
+                        <!-- ========== ETAPA 4: Resumo de Tempos (Rodapé) ========== -->
+                        <div class="performance-timeline-summary">
+                            <div class="performance-timeline-summary-card">
+                                <span class="performance-timeline-summary-label">PRODUÇÃO</span>
+                                <span class="performance-timeline-summary-value" id="performance-summary-prod">—</span>
+                            </div>
+                            <div class="performance-timeline-summary-card">
+                                <span class="performance-timeline-summary-label">SETUP</span>
+                                <span class="performance-timeline-summary-value" id="performance-summary-setup">—</span>
+                            </div>
+                            <div class="performance-timeline-summary-card">
+                                <span class="performance-timeline-summary-label">TOTAL</span>
+                                <span class="performance-timeline-summary-value" id="performance-summary-total">—</span>
+                            </div>
+                            <div class="performance-timeline-summary-card">
+                                <span class="performance-timeline-summary-label">DISPONÍVEL</span>
+                                <span class="performance-timeline-summary-value" id="performance-summary-available">—</span>
+                            </div>
+                            <div class="performance-timeline-summary-card">
+                                <span class="performance-timeline-summary-label">OCIOSIDADE</span>
+                                <span class="performance-timeline-summary-value" id="performance-summary-idle">—</span>
+                            </div>
+                        </div>
                     </div>
 
                     <div id="performance-daily" class="performance-daily"></div>

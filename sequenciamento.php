@@ -443,15 +443,22 @@ $prgId = (int) ($_GET['id'] ?? 0);
     <script>
         let ganttInstance = null;
         
-        // Determinar caminho da API dinamicamente  
-        const baseDir = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/'));
-        const apiBase = baseDir + '/api/sequenciamento.php';
+        // Detectar caminho correto dinamicamente
+        // Suporta: /sequenciamento.php ou /controlepcp_sandbox/sequenciamento.php
+        const currentPath = window.location.pathname;
+        const pathParts = currentPath.split('/').filter(p => p && p !== 'sequenciamento.php');
+        
+        // Se tem pasta antes, usa ela. Se não, usa raiz
+        const apiBase = pathParts.length > 0 
+            ? '/' + pathParts.join('/') + '/api/sequenciamento.php'
+            : '/api/sequenciamento.php';
         
         // Capturar prgId da URL
         const urlParams = new URLSearchParams(window.location.search);
         window.urlPrgId = parseInt(urlParams.get('id') || 0);
         
-        console.log('📍 Base Dir:', baseDir);
+        console.log('🔹 Current Path:', currentPath);
+        console.log('🔹 Path Parts:', pathParts);
         console.log('📌 API Base:', apiBase);
 
         /**
@@ -621,40 +628,97 @@ $prgId = (int) ($_GET['id'] ?? 0);
          */
         async function carregarProgramacoes() {
             try {
-                console.log('Tentando carregar de:', apiBase);
+                console.log('═══════════════════════════════════════');
+                console.log('➡️ Iniciando carregamento de programações...');
+                console.log('🔗 API Base:', apiBase);
+                console.log('═══════════════════════════════════════');
                 
-                // Primeiro testar conexão com endpoint simples
-                const testUrl = apiBase.replace('sequenciamento.php', 'teste.php');
-                console.log('📋 Testando com URL:', testUrl);
+                // 1. Teste de conectividade simples
+                console.log('\n📋 [ETAPA 1] Testando connectividade básica...');
+                const testUrl = apiBase.replace('sequenciamento.php', 'ping.php');
+                console.log('🧪 URL de teste:', testUrl);
                 
-                const testResponse = await fetch(testUrl);
-                console.log('📊 Status do teste:', testResponse.status, testResponse.statusText);
-                
-                if (!testResponse.ok) {
-                    throw new Error(`Caminho teste retornou ${testResponse.status} - API pode estar inacessível`);
+                try {
+                    const testResponse = await fetch(testUrl);
+                    console.log('✅ Status PING:', testResponse.status, testResponse.statusText);
+                } catch (pingErr) {
+                    console.warn('⚠️ Ping failed (não é fatal):', pingErr.message);
                 }
                 
-                // Agora buscar dados reais
-                const response = await fetch(apiBase + '?action=listar&limit=50');
+                // 2. Teste de banco de dados
+                console.log('\n📋 [ETAPA 2] Testando conexão com banco...');
+                const dbTestUrl = apiBase.replace('sequenciamento.php', 'test_db.php');
+                console.log('🧪 URL db test:', dbTestUrl);
+                
+                try {
+                    const dbResponse = await fetch(dbTestUrl);
+                    const dbData = await dbResponse.json();
+                    console.log('✅ DB Test:', dbResponse.status, dbData);
+                    if (dbData.sucesso) {
+                        console.log('   📊 prg_programas:', dbData.banco.prg_programas);
+                        console.log('   📊 sch_linhas:', dbData.banco.sch_linhas);
+                    } else {
+                        console.warn('⚠️ DB Test falhou:', dbData.erro);
+                    }
+                } catch (dbErr) {
+                    console.warn('⚠️ DB Test error:', dbErr.message);
+                }
+                
+                // 3. Teste de status da API
+                console.log('\n📋 [ETAPA 3] Checando status da API...');
+                const statusUrl = apiBase + '?action=status';
+                console.log('🧪 URL status:', statusUrl);
+                
+                try {
+                    const statusResponse = await fetch(statusUrl);
+                    console.log('✅ Status API:', statusResponse.status);
+                    const statusData = await statusResponse.json();
+                    console.log('   ✅', statusData);
+                } catch (statusErr) {
+                    console.warn('⚠️ Status check falhou:', statusErr.message);
+                }
+                
+                // 4. Chamar API principal - LISTAR programações
+                console.log('\n📋 [ETAPA 4] Buscando programações...');
+                const mainUrl = apiBase + '?action=listar&limit=50';
+                console.log('📡 URL completa:', mainUrl);
+                
+                const response = await fetch(mainUrl);
+                console.log('📊 Response Status:', response.status, response.statusText);
                 
                 if (!response.ok) {
-                    throw new Error(`API retornou ${response.status}: ${response.statusText}`);
+                    const errorText = await response.text();
+                    console.error('❌ Response Error Body:');
+                    console.error(errorText);
+                    throw new Error(`API ${response.status}: ${response.statusText}`);
                 }
                 
                 const text = await response.text();
+                console.log('✅ Raw Response (primeiros 300 chars):');
+                console.log(text.substring(0, 300));
                 
                 // Verificar se é JSON válido
                 let json;
                 try {
                     json = JSON.parse(text);
+                    console.log('✅ JSON parse OK');
                 } catch (jsonErr) {
-                    console.error('❌ Erro ao parsear JSON:', text.substring(0, 200));
-                    throw new Error('Resposta inválida da API: ' + jsonErr.message);
+                    console.error('❌ JSON Parse Error:', jsonErr.message);
+                    console.error('❌ Raw text:', text);
+                    throw jsonErr;
                 }
 
-                if (!json.sucesso || !json.data) {
-                    throw new Error(json.erro || 'Erro ao buscar programações');
+                if (!json.sucesso) {
+                    console.error('❌ API retornou sucesso=false:', json);
+                    throw new Error(json.erro || 'Erro desconhecido da API');
                 }
+
+                if (!json.data || json.data.length === 0) {
+                    console.warn('⚠️ API retornou vazio - pode não ter dados no banco');
+                    json.data = [];
+                }
+
+                console.log('✅ Total de programações recebidas:', json.data.length);
 
                 const programacoes = json.data;
                 const select = document.getElementById('programacaoSelect');
@@ -684,11 +748,13 @@ $prgId = (int) ($_GET['id'] ?? 0);
                     select.value = window.urlPrgId;
                     setTimeout(() => atualizarGantt(), 300);
                 }
+                
+                console.log('✅ Carregamento concluído com sucesso!');
 
             } catch (error) {
-                console.error('❌ Erro ao carregar programações:', error);
+                console.error('❌ Erro completo:', error);
                 document.getElementById('sidebarList').innerHTML = 
-                    `<div style="color: #dc2626; font-size: 12px; padding: 8px;">❌ Erro: ${error.message}<br><small>Verifique console (F12)</small></div>`;
+                    `<div style="color: #dc2626; font-size: 12px; padding: 8px;">❌ Erro: ${error.message}<br><small>Verifique console (F12) para detalhes</small></div>`;
             }
         }
 

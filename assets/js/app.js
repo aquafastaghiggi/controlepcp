@@ -5227,6 +5227,47 @@ function updatePerformanceStatusDashboard(operationLines, detail) {
   }
 }
 
+// ========== ETAPA 2: Função para Detectar Status de Item (Anomalias) ==========
+function getItemStatusClass(itemStart, itemEnd, isSetup) {
+  const now = new Date();
+  
+  // Item completado
+  if (itemEnd < now) {
+    return 'is-on-time'; // Completado no prazo
+  }
+  
+  // Item em execução
+  if (itemStart <= now && itemEnd > now) {
+    const diffMs = itemEnd.getTime() - now.getTime();
+    const diffMinutes = diffMs / (1000 * 60);
+    
+    // Faltam menos de 15 minutos para terminar
+    if (diffMinutes < 15) {
+      return 'is-warning';
+    }
+    return 'is-on-time';
+  }
+  
+  // Item não iniciado
+  if (itemStart > now) {
+    const diffMs = itemStart.getTime() - now.getTime();
+    const diffMinutes = diffMs / (1000 * 60);
+    
+    // Setup não iniciado no horário correto (detectar atraso)
+    if (isSetup && diffMinutes < 0) {
+      return 'is-alert';
+    }
+    
+    // Próxima exécução em menos de 30 minutos
+    if (diffMinutes < 30) {
+      return 'is-warning';
+    }
+    return 'is-on-time';
+  }
+  
+  return 'is-on-time';
+}
+
 function renderPerformanceTimeline(detail, options = {}) {
   const containerId = options?.containerId || 'performance-timeline';
   const bodyId = options?.bodyId || 'performance-timeline-body';
@@ -5579,11 +5620,14 @@ function renderPerformanceTimeline(detail, options = {}) {
         };
         const durFormatted = formatDuration(durMin);
         
+        // ========== ETAPA 2: Detectar status (anomalias) ==========
+        const statusClass = getItemStatusClass(itemStart, itemEnd, isS);
+        
         // Label visível na barra (adaptado ao tamanho)
         const seqLabel = itemWidthPct < 8 ? itemSeq : `${itemSeq}`;
         const barLabel = itemWidthPct < 15 ? `${durFormatted}` : `${itemSeq} • ${durFormatted}`;
         
-        return `<span class="performance-timeline-item ${isS ? 'is-setup' : 'is-prod'}" style="left:${itemStartPct.toFixed(4)}%; width:${itemWidthPct.toFixed(4)}%; --timeline-start-ms:${clampedStartMs}; --timeline-end-ms:${endMs}; --timeline-range-ms:${timelineRangeMs};" data-item-start="${clampedStartMs}" data-item-end="${endMs}" data-item-type="${isS ? 'setup' : 'prod'}" data-item-date="${startDateKeyItem}" data-item-seq="${escapeHtml(itemSeq)}" data-item-duration="${durMin}" data-item-desc="${escapeHtml(item.sch_descricao || '')}" title="${escapeHtml(item.sch_descricao || '')} ${itemStartTime} → ${itemEndTime}"><span class="performance-timeline-item-label">${labelContent}</span><span class="performance-timeline-item-info">${barLabel}</span></span>`;
+        return `<span class="performance-timeline-item ${isS ? 'is-setup' : 'is-prod'} ${statusClass}" style="left:${itemStartPct.toFixed(4)}%; width:${itemWidthPct.toFixed(4)}%; --timeline-start-ms:${clampedStartMs}; --timeline-end-ms:${endMs}; --timeline-range-ms:${timelineRangeMs};" data-item-start="${clampedStartMs}" data-item-end="${endMs}" data-item-type="${isS ? 'setup' : 'prod'}" data-item-date="${startDateKeyItem}" data-item-seq="${escapeHtml(itemSeq)}" data-item-duration="${durMin}" data-item-desc="${escapeHtml(item.sch_descricao || '')}" title="${escapeHtml(item.sch_descricao || '')} ${itemStartTime} → ${itemEndTime}"><span class="performance-timeline-item-label">${labelContent}</span><span class="performance-timeline-item-info">${barLabel}</span></span>`;
       }).join('')}
             </div>
           </div>

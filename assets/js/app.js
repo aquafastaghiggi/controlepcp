@@ -5661,8 +5661,18 @@ function renderPerformanceTimeline(detail, options = {}) {
         if (endMs <= clampedStartMs) return '';
         // Use real end time for accurate proportional bar width
         const renderEndMs = endMs;
-        const itemStartPct = ((clampedStartMs - timelineStartMs) / timelineRangeMs) * 100;
-        const itemWidthPct = Math.max(0, ((Math.min(renderEndMs, timelineEndMsClamped) - clampedStartMs) / timelineRangeMs) * 100);
+        let itemStartPct = ((clampedStartMs - timelineStartMs) / timelineRangeMs) * 100;
+        let itemWidthPct = Math.max(0, ((Math.min(renderEndMs, timelineEndMsClamped) - clampedStartMs) / timelineRangeMs) * 100);
+        
+        // Apply minimum width for visibility (at least 3% of timeline)
+        const MIN_BAR_WIDTH = 3;
+        if (itemWidthPct > 0 && itemWidthPct < MIN_BAR_WIDTH) {
+          itemWidthPct = MIN_BAR_WIDTH;
+        }
+        // If bar would overflow, adjust start position
+        if (itemStartPct + itemWidthPct > 100) {
+          itemStartPct = Math.max(0, 100 - itemWidthPct);
+        }
         const itemStartTime = formatTimeOnlyPt(itemStart);
         const itemEndTime = formatTimeOnlyPt(itemEnd);
         

@@ -7347,5 +7347,56 @@ async function openHistoryPreview(prgId, filterDateKey = null) {
   }
 }
 
+// Comparador rápido (debug) entre o JSON do preview e o JSON usado no gráfico.
+// Uso: depois de abrir o preview e renderizar o gráfico, execute no console:
+// `window.compareHistoryPreviewToTimeline()`
+window.compareHistoryPreviewToTimeline = function compareHistoryPreviewToTimeline() {
+  const hp = window.__historyPreviewLast;
+  const tl = window.__performanceTimelineLast;
+
+  if (!hp || !tl) {
+    console.warn('Dados insuficientes: gere o preview e renderize o gráfico antes de comparar.');
+    return null;
+  }
+
+  const normalize = (item, idx) => {
+    const seq = String(item && item.sch_sequencia != null ? item.sch_sequencia : '').trim();
+    const tipo = String(item && item.sch_tipo != null ? item.sch_tipo : '').trim().toLowerCase();
+    const data = String(item && item.sch_data_inicio != null ? item.sch_data_inicio : '').trim();
+    const ini = String(item && item.sch_hora_inicio != null ? item.sch_hora_inicio : '').slice(0, 5);
+    const fimRaw = String(item && item.sch_fim_producao != null ? item.sch_fim_producao : '').trim();
+    const fim = fimRaw ? fimRaw.replace('T', ' ').slice(0, 16) : `${data} ${String(item && item.sch_hora_fim != null ? item.sch_hora_fim : '').slice(0, 5)}`.trim();
+    const dur = String(item && item.sch_duracao_minutos != null ? item.sch_duracao_minutos : '').trim();
+    return {
+      idx,
+      key: `${seq}|${tipo}|${data} ${ini}|${fim}|${dur}`,
+    };
+  };
+
+  const hpList = Array.isArray(hp.schedule) ? hp.schedule.map((it, i) => normalize(it, i)) : [];
+  const tlList = Array.isArray(tl.schedule) ? tl.schedule.map((it, i) => normalize(it, i)) : [];
+
+  const max = Math.max(hpList.length, tlList.length);
+  const mismatches = [];
+  for (let i = 0; i < max; i++) {
+    const a = hpList[i] ? hpList[i].key : null;
+    const b = tlList[i] ? tlList[i].key : null;
+    if (a !== b) {
+      mismatches.push({ i, preview: a, timeline: b });
+      if (mismatches.length >= 25) break;
+    }
+  }
+
+  const summary = {
+    preview: { prgId: hp.prgId, filterDateKey: hp.filterDateKey, count: hpList.length },
+    timeline: { prgId: tl.prgId, selection: tl.selection, count: tlList.length },
+    mismatchCountSample: mismatches.length,
+    mismatches,
+  };
+
+  console.log('compareHistoryPreviewToTimeline:', summary);
+  return summary;
+};
+
 
 

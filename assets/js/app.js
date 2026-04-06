@@ -5375,14 +5375,19 @@ function renderPerformanceTimeline(detail, options = {}) {
     }
   };
 
+  const pad2 = (value) => {
+    const text = String(value);
+    return text.length === 1 ? `0${text}` : text;
+  };
+
   const formatTimeOnlyPt = (dateObj) => {
     if (!dateObj || Number.isNaN(dateObj.getTime())) return '--:--';
-    return `${String(dateObj.getHours()).padStart(2, '0')}:${String(dateObj.getMinutes()).padStart(2, '0')}`;
+    return `${pad2(dateObj.getHours())}:${pad2(dateObj.getMinutes())}`;
   };
 
   const formatDateOnlyPtShort = (dateObj) => {
     if (!dateObj || Number.isNaN(dateObj.getTime())) return '--/--';
-    return `${String(dateObj.getDate()).padStart(2, '0')}/${String(dateObj.getMonth() + 1).padStart(2, '0')}`;
+    return `${pad2(dateObj.getDate())}/${pad2(dateObj.getMonth() + 1)}`;
   };
 
   const formatWeekdayShortPt = (dateKey) => {
@@ -5399,8 +5404,8 @@ function renderPerformanceTimeline(detail, options = {}) {
   const toDateKeyLocal = (dateObj) => {
     if (!dateObj || Number.isNaN(dateObj.getTime())) return '';
     const y = dateObj.getFullYear();
-    const m = String(dateObj.getMonth() + 1).padStart(2, '0');
-    const d = String(dateObj.getDate()).padStart(2, '0');
+    const m = pad2(dateObj.getMonth() + 1);
+    const d = pad2(dateObj.getDate());
     return `${y}-${m}-${d}`;
   };
 
@@ -5461,8 +5466,10 @@ function renderPerformanceTimeline(detail, options = {}) {
   });
 
   // Agrupa por operação (seq)
-  const showProd = document.getElementById('performance-timeline-filter-prod')?.checked ?? true;
-  const showSetup = document.getElementById('performance-timeline-filter-setup')?.checked ?? true;
+  const showProdEl = document.getElementById('performance-timeline-filter-prod');
+  const showSetupEl = document.getElementById('performance-timeline-filter-setup');
+  const showProd = showProdEl ? !!showProdEl.checked : true;
+  const showSetup = showSetupEl ? !!showSetupEl.checked : true;
   const filterPredicate = (row) => {
     const isSetup = String(row?.sch_tipo || '').trim().toLowerCase() === 'setup';
     if (isSetup && !showSetup) return false;
@@ -5490,7 +5497,8 @@ function renderPerformanceTimeline(detail, options = {}) {
 
       const op = String(itemsFiltered.find((r) => String(r?.sch_sequencia || '').trim() === seqKey)?.sch_sequencia || '').trim();
       const firstItem = itemsFiltered.find((r) => String(r?.sch_sequencia || '').trim() === seqKey);
-      const detailOpNumber = String(detailOpMap.get(seqKey) ?? '').trim();
+      const detailOpNumberRaw = detailOpMap.get(seqKey);
+      const detailOpNumber = String(detailOpNumberRaw != null ? detailOpNumberRaw : '').trim();
       const fallbackOpNumber = String(
         firstItem?.prg_itens_op ||
         firstItem?.sch_numero_programacao ||
@@ -5708,7 +5716,9 @@ function renderPerformanceTimeline(detail, options = {}) {
         const seqLabel = itemWidthPct < 8 ? itemSeq : `${itemSeq}`;
         const barLabel = itemWidthPct < 15 ? `${durFormatted}` : `${itemSeq} • ${durFormatted}`;
         
-        return `<span class="performance-timeline-item ${isS ? 'is-setup' : 'is-prod'} ${statusClass}" style="left:${itemStartPct.toFixed(4)}%; width:${itemWidthPct.toFixed(4)}%; --timeline-start-ms:${clampedStartMs}; --timeline-end-ms:${endMs}; --timeline-range-ms:${timelineRangeMs};" data-item-start="${clampedStartMs}" data-item-end="${endMs}" data-item-type="${isS ? 'setup' : 'prod'}" data-item-date="${startDateKeyItem}" data-item-seq="${escapeHtml(itemSeq)}" data-item-duration="${durMin}" data-item-desc="${escapeHtml(item.sch_descricao || '')}" title="${escapeHtml(item.sch_descricao || '')} ${itemStartTime} → ${itemEndTime}"><span class="performance-timeline-item-label">${labelContent}</span><span class="performance-timeline-item-info">${barLabel}</span></span>`;
+        const ariaLabel = `${isS ? 'Setup' : 'Producao'} - OP ${opNumber || '—'} - Seq ${itemSeq} - ${stripSeqPrefix(item.sch_descricao || '') || '-'} - Inicio ${itemStartTimeCompact}, fim ${itemEndTimeCompact} - Duracao ${durFormatted}`;
+        const qtyText = item && item.sch_quantidade != null ? String(item.sch_quantidade) : '';
+        return `<span class="performance-timeline-item ${isS ? 'is-setup' : 'is-prod'} ${statusClass}" role="button" tabindex="0" aria-pressed="false" aria-label="${escapeHtml(ariaLabel)}" style="left:${itemStartPct.toFixed(4)}%; width:${itemWidthPct.toFixed(4)}%; --timeline-start-ms:${clampedStartMs}; --timeline-end-ms:${endMs}; --timeline-range-ms:${timelineRangeMs};" data-item-start="${clampedStartMs}" data-item-end="${endMs}" data-item-op="${escapeHtml(opNumber || '')}" data-item-type="${isS ? 'setup' : 'prod'}" data-item-date="${startDateKeyItem}" data-item-seq="${escapeHtml(itemSeq)}" data-item-qty="${escapeHtml(qtyText)}" data-item-duration="${durMin}" data-item-duration-label="${escapeHtml(durFormatted)}" data-item-desc="${escapeHtml(item.sch_descricao || '')}" title="${escapeHtml(item.sch_descricao || '')} ${itemStartTime} → ${itemEndTime}"><span class="performance-timeline-item-label">${labelContent}</span><span class="performance-timeline-item-info">${barLabel}</span></span>`;
       }).join('')}
             </div>
           </div>
@@ -5813,18 +5823,21 @@ function renderPerformanceTimeline(detail, options = {}) {
       // Remover is-active de todos os items
       container.querySelectorAll('.performance-timeline-item').forEach(item => {
         item.classList.remove('is-active');
+        item.setAttribute('aria-pressed', 'false');
       });
       
       // Adicionar is-active ao item clicado
       timelineItem.classList.add('is-active');
-      
-      // Log para debug
-      console.log('Timeline item selecionado:', timelineItem.getAttribute('data-item-seq'));
+      timelineItem.setAttribute('aria-pressed', 'true');
+      if (typeof timelineItem.focus === 'function') timelineItem.focus();
       
       // ========== ETAPA 8: Populate tabela ao clicar ==========
       const itemSeq = timelineItem.getAttribute('data-item-seq') || '';
       const itemDuration = timelineItem.getAttribute('data-item-duration') || '0';
+      const itemDurationLabel = timelineItem.getAttribute('data-item-duration-label') || `${itemDuration}m`;
+      const itemQty = timelineItem.getAttribute('data-item-qty') || '';
       const itemDesc = timelineItem.getAttribute('data-item-desc') || '';
+      const opNumber = timelineItem.getAttribute('data-item-op') || '—';
       const itemType = timelineItem.getAttribute('data-item-type') || 'prod';
       const itemDate = timelineItem.getAttribute('data-item-date') || '';
       const itemStart = timelineItem.getAttribute('data-item-start') || '0';
@@ -5834,7 +5847,7 @@ function renderPerformanceTimeline(detail, options = {}) {
       const formatTimeFromMs = (ms) => {
         const dt = new Date(Number(ms));
         if (Number.isNaN(dt.getTime())) return '--:--';
-        return `${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`;
+        return `${pad2(dt.getHours())}:${pad2(dt.getMinutes())}`;
       };
       
       const formatDateFromKey = (key) => {
@@ -5853,20 +5866,6 @@ function renderPerformanceTimeline(detail, options = {}) {
       const endTime = formatTimeFromMs(itemEnd);
       const formattedDate = formatDateFromKey(itemDate);
       
-      // Extrair número da OP a partir do elemento pai
-      let opNumber = '—';
-      const timelineWrapper = timelineItem.closest('.performance-timeline-row-wrapper');
-      if (timelineWrapper) {
-        const opInfoElement = timelineWrapper.querySelector('.performance-timeline-row-op-info');
-        if (opInfoElement) {
-          const opText = opInfoElement.textContent; // "OP: 201613 / Seq 25"
-          const opMatch = opText.match(/OP:\s*(\d+)/);
-          if (opMatch && opMatch[1]) {
-            opNumber = opMatch[1];
-          }
-        }
-      }
-      
       // Preencher tabela
       const tableBody = document.getElementById('performance-data-table-body');
       if (tableBody) {
@@ -5875,8 +5874,8 @@ function renderPerformanceTimeline(detail, options = {}) {
           <tr>
             <td>${safeHtml(opNumber) || '—'}</td>
             <td>${safeHtml(itemSeq) || '—'}</td>
-            <td>1</td>
-            <td>${itemDuration}m</td>
+            <td>${safeHtml(itemQty) || '—'}</td>
+            <td>${safeHtml(itemDurationLabel) || '—'}</td>
             <td>${formattedDate}</td>
             <td>${startTime}</td>
             <td>${endTime}</td>
@@ -5892,7 +5891,7 @@ function renderPerformanceTimeline(detail, options = {}) {
         const kpiEnd = kpisContainer.querySelector('[data-kpi="end"]');
         const kpiType = kpisContainer.querySelector('[data-kpi="type"]');
         
-        if (kpiDuration) kpiDuration.textContent = `${itemDuration}m`;
+        if (kpiDuration) kpiDuration.textContent = `${itemDurationLabel}`;
         if (kpiStart) kpiStart.textContent = startTime;
         if (kpiEnd) kpiEnd.textContent = endTime;
         if (kpiType) kpiType.textContent = itemType === 'setup' ? 'Setup' : 'Produção';
@@ -5924,11 +5923,32 @@ function renderPerformanceTimeline(detail, options = {}) {
   };
   container.addEventListener('click', window.__performanceTimelineClickHandler);
 
+  container.removeEventListener('keydown', window.__performanceTimelineKeydownHandler);
+  window.__performanceTimelineKeydownHandler = (event) => {
+    const key = event && typeof event.key === 'string' ? event.key : '';
+    const keyCode = event && typeof event.keyCode === 'number' ? event.keyCode : 0;
+    const isEnter = key === 'Enter' || keyCode === 13;
+    const isSpace = key === ' ' || key === 'Spacebar' || keyCode === 32;
+    if (!isEnter && !isSpace) return;
+
+    const target = event && event.target ? event.target : null;
+    const timelineItem = target && typeof target.closest === 'function'
+      ? target.closest('.performance-timeline-item')
+      : null;
+    if (!timelineItem) return;
+
+    event.preventDefault();
+    if (typeof timelineItem.click === 'function') timelineItem.click();
+  };
+  container.addEventListener('keydown', window.__performanceTimelineKeydownHandler);
+
   // Adicionar listeners para filtros e interatividade
   if (container.dataset.timelineListener !== '1') {
     container.dataset.timelineListener = '1';
-    document.getElementById('performance-timeline-filter-prod')?.addEventListener('change', () => renderPerformanceTimeline(detail, options));
-    document.getElementById('performance-timeline-filter-setup')?.addEventListener('change', () => renderPerformanceTimeline(detail, options));
+    const prodFilterEl = document.getElementById('performance-timeline-filter-prod');
+    const setupFilterEl = document.getElementById('performance-timeline-filter-setup');
+    if (prodFilterEl) prodFilterEl.addEventListener('change', () => renderPerformanceTimeline(detail, options));
+    if (setupFilterEl) setupFilterEl.addEventListener('change', () => renderPerformanceTimeline(detail, options));
 
     // Sincronizar hover no timeline com arquivo antigo
     container.addEventListener('mouseover', (event) => {

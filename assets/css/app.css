@@ -2484,7 +2484,7 @@ select {
 
 /* Tooltip customizado ao hover */
 .performance-timeline-item::before {
-    content: attr(data-item-seq) " ??? " attr(data-item-duration) "m";
+    content: attr(data-item-seq) " - " attr(data-item-duration) "m";
     position: absolute;
     bottom: calc(100% + 8px);
     left: 50%;
@@ -2506,6 +2506,16 @@ select {
 
 .performance-timeline-item:hover::before {
     opacity: 1;
+}
+
+.performance-timeline-item:focus::before {
+    opacity: 1;
+}
+
+.performance-timeline-item:focus {
+    outline: 3px solid rgba(59, 130, 246, 1);
+    outline-offset: 3px;
+    z-index: 10;
 }
 
 .performance-timeline-item.is-setup {
@@ -2934,6 +2944,28 @@ select {
 
 .performance-timeline-row-info small {
     display: inline;
+}
+
+@media (max-width: 720px) {
+    .performance-timeline {
+        padding: 12px 12px;
+    }
+
+    .performance-timeline-row,
+    .performance-timeline-header {
+        grid-template-columns: 96px 1fr 120px;
+        gap: 8px;
+    }
+
+    .performance-timeline-row {
+        padding: 4px 10px;
+    }
+
+    .performance-timeline-row-info {
+        min-width: 0;
+        justify-content: flex-start;
+        flex-wrap: wrap;
+    }
 }
 
 /* Header Temporal com Datas */

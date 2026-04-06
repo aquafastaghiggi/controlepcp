@@ -5172,7 +5172,8 @@ function updatePerformanceStatusDashboard(operationLines, detail) {
   let nextOp = null;
   
   // Processa todas as operações para encontrar a atual e próxima
-  operationLines.forEach((op, idx) => {
+  const prodLines = (operationLines || []).filter((op) => op && op.type !== 'setup');
+  prodLines.forEach((op, idx) => {
     // Se a operação ainda não começou
     if (op.start > now && !nextOp) {
       nextOp = op;
@@ -5477,42 +5478,28 @@ function renderPerformanceTimeline(detail, options = {}) {
 
   const stripSeqPrefix = (value) => String(value || '').replace(/^\s*\d+\s*-\s*/g, '').trim();
 
-  const scheduleGroupKey = (row, idx) => {
-    const pick = (value) => String(value != null ? value : '').trim();
-    const candidates = [
-      pick(row && row.sch_sequencia),
-      pick(row && row.prg_sequencia),
-      pick(row && row.prg_itens_sequencia),
-      pick(row && row.prg_seq),
-      pick(row && row.sch_seq),
-    ];
+  const parseScheduleStart = (row) => (
+    parseLocalDateTimeFromSql(row?.sch_inicio_producao) ||
+    parseLocalDateTime(row?.sch_data_inicio, row?.sch_hora_inicio) ||
+    null
+  );
 
-    for (let i = 0; i < candidates.length; i++) {
-      if (candidates[i]) return candidates[i];
-    }
+  const parseScheduleEnd = (row) => (
+    parseLocalDateTimeFromSql(row?.sch_fim_producao) ||
+    parseLocalDateTime(row?.sch_data_inicio, row?.sch_hora_fim) ||
+    null
+  );
 
-    const typeRaw = pick(row && row.sch_tipo).toLowerCase();
-    return `__${typeRaw || 'row'}__${String(idx)}`;
+  const formatDurationHHMM = (minutes) => {
+    const min = Math.max(0, Math.round(Number(minutes) || 0));
+    const h = Math.floor(min / 60);
+    const m = min % 60;
+    return `${pad2(h)}:${pad2(m)}`;
   };
 
-  const scheduleEntries = scheduleRows.map((row, idx) => ({
-    row,
-    idx,
-    key: scheduleGroupKey(row, idx),
-  }));
-
-  // Coleta informações operacionais
-  const opMap = new Map();
-  scheduleRows.forEach((row) => {
-    const seq = String(row?.sch_sequencia || '').trim();
-    if (seq && !opMap.has(seq)) {
-      opMap.set(seq, seq);
-    }
-  });
-
-  // Agrupa por operação (seq)
-  const showProdEl = document.getElementById('performance-timeline-filter-prod');
-  const showSetupEl = document.getElementById('performance-timeline-filter-setup');
+  // Filtros visíveis do card (fallback para filtros antigos da timeline)
+  const showProdEl = document.getElementById('performance-show-prod') || document.getElementById('performance-timeline-filter-prod');
+  const showSetupEl = document.getElementById('performance-show-setup') || document.getElementById('performance-timeline-filter-setup');
   const showProd = showProdEl ? !!showProdEl.checked : true;
   const showSetup = showSetupEl ? !!showSetupEl.checked : true;
   const filterPredicate = (row) => {
@@ -5522,94 +5509,62 @@ function renderPerformanceTimeline(detail, options = {}) {
     return true;
   };
 
-  const operationLines = [];
-  const seenSeqs = new Set();
+  // Etapa 2: montar linhas diretamente do schedule (mesma base do preview/PDF)
+  // Uma linha por item, ordenada por início, para manter Setup/Produção na ordem correta.
+  const operationLines = scheduleRows
+    .map((row, idx) => {
+      if (!filterPredicate(row)) return null;
 
-  scheduleEntries.filter((entry) => filterPredicate(entry.row)).forEach((entry) => {
-    const row = entry.row;
-    const idx = entry.idx;
-    const start = parseLocalDateTime(row?.sch_data_inicio, row?.sch_hora_inicio) || parseLocalDateTimeFromSql(row?.sch_inicio_producao);
-    const end = parseLocalDateTimeFromSql(row?.sch_fim_producao) || parseLocalDateTime(row?.sch_data_inicio, row?.sch_hora_fim);
-    if (!start || !end) return;
+      const start = parseScheduleStart(row);
+      const end = parseScheduleEnd(row);
+      if (!start || !end) return null;
 
-    const seqKey = entry.key;
-    const isSetup = String(row?.sch_tipo || '').trim().toLowerCase() === 'setup';
-    const label = row?.sch_sequencia ? `${row.sch_sequencia} - ${row.sch_descricao}` : row.sch_descricao || 'Produção';
+      const tipoRaw = String(row?.sch_tipo || '').trim().toLowerCase();
+      const isSetup = tipoRaw === 'setup';
+      const seqKey = String(row?.sch_sequencia || '').trim();
+      const sku = String(row?.sch_sku || '').trim();
+      const desc = String(row?.sch_descricao || '').trim();
 
-    if (!seenSeqs.has(seqKey)) {
-      seenSeqs.add(seqKey);
-      const items = scheduleEntries
-        .filter((itemEntry) => itemEntry.key === seqKey)
-        .map((itemEntry) => itemEntry.row);
-      const itemsFiltered = items.filter(filterPredicate);
-      if (itemsFiltered.length === 0) return;
+      const mappedOp = (!isSetup && seqKey) ? String(detailOpMap.get(seqKey) || '').trim() : '';
+      const fallbackOp = (!isSetup)
+        ? String(row?.prg_itens_op || row?.sch_numero_programacao || row?.prg_numero_op || row?.numero_programacao || '').trim()
+        : '';
+      const numProgramacao = mappedOp || fallbackOp;
 
-      const firstItem = itemsFiltered[0];
-      const op = String(firstItem?.sch_sequencia || '').trim();
-      const detailOpNumberRaw = detailOpMap.get(seqKey);
-      const detailOpNumber = String(detailOpNumberRaw != null ? detailOpNumberRaw : '').trim();
-      const fallbackOpNumber = String(
-        firstItem?.prg_itens_op ||
-        firstItem?.sch_numero_programacao ||
-        firstItem?.prg_numero_op ||
-        firstItem?.numero_programacao ||
-        ''
-      ).trim();
-      const numProgramacao = detailOpNumber || fallbackOpNumber;
-      const prodLabel = stripSeqPrefix(itemsFiltered.find((r) => !String(r?.sch_tipo || '').trim().toLowerCase().includes('setup'))?.sch_descricao || label);
-      const computeRange = (rowsSubset) => {
-        const parsed = rowsSubset
-          .map((rowItem) => {
-            const startVal = parseLocalDateTime(rowItem?.sch_data_inicio, rowItem?.sch_hora_inicio) || parseLocalDateTimeFromSql(rowItem?.sch_inicio_producao);
-            const endVal = parseLocalDateTimeFromSql(rowItem?.sch_fim_producao) || parseLocalDateTime(rowItem?.sch_data_inicio, rowItem?.sch_hora_fim);
-            if (!startVal || !endVal) return null;
-            return { start: startVal, end: endVal };
-          })
-          .filter(Boolean);
-        if (!parsed.length) return null;
-        const startMs = Math.min(...parsed.map((entry) => entry.start.getTime()));
-        const endMs = Math.max(...parsed.map((entry) => entry.end.getTime()));
-        const duration = parsed.reduce((sum, entry) => sum + toMin(entry.start, entry.end), 0);
-        return {
-          start: new Date(startMs),
-          end: new Date(endMs),
-          duration,
-        };
+      const durMinRaw = Number(row?.sch_duracao_minutos);
+      const durMin = Number.isFinite(durMinRaw)
+        ? Math.max(0, Math.round(durMinRaw))
+        : Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000));
+
+      const label = isSetup
+        ? 'Setup'
+        : (stripSeqPrefix(desc) || desc || sku || 'Produção');
+
+      return {
+        idx,
+        seq: seqKey,
+        sku,
+        numProgramacao,
+        label,
+        type: isSetup ? 'setup' : 'prod',
+        start,
+        end,
+        durMin,
+        durLabel: formatDurationHHMM(durMin),
+        items: [row],
       };
-
-      const buildRow = (type, rowsSubset, rowLabel) => {
-        if (!rowsSubset.length) return null;
-        const range = computeRange(rowsSubset);
-        if (!range) return null;
-        const isSetup = type === 'setup';
-        return {
-          seq: seqKey,
-          op,
-          numProgramacao,
-          label: rowLabel,
-          type,
-          start: range.start,
-          end: range.end,
-          prodMin: isSetup ? 0 : range.duration,
-          setupMin: isSetup ? range.duration : 0,
-          items: rowsSubset,
-        };
-      };
-
-      const productionRows = itemsFiltered.filter((r) => String(r?.sch_tipo || '').trim().toLowerCase() !== 'setup');
-      const setupRows = itemsFiltered.filter((r) => String(r?.sch_tipo || '').trim().toLowerCase() === 'setup');
-
-      const prodLine = buildRow('prod', productionRows, prodLabel);
-      const setupLine = buildRow('setup', setupRows, 'Setup');
-
-      if (prodLine) {
-        operationLines.push(prodLine);
-      }
-      if (setupLine) {
-        operationLines.push(setupLine);
-      }
-    }
-  });
+    })
+    .filter(Boolean)
+    .sort((a, b) => {
+      const sa = a.start ? a.start.getTime() : 0;
+      const sb = b.start ? b.start.getTime() : 0;
+      if (sa !== sb) return sa - sb;
+      const ea = a.end ? a.end.getTime() : 0;
+      const eb = b.end ? b.end.getTime() : 0;
+      if (ea !== eb) return ea - eb;
+      if (a.type !== b.type) return a.type === 'setup' ? -1 : 1;
+      return (a.idx || 0) - (b.idx || 0);
+    });
 
   // Renderizar timelines
   if (!operationLines.length) {
@@ -5693,7 +5648,12 @@ function renderPerformanceTimeline(detail, options = {}) {
     `;
 
     const lines = visibleOperationLines.map((op) => {
-      const opNumber = op.numProgramacao || programacaoOp || '';
+      const opNumber = op.type === 'setup'
+        ? ''
+        : (op.numProgramacao || programacaoOp || '');
+      const opInfoHtml = op.type === 'setup'
+        ? 'Setup'
+        : ('OP: ' + escapeHtml(opNumber || '—') + ' / Seq ' + escapeHtml(op.seq || '—') + (op.sku ? (' / SKU ' + escapeHtml(op.sku)) : ''));
       const opStartPct = ((op.start.getTime() - timelineStartMs) / timelineRangeMs) * 100;
       const clampedOpEndMs = Math.min(op.end.getTime(), timelineEndMsClamped);
       const opWidthPct = Math.max(0, ((clampedOpEndMs - op.start.getTime()) / timelineRangeMs) * 100);
@@ -5706,7 +5666,7 @@ function renderPerformanceTimeline(detail, options = {}) {
 
       return `
         <div class="performance-timeline-row-wrapper">
-          <div class="performance-timeline-row-op-info">OP: ${escapeHtml(opNumber || '—')} / Seq ${escapeHtml(op.seq)}</div>
+          <div class="performance-timeline-row-op-info">${opInfoHtml}</div>
           <div class="performance-timeline-row">
             <div class="performance-timeline-row-header">
               <div class="performance-timeline-row-seq">${escapeHtml(op.label)}</div>
@@ -5714,8 +5674,8 @@ function renderPerformanceTimeline(detail, options = {}) {
           <div class="performance-timeline-row-bars" style="position:relative; flex:1;">
             <div class="performance-timeline-bar-container">
               ${op.items.map((item) => {
-         const itemStart = parseLocalDateTime(item?.sch_data_inicio, item?.sch_hora_inicio) || parseLocalDateTimeFromSql(item?.sch_inicio_producao);
-        const itemEnd = parseLocalDateTimeFromSql(item?.sch_fim_producao) || parseLocalDateTime(item?.sch_data_inicio, item?.sch_hora_fim);
+         const itemStart = parseScheduleStart(item);
+        const itemEnd = parseScheduleEnd(item);
         if (!itemStart || !itemEnd) return '';
         const isS = String(item?.sch_tipo || '').trim().toLowerCase() === 'setup';
         const startMs = itemStart.getTime();
@@ -5755,7 +5715,7 @@ function renderPerformanceTimeline(detail, options = {}) {
         const durMin = Number.isFinite(durMinRaw)
           ? Math.max(0, Math.round(durMinRaw))
           : Math.max(0, Math.round((itemEnd.getTime() - itemStart.getTime()) / 60000));
-        const itemSeq = item?.sch_sequencia ? String(item.sch_sequencia).trim() : 'Setup';
+        const itemSeq = item?.sch_sequencia ? String(item.sch_sequencia).trim() : '';
         
         // Formatação de duração (fiel ao preview): HH:MM
         const formatDurationHHMM = (minutes) => {
@@ -5771,7 +5731,10 @@ function renderPerformanceTimeline(detail, options = {}) {
         
         // Label visível na barra (adaptado ao tamanho)
         const seqLabel = itemWidthPct < 8 ? itemSeq : `${itemSeq}`;
-        const barLabel = itemWidthPct < 15 ? `${durFormatted}` : `${itemSeq} • ${durFormatted}`;
+        const seqLabelForBar = itemSeq || (isS ? 'Setup' : '');
+        const barLabel = itemWidthPct < 15
+          ? `${durFormatted}`
+          : (seqLabelForBar ? `${seqLabelForBar} • ${durFormatted}` : `${durFormatted}`);
         
         const ariaLabel = `${isS ? 'Setup' : 'Producao'} - OP ${opNumber || '—'} - Seq ${itemSeq} - ${stripSeqPrefix(item.sch_descricao || '') || '-'} - Inicio ${itemStartTimeCompact}, fim ${itemEndTimeCompact} - Duracao ${durFormatted}`;
         const qtyText = item && item.sch_quantidade != null ? String(item.sch_quantidade) : '';
@@ -5829,16 +5792,17 @@ function renderPerformanceTimeline(detail, options = {}) {
 
   // ========== ETAPA 2: Detectar e destacar gaps entre operações ==========
   const detectAndHighlightGaps = () => {
-    operationLines.forEach((op, idx) => {
-      if (idx < operationLines.length - 1) {
+    const gapLines = (operationLines || []).filter((op) => op && op.type !== 'setup');
+    gapLines.forEach((op, idx) => {
+      if (idx < gapLines.length - 1) {
         const currentOpEnd = op.end.getTime();
-        const nextOpStart = operationLines[idx + 1].start.getTime();
+        const nextOpStart = gapLines[idx + 1].start.getTime();
         const gapMs = nextOpStart - currentOpEnd;
         const gapMinutes = gapMs / (1000 * 60);
         
         // Se gap > 30 min, adicionar badge/alerta
         if (gapMinutes > 30) {
-          console.log(`⏱️ Gap detectado entre OP ${op.numProgramacao} e ${operationLines[idx + 1].numProgramacao}: ${Math.round(gapMinutes)}min`);
+          console.log(`⏱️ Gap detectado entre OP ${op.numProgramacao} e ${gapLines[idx + 1].numProgramacao}: ${Math.round(gapMinutes)}min`);
         }
       }
     });

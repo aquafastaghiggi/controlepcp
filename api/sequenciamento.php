@@ -400,94 +400,60 @@ function handleTimeline(): void
         
         // Determinar datas baseado no período
         $agora = new DateTime('now', new DateTimeZone('America/Sao_Paulo'));
+        $dataIni = clone $agora;
+        $dataFim = clone $agora;
         
         switch ($periodo) {
             case '4h':
-                $duracao = 4 * 60; // minutos
+                $dataFim->modify('+4 hours');
                 break;
             case '8h':
-                $duracao = 8 * 60;
+                $dataFim->modify('+8 hours');
                 break;
             case '12h':
-                $duracao = 12 * 60;
+                $dataFim->modify('+12 hours');
                 break;
             case '24h':
-                $duracao = 24 * 60;
+                $dataFim->modify('+24 hours');
                 break;
             case 'tudo':
-                $duracao = null; // sem limite
+                $dataIni->modify('-7 days');
+                $dataFim->modify('+7 days');
                 break;
             default:
-                $duracao = 24 * 60;
-        }
-        
-        // Se for 'tudo', busca do primeiro ao último
-        if ($duracao === null) {
-            $dataIni = $agora->modify('-7 days');
-            $dataFim = $agora->modify('+7 days');
-        } else {
-            $dataIni = clone $agora;
-            $dataFim = clone $agora;
-            $dataFim->modify("+{$duracao} minutes");
+                $dataFim->modify('+24 hours');
         }
         
         error_log('📅 Período: ' . $dataIni->format('Y-m-d H:i') . ' a ' . $dataFim->format('Y-m-d H:i'));
         
-        // Query para buscar programações + schedule
-        if ($prgId > 0) {
-            // Uma programação específica
-            $sql = "
-                SELECT 
-                    p.prg_id,
-                    p.prg_numero_op,
-                    l.lin_codigo,
-                    p.prg_eficiencia,
-                    s.sch_id,
-                    s.sch_sequencia,
-                    s.sch_tipo,
-                    s.sch_sku,
-                    s.sch_duracao_minutos,
-                    s.sch_data_inicio,
-                    s.sch_hora_inicio,
-                    s.sch_hora_fim
-                FROM prg_programas p
-                LEFT JOIN lin_linhas l ON l.lin_id = p.prg_linha_id
-                LEFT JOIN sch_linhas s ON s.sch_programa_id = p.prg_id
-                WHERE p.prg_id = :prg_id
-                ORDER BY s.sch_sequencia ASC
-            ";
-            $stmt = $pdo->prepare($sql);
-            $stmt->bindValue(':prg_id', $prgId, PDO::PARAM_INT);
-            $stmt->execute();
-            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        } else {
-            // Todas programações com schedule neste período
-            $sql = "
-                SELECT 
-                    p.prg_id,
-                    p.prg_numero_op,
-                    l.lin_codigo,
-                    p.prg_eficiencia,
-                    s.sch_id,
-                    s.sch_sequencia,
-                    s.sch_tipo,
-                    s.sch_sku,
-                    s.sch_duracao_minutos,
-                    s.sch_data_inicio,
-                    s.sch_hora_inicio,
-                    s.sch_hora_fim
-                FROM prg_programas p
-                LEFT JOIN lin_linhas l ON l.lin_id = p.prg_linha_id
-                LEFT JOIN sch_linhas s ON s.sch_programa_id = p.prg_id
-                WHERE s.sch_id IS NOT NULL
-                GROUP BY p.prg_id, s.sch_id
-                ORDER BY p.prg_criado_em DESC, s.sch_sequencia ASC
-                LIMIT 50
-            ";
-            $stmt = $pdo->prepare($sql);
-            $stmt->execute();
-            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        }
+        // Query: buscar todas as programações com seus schedules
+        $sql = "
+            SELECT DISTINCT
+                p.prg_id,
+                p.prg_numero_op,
+                l.lin_codigo,
+                p.prg_eficiencia,
+                s.sch_id,
+                s.sch_sequencia,
+                s.sch_tipo,
+                s.sch_sku,
+                s.sch_duracao_minutos,
+                s.sch_data_inicio,
+                s.sch_hora_inicio,
+                s.sch_hora_fim
+            FROM prg_programas p
+            LEFT JOIN lin_linhas l ON l.lin_id = p.prg_linha_id
+            LEFT JOIN sch_linhas s ON s.sch_programa_id = p.prg_id
+            WHERE s.sch_id IS NOT NULL
+            ORDER BY p.prg_criado_em DESC, s.sch_sequencia ASC
+            LIMIT 50
+        ";
+        
+        error_log('🟡 Executando query...');
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute();
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        error_log('✅ Query executada, ' . count($rows) . ' linhas retornadas');
         
         // Agrupar por programação
         $programacoes = [];
@@ -496,8 +462,8 @@ function handleTimeline(): void
             if (!isset($programacoes[$id])) {
                 $programacoes[$id] = [
                     'id' => $id,
-                    'numero_op' => $row['prg_numero_op'],
-                    'linha' => $row['lin_codigo'],
+                    'numero_op' => $row['prg_numero_op'] ?? 'OP Sem Número',
+                    'linha' => $row['lin_codigo'] ?? 'N/A',
                     'eficiencia' => (float) $row['prg_eficiencia'],
                     'linhas' => []
                 ];
@@ -516,6 +482,8 @@ function handleTimeline(): void
                 ];
             }
         }
+        
+        error_log('✅ Agrupando por programação: ' . count($programacoes) . ' programações');
         
         echo json_encode([
             'sucesso' => true,

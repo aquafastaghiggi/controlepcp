@@ -545,7 +545,9 @@ Auth::requireLogin();
                     throw new Error(json.erro || 'Erro desconhecido');
                 }
 
-                console.log('✅ Timeline data:', json.programacoes.length, 'programações');
+                console.log('✅ Timeline data:', json);
+                console.log('📊 Programações:', json.programacoes);
+                console.log('📅 Período:', json.data_ini, 'a', json.data_fim);
 
                 // Renderizar cabeçalho de horas
                 renderTimelineHeader(json.data_ini, json.data_fim);
@@ -615,41 +617,61 @@ Auth::requireLogin();
             let html = '';
 
             linhas.forEach(linha => {
-                // Parsear data/hora
-                const [dataStr] = (linha.data_inicio || '2026-04-06').split(' ');
-                const [anoStr, mesStr, diaStr] = dataStr.split('-');
-                const dataInicio = new Date(`${anoStr}-${mesStr}-${diaStr}T${linha.hora_inicio}`);
-                const dataFimLinha = new Date(`${anoStr}-${mesStr}-${diaStr}T${linha.hora_fim}`);
+                try {
+                    // Parsear data - formato: "2026-04-06"
+                    const dataStr = linha.data_inicio ? linha.data_inicio.substring(0, 10) : '2026-04-06';
+                    const horaIniStr = linha.hora_inicio || '00:00';
+                    const horaFimStr = linha.hora_fim || '00:00';
+                    
+                    // Montar datas
+                    const dataInicio = new Date(`${dataStr}T${horaIniStr}:00`);
+                    const dataFimLinha = new Date(`${dataStr}T${horaFimStr}:00`);
 
-                // Calcular posição e tamanho
-                if (dataInicio >= dataFimLinha || dataInicio < dataIni || dataInicio > dataFim) {
-                    return; // Fora do período
+                    // Validar
+                    if (isNaN(dataInicio.getTime()) || isNaN(dataFimLinha.getTime())) {
+                        console.warn('⚠️ Data inválida:', linha);
+                        return;
+                    }
+
+                    // Se fim for menor que início (passou de meia-noite), adiciona um dia
+                    if (dataFimLinha < dataInicio) {
+                        dataFimLinha.setDate(dataFimLinha.getDate() + 1);
+                    }
+
+                    // Fora do período?
+                    if (dataFimLinha < dataIni || dataInicio > dataFim) {
+                        return;
+                    }
+
+                    const distInicio = Math.max(0, dataInicio - dataIni);
+                    const distFim = Math.min(duracao, dataFimLinha - dataIni);
+                    const duracaoVis = distFim - distInicio;
+
+                    if (duracaoVis <= 0) return;
+
+                    const posLeft = (distInicio / duracao) * 100;
+                    const width = (duracaoVis / duracao) * 100;
+
+                    const tipos = {
+                        'Produção': 'producao',
+                        'Setup': 'setup',
+                        'Pausa': 'pausa',
+                        'Manutenção': 'manutencao'
+                    };
+
+                    const tipo = tipos[linha.tipo] || 'producao';
+                    const label = `${linha.sku} (${formataDuracao(linha.duracao_minutos)})`;
+
+                    html += `
+                        <div class="timeline-bar ${tipo}" 
+                             style="left: ${posLeft}%; width: ${Math.max(1, width)}%;" 
+                             title="${label}">
+                            ${width > 8 ? label : ''}
+                        </div>
+                    `;
+                } catch (err) {
+                    console.error('❌ Erro ao renderizar barra:', err, linha);
                 }
-
-                const distInicio = Math.max(0, dataInicio - dataIni);
-                const distFim = Math.min(duracao, dataFimLinha - dataIni);
-                const duracaoVis = distFim - distInicio;
-
-                const posLeft = (distInicio / duracao) * 100;
-                const width = (duracaoVis / duracao) * 100;
-
-                const tipos = {
-                    'Produção': 'producao',
-                    'Setup': 'setup',
-                    'Pausa': 'pausa',
-                    'Manutenção': 'manutencao'
-                };
-
-                const tipo = tipos[linha.tipo] || 'producao';
-                const label = `${linha.sku} (${formataDuracao(linha.duracao_minutos)})`;
-
-                html += `
-                    <div class="timeline-bar ${tipo}" 
-                         style="left: ${posLeft}%; width: ${Math.max(2, width)}%;" 
-                         title="${label}">
-                        ${width > 8 ? label : ''}
-                    </div>
-                `;
             });
 
             return html;

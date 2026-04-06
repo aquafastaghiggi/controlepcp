@@ -2933,13 +2933,7 @@ select {
 }
 
 .performance-timeline-row-info {
-    display: flex;
-    gap: 4px;
-    align-items: center;
-    justify-content: flex-end;
-    font-size: 11px;
-    color: rgba(71, 85, 105, 0.8);
-    min-width: 150px;
+    display: none;
 }
 
 .performance-timeline-row-info small {

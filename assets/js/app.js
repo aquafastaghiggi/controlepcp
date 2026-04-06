@@ -5661,6 +5661,15 @@ function renderPerformanceTimeline(detail, options = {}) {
       : [];
 
     const shiftTextByDateKey = {};
+    const productionOperationsByDate = new Map();
+    operationLines.forEach((op) => {
+      if (!op || op.type === 'setup' || !op.start) return;
+      const key = toDateKeyLocal(op.start);
+      if (!key) return;
+      const list = productionOperationsByDate.get(key) || [];
+      list.push(op);
+      productionOperationsByDate.set(key, list);
+    });
 
     const normalizeShiftTime = (value) => {
       const text = String(value || '').trim();
@@ -5679,11 +5688,15 @@ function renderPerformanceTimeline(detail, options = {}) {
         const endText = normalizeShiftTime(interval.end);
         if (!startText || !endText) return;
 
+        const operations = productionOperationsByDate.get(dateKey);
+        const hasProductionInShift = Array.isArray(operations) && operations.some((op) => isWithinShift(op, interval));
+        if (!hasProductionInShift) return;
+
         const token = `${startText}-${endText}`;
         if (!shiftTextByDateKey[dateKey]) {
           shiftTextByDateKey[dateKey] = [];
         }
-        if (shiftTextByDateKey[dateKey].indexOf(token) === -1) {
+        if (!shiftTextByDateKey[dateKey].includes(token)) {
           shiftTextByDateKey[dateKey].push(token);
         }
       });

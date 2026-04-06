@@ -5676,6 +5676,24 @@ function renderPerformanceTimeline(detail, options = {}) {
   // ========== ETAPA 1: Atualizar Dashboard de Status ==========
   updatePerformanceStatusDashboard(operationLines, detail);
 
+  // ========== ETAPA 2: Detectar e destacar gaps entre operações ==========
+  const detectAndHighlightGaps = () => {
+    operationLines.forEach((op, idx) => {
+      if (idx < operationLines.length - 1) {
+        const currentOpEnd = op.end.getTime();
+        const nextOpStart = operationLines[idx + 1].start.getTime();
+        const gapMs = nextOpStart - currentOpEnd;
+        const gapMinutes = gapMs / (1000 * 60);
+        
+        // Se gap > 30 min, adicionar badge/alerta
+        if (gapMinutes > 30) {
+          console.log(`⏱️ Gap detectado entre OP ${op.numProgramacao} e ${operationLines[idx + 1].numProgramacao}: ${Math.round(gapMinutes)}min`);
+        }
+      }
+    });
+  };
+  detectAndHighlightGaps();
+
   // ========== ETAPA 7: Listener de click SEMPRE acionado (fora do check de listener) ==========
   // Adicionar listeners para clique nas barras (sem check, sempre atualiza)
   container.removeEventListener('click', window.__performanceTimelineClickHandler);

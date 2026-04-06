@@ -2548,6 +2548,25 @@ select {
     }
 }
 
+/* Badge de alerta para anomalias */
+.performance-timeline-alert-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: rgba(239, 68, 68, 0.9);
+    color: white;
+    font-size: 12px;
+    font-weight: 800;
+    border: 2px solid rgba(220, 38, 38, 0.95);
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.5);
+    animation: pulse 1.5s infinite;
+    position: relative;
+    z-index: 8;
+}
+
 .performance-timeline-item:hover {
     opacity: 1;
     box-shadow: 

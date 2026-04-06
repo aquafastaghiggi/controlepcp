@@ -5,24 +5,12 @@ declare(strict_types=1);
 require __DIR__ . '/src/bootstrap.php';
 
 use App\Auth\Auth;
-use App\Repository\ProgramacaoRepository;
 
 Auth::startSession();
 Auth::requireLogin();
 
-$repo = new ProgramacaoRepository();
-
-// Se tem ID na query, carrega essa programação
+// Se tem ID na query, passa para o JS
 $prgId = (int) ($_GET['id'] ?? 0);
-$programacoes = [];
-$programacaoAtual = null;
-
-// Buscar últimas programações
-$programacoes = $repo->getAllProgramacoes(20, 0);
-
-if ($prgId > 0) {
-    $programacaoAtual = $repo->getProgramacaoById($prgId);
-}
 
 ?>
 <!DOCTYPE html>
@@ -381,13 +369,6 @@ if ($prgId > 0) {
             <div class="header-controls">
                 <select id="programacaoSelect" onchange="carregarProgramacao()">
                     <option value="">-- Selecione uma programação --</option>
-                    <?php foreach ((array) $programacoes as $prg): ?>
-                        <option value="<?= (int) $prg['prg_id'] ?>" <?= $prgId === (int) $prg['prg_id'] ? 'selected' : '' ?>>
-                            <?= htmlspecialchars($prg['prg_numero_op'] ?? 'OP Sem Número') ?> 
-                            (Linha: <?= htmlspecialchars($prg['lin_codigo'] ?? 'N/A') ?>, 
-                            Eficiência: <?= number_format((float) ($prg['prg_eficiencia'] ?? 0), 1, ',', '.') ?>%)
-                        </option>
-                    <?php endforeach; ?>
                 </select>
                 <button class="btn primary" onclick="atualizarGantt()">Atualizar</button>
                 <button class="btn" onclick="exportarPDF()">Exportar PDF</button>
@@ -396,17 +377,11 @@ if ($prgId > 0) {
 
         <div class="main-content">
             <aside class="sidebar">
-                <h3>Programações Recentes</h3>
+                <h3>Programações com Dados</h3>
                 <div class="sidebar-list" id="sidebarList">
-                    <?php foreach ((array) array_slice($programacoes, 0, 10) as $prg): ?>
-                        <div class="sidebar-item <?= $prgId === (int) $prg['prg_id'] ? 'active' : '' ?>" onclick="selecionarProgramacao(<?= (int) $prg['prg_id'] ?>)">
-                            <span class="sidebar-item-op"><?= htmlspecialchars($prg['prg_numero_op'] ?? 'OP') ?></span>
-                            <span class="sidebar-item-meta">
-                                <?= htmlspecialchars($prg['lin_codigo'] ?? 'N/A') ?> · 
-                                <?= number_format((float) ($prg['prg_eficiencia'] ?? 0), 1, ',', '.') ?>%
-                            </span>
-                        </div>
-                    <?php endforeach; ?>
+                    <div style="color: #a0aec0; font-size: 12px; padding: 8px; text-align: center;">
+                        Carregando...
+                    </div>
                 </div>
             </aside>
 
@@ -468,6 +443,10 @@ if ($prgId > 0) {
     <script>
         let ganttInstance = null;
         const apiBase = '/controlepcp_sandbox/api/sequenciamento.php';
+        
+        // Capturar prgId da URL
+        const urlParams = new URLSearchParams(window.location.search);
+        window.urlPrgId = parseInt(urlParams.get('id') || 0);
 
         /**
          * Selecionar programação pela sidebar
@@ -632,6 +611,54 @@ if ($prgId > 0) {
         }
 
         /**
+         * Carregando lista de programações da API
+         */
+        async function carregarProgramacoes() {
+            try {
+                const response = await fetch(`${apiBase}?action=listar&limit=50`);
+                const json = await response.json();
+
+                if (!json.sucesso || !json.data) {
+                    throw new Error('Erro ao buscar programações');
+                }
+
+                const programacoes = json.data;
+                const select = document.getElementById('programacaoSelect');
+                const sidebar = document.getElementById('sidebarList');
+
+                // Popular select
+                const optsHtml = programacoes.map(p => 
+                    `<option value="${p.id}" ${window.urlPrgId === p.id ? 'selected' : ''}>
+                        ${p.numero_op} (${p.linha} - ${Number(p.eficiencia).toFixed(1)}%)
+                    </option>`
+                ).join('');
+                
+                select.innerHTML = '<option value="">-- Selecione uma programação --</option>' + optsHtml;
+
+                // Popular sidebar
+                const sidebarHtml = programacoes.slice(0, 15).map(p =>
+                    `<div class="sidebar-item ${window.urlPrgId === p.id ? 'active' : ''}" onclick="selecionarProgramacao(${p.id})">
+                        <span class="sidebar-item-op">${p.numero_op}</span>
+                        <span class="sidebar-item-meta">${p.linha} · ${Number(p.eficiencia).toFixed(1)}%</span>
+                    </div>`
+                ).join('');
+
+                sidebar.innerHTML = sidebarHtml || '<div style="color: #a0aec0; font-size: 12px; padding: 8px;">Nenhuma programação com histórico</div>';
+
+                // Se havia prgId na URL, carregar automaticamente
+                if (window.urlPrgId && window.urlPrgId > 0) {
+                    select.value = window.urlPrgId;
+                    setTimeout(() => atualizarGantt(), 300);
+                }
+
+            } catch (error) {
+                console.error('Erro ao carregar programações:', error);
+                document.getElementById('sidebarList').innerHTML = 
+                    `<div style="color: #dc2626; font-size: 12px; padding: 8px;">❌ Erro ao carregar: ${error.message}</div>`;
+            }
+        }
+
+        /**
          * Exportar para PDF
          */
         function exportarPDF() {
@@ -649,10 +676,7 @@ if ($prgId > 0) {
 
         // Carregar programação atual se tiver ID na URL
         window.addEventListener('load', () => {
-            const select = document.getElementById('programacaoSelect');
-            if (select.value) {
-                setTimeout(() => atualizarGantt(), 500);
-            }
+            carregarProgramacoes();
         });
     </script>
 </body>

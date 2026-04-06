@@ -45,24 +45,50 @@ try {
 }
 
 /**
- * Listar últimas programações
+ * Listar programações que têm schedule (histórico)
  */
 function handleListar(ProgramacaoRepository $repo): void
 {
-    $limit = (int) ($_GET['limit'] ?? 20);
+    $limit = (int) ($_GET['limit'] ?? 50);
     $page = (int) ($_GET['page'] ?? 1);
     $offset = ($page - 1) * $limit;
 
-    $programacoes = $repo->getAllProgramacoes($limit, $offset);
+    // Buscar programações que têm schedule
+    $pdo = $repo->getConnection();
+    
+    $stmt = $pdo->prepare("
+        SELECT DISTINCT
+            p.prg_id,
+            p.prg_numero_op,
+            p.prg_eficiencia,
+            p.prg_status,
+            p.prg_base_inicio,
+            p.prg_criado_em,
+            l.lin_codigo,
+            COUNT(s.sch_id) as total_linhas
+        FROM prg_programas p
+        LEFT JOIN lin_linhas l ON l.lin_id = p.prg_linha_id
+        LEFT JOIN sch_linhas s ON s.sch_programa_id = p.prg_id
+        WHERE s.sch_id IS NOT NULL
+        GROUP BY p.prg_id
+        ORDER BY p.prg_criado_em DESC, p.prg_id DESC
+        LIMIT :limit OFFSET :offset
+    ");
+    
+    $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+    $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+    $stmt->execute();
+    $programacoes = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     $data = array_map(fn($p) => [
         'id' => (int) $p['prg_id'],
-        'numero_op' => $p['prg_numero_op'] ?? null,
+        'numero_op' => $p['prg_numero_op'] ?? 'OP Sem Número',
         'linha' => $p['lin_codigo'] ?? 'N/A',
         'eficiencia' => (float) ($p['prg_eficiencia'] ?? 0),
         'status' => $p['prg_status'] ?? 'pendente',
         'base_inicio' => $p['prg_base_inicio'] ?? null,
         'criado_em' => $p['prg_criado_em'] ?? null,
+        'total_linhas' => (int) ($p['total_linhas'] ?? 0),
     ], $programacoes);
 
     echo json_encode([

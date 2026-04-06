@@ -5478,17 +5478,56 @@ function renderPerformanceTimeline(detail, options = {}) {
 
   const stripSeqPrefix = (value) => String(value || '').replace(/^\s*\d+\s*-\s*/g, '').trim();
 
-  const parseScheduleStart = (row) => (
-    parseLocalDateTimeFromSql(row?.sch_inicio_producao) ||
-    parseLocalDateTime(row?.sch_data_inicio, row?.sch_hora_inicio) ||
-    null
-  );
+  const parseSqlDateTimeLoose = (value) => {
+    if (!value) return null;
+    try {
+      const text = String(value || '').trim();
+      if (!text) return null;
+      const normalized = text.includes('T') ? text : text.replace(' ', 'T');
+      const dt = new Date(normalized);
+      return Number.isNaN(dt.getTime()) ? null : dt;
+    } catch (e) {
+      return null;
+    }
+  };
 
-  const parseScheduleEnd = (row) => (
-    parseLocalDateTimeFromSql(row?.sch_fim_producao) ||
-    parseLocalDateTime(row?.sch_data_inicio, row?.sch_hora_fim) ||
-    null
-  );
+  const parseScheduleStart = (row) => {
+    const dtSql = parseSqlDateTimeLoose(row && row.sch_inicio_producao);
+    if (dtSql) return dtSql;
+    return parseLocalDateTime(row && row.sch_data_inicio, row && row.sch_hora_inicio) || null;
+  };
+
+  const parseScheduleEnd = (row, startDt) => {
+    const fimRaw = row && row.sch_fim_producao;
+    const dtFimSql = parseSqlDateTimeLoose(fimRaw);
+    if (dtFimSql) return dtFimSql;
+
+    // Se vier só a data no `sch_fim_producao`, usar o horário de `sch_hora_fim`.
+    const fimDateMatch = fimRaw ? String(fimRaw).match(/^(\d{4}-\d{2}-\d{2})/) : null;
+    const fimDateOnly = fimDateMatch ? fimDateMatch[1] : null;
+    if (fimDateOnly) {
+      const dtDateOnly = parseLocalDateTime(fimDateOnly, row && row.sch_hora_fim);
+      if (dtDateOnly) return dtDateOnly;
+    }
+
+    // Preferir duração (quando disponível) para evitar erros em virada de dia.
+    const durMinRaw = Number(row && row.sch_duracao_minutos);
+    if (startDt && Number.isFinite(durMinRaw)) {
+      return new Date(startDt.getTime() + (Math.max(0, Math.round(durMinRaw)) * 60000));
+    }
+
+    const endDt = parseLocalDateTime(row && row.sch_data_inicio, row && row.sch_hora_fim);
+    if (!endDt) return null;
+
+    // Ajuste simples de virada de dia (ex.: 08:26 -> 00:08 do dia seguinte).
+    if (startDt && endDt.getTime() <= startDt.getTime()) {
+      const adjusted = new Date(endDt.getTime());
+      adjusted.setDate(adjusted.getDate() + 1);
+      return adjusted;
+    }
+
+    return endDt;
+  };
 
   const formatDurationHHMM = (minutes) => {
     const min = Math.max(0, Math.round(Number(minutes) || 0));
@@ -5516,7 +5555,7 @@ function renderPerformanceTimeline(detail, options = {}) {
       if (!filterPredicate(row)) return null;
 
       const start = parseScheduleStart(row);
-      const end = parseScheduleEnd(row);
+      const end = parseScheduleEnd(row, start);
       if (!start || !end) return null;
 
       const tipoRaw = String(row?.sch_tipo || '').trim().toLowerCase();

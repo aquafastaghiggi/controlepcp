@@ -5554,52 +5554,54 @@ function renderPerformanceTimeline(detail, options = {}) {
 
   container.classList.remove('hidden');
 
+  // ========== ETAPA 7: Listener de click SEMPRE acionado (fora do check de listener) ==========
+  // Adicionar listeners para clique nas barras (sem check, sempre atualiza)
+  container.removeEventListener('click', window.__performanceTimelineClickHandler);
+  window.__performanceTimelineClickHandler = (event) => {
+    const timelineItem = event.target.closest('.performance-timeline-item');
+    if (timelineItem) {
+      // Remover is-active de todos os items
+      container.querySelectorAll('.performance-timeline-item').forEach(item => {
+        item.classList.remove('is-active');
+      });
+      
+      // Adicionar is-active ao item clicado
+      timelineItem.classList.add('is-active');
+      
+      // Log para debug
+      console.log('Timeline item selecionado:', timelineItem.getAttribute('data-item-seq'));
+    }
+    
+    if (timelineItem && window.__performanceAltState) {
+      // Procurar o idx do item clicado
+      const titleAttr = timelineItem.getAttribute('title');
+      const itemDescription = titleAttr ? titleAttr.split(' ')[0] : '';
+      
+      // Tentar encontrar o item no estado
+      const altBody = document.getElementById('performance-alt-body');
+      if (altBody) {
+        const items = Array.from(altBody.querySelectorAll('[data-alt-idx]'));
+        const matchedItem = items.find((item) => {
+          const label = item.querySelector('.performance-alt-item-label');
+          return label && label.textContent.includes(itemDescription);
+        });
+        
+        if (matchedItem) {
+          const idx = matchedItem.getAttribute('data-alt-idx');
+          setPerformanceGanttSelection('performance-gantt-a', idx);
+          updatePerformanceAltSummary();
+          highlightAlternativeSelection(idx);
+        }
+      }
+    }
+  };
+  container.addEventListener('click', window.__performanceTimelineClickHandler);
+
   // Adicionar listeners para filtros e interatividade
   if (container.dataset.timelineListener !== '1') {
     container.dataset.timelineListener = '1';
     document.getElementById('performance-timeline-filter-prod')?.addEventListener('change', () => renderPerformanceTimeline(detail, options));
     document.getElementById('performance-timeline-filter-setup')?.addEventListener('change', () => renderPerformanceTimeline(detail, options));
-
-    // Listener para click nas barras do timeline
-    container.addEventListener('click', (event) => {
-      const timelineItem = event.target.closest('.performance-timeline-item');
-      if (timelineItem) {
-        // ========== ETAPA 7: Adicionar is-active ao clicar ==========
-        // Remover is-active de todos os items
-        container.querySelectorAll('.performance-timeline-item').forEach(item => {
-          item.classList.remove('is-active');
-        });
-        
-        // Adicionar is-active ao item clicado
-        timelineItem.classList.add('is-active');
-        
-        // Log para debug
-        console.log('Timeline item selecionado:', timelineItem.getAttribute('data-item-seq'));
-      }
-      
-      if (timelineItem && window.__performanceAltState) {
-        // Procurar o idx do item clicado
-        const titleAttr = timelineItem.getAttribute('title');
-        const itemDescription = titleAttr ? titleAttr.split(' ')[0] : '';
-        
-        // Tentar encontrar o item no estado
-        const body = document.getElementById('performance-alt-body');
-        if (body) {
-          const items = Array.from(body.querySelectorAll('[data-alt-idx]'));
-          const matchedItem = items.find((item) => {
-            const label = item.querySelector('.performance-alt-item-label');
-            return label && label.textContent.includes(itemDescription);
-          });
-          
-          if (matchedItem) {
-            const idx = matchedItem.getAttribute('data-alt-idx');
-            setPerformanceGanttSelection('performance-gantt-a', idx);
-            updatePerformanceAltSummary();
-            highlightAlternativeSelection(idx);
-          }
-        }
-      }
-    });
 
     // Sincronizar hover no timeline com arquivo antigo
     container.addEventListener('mouseover', (event) => {

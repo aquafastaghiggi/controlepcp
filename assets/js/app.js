@@ -5534,6 +5534,12 @@ function renderPerformanceTimeline(detail, options = {}) {
     const selectedHeaderDate = selectionState.dateKey || defaultDateKey;
     const highlightPct = hasManualSelection ? Math.max(0, Math.min(100, ((selectionEndMs - timelineStartMs) / timelineRangeMs) * 100)) : 0;
 
+    // ========== ETAPA 3: Calcular posição do marcador "AGORA" ==========
+    const now = new Date();
+    const nowMs = now.getTime();
+    const isNowInRange = nowMs >= timelineStartMs && nowMs <= timelineEndMsClamped;
+    const nowPct = isNowInRange ? ((nowMs - timelineStartMs) / timelineRangeMs) * 100 : -1;
+
     // Renderizar header de datas
     const headerHtml = `
       <div class="performance-timeline-header">
@@ -5547,6 +5553,7 @@ function renderPerformanceTimeline(detail, options = {}) {
                 <div class="performance-timeline-header-date">${escapeHtml(item.formatted)}</div>
               </div>
             `).join('')}
+            ${isNowInRange ? `<span class="performance-timeline-now-marker" style="left:${nowPct.toFixed(2)}%;"><span class="performance-timeline-now-label">AGORA</span></span>` : ''}
           </div>
         </div>
         <div class="performance-timeline-header-info">
@@ -5693,6 +5700,25 @@ function renderPerformanceTimeline(detail, options = {}) {
     });
   };
   detectAndHighlightGaps();
+
+  // ========== ETAPA 3: Atualizar continuamente marcador "AGORA" em tempo real ==========
+  const updateNowMarker = () => {
+    const nowMarker = body.querySelector('.performance-timeline-now-marker');
+    if (nowMarker && isNowInRange) {
+      const nowMs = new Date().getTime();
+      const newNowPct = ((nowMs - timelineStartMs) / timelineRangeMs) * 100;
+      
+      if (newNowPct >= 0 && newNowPct <= 100) {
+        nowMarker.style.left = `${newNowPct.toFixed(2)}%`;
+      }
+    }
+  };
+  
+  // Atualizar a cada 10 segundos (ou pode ser 30s/1min conforme preferência)
+  if (window.__performanceNowMarkerInterval) {
+    clearInterval(window.__performanceNowMarkerInterval);
+  }
+  window.__performanceNowMarkerInterval = setInterval(updateNowMarker, 10000); // 10 segundos
 
   // ========== ETAPA 7: Listener de click SEMPRE acionado (fora do check de listener) ==========
   // Adicionar listeners para clique nas barras (sem check, sempre atualiza)

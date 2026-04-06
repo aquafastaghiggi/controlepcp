@@ -2559,6 +2559,58 @@ select {
     animation: pulse-alert 2s infinite;
 }
 
+/* ========== ETAPA 3: Marcador "AGORA" com Linha Vertical Animada ========== */
+.performance-timeline-now-marker {
+    position: absolute;
+    top: -8px;
+    bottom: 0;
+    width: 3px;
+    background: linear-gradient(180deg, #FF4444 0%, #FF6B6B 50%, #FF4444 100%);
+    border-left: 1px solid rgba(255, 68, 68, 0.5);
+    border-right: 1px solid rgba(255, 68, 68, 0.5);
+    transform: scaleX(1.5);
+    box-shadow: 
+        0 0 4px rgba(255, 68, 68, 0.8),
+        0 0 8px rgba(255, 68, 68, 0.5),
+        inset 0 0 2px rgba(255, 255, 255, 0.3);
+    z-index: 15;
+    animation: pulse-now 1.5s ease-in-out infinite;
+}
+
+.performance-timeline-now-label {
+    position: absolute;
+    top: -22px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: linear-gradient(135deg, #FF4444, #FF6B6B);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 800;
+    white-space: nowrap;
+    letter-spacing: 0.5px;
+    box-shadow: 0 2px 8px rgba(255, 68, 68, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+@keyframes pulse-now {
+    0%, 100% {
+        opacity: 1;
+        box-shadow: 
+            0 0 4px rgba(255, 68, 68, 0.8),
+            0 0 8px rgba(255, 68, 68, 0.5),
+            inset 0 0 2px rgba(255, 255, 255, 0.3);
+    }
+    50% {
+        opacity: 0.6;
+        box-shadow: 
+            0 0 8px rgba(255, 68, 68, 0.6),
+            0 0 16px rgba(255, 68, 68, 0.3),
+            inset 0 0 4px rgba(255, 255, 255, 0.2);
+    }
+}
+
 @keyframes pulse-alert {
     0%, 100% {
         opacity: 0.95;

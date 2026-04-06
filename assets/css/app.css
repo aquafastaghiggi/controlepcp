@@ -2210,6 +2210,10 @@ select {
     display: none;
 }
 
+.performance-alt-title {
+    display: none;
+}
+
 .performance-timeline-filter {
     display: flex;
     align-items: center;

@@ -5656,6 +5656,45 @@ function renderPerformanceTimeline(detail, options = {}) {
     // Header: mostrar apenas datas relevantes (mesma lógica do preview/PDF).
     // Em vez de listar todos os dias do intervalo (inclui DOM sem eventos), usamos
     // apenas os dias em que existe item iniciando no schedule.
+    const shiftIntervals = (typeof collectPerformanceShiftIntervals === 'function')
+      ? collectPerformanceShiftIntervals(scheduleRows)
+      : [];
+
+    const shiftTextByDateKey = {};
+
+    const normalizeShiftTime = (value) => {
+      const text = String(value || '').trim();
+      if (!text) return '';
+      const match = text.match(/^(\d{2}:\d{2})/);
+      if (match) return match[1];
+      return text.length >= 5 ? text.slice(0, 5) : '';
+    };
+
+    if (Array.isArray(shiftIntervals) && shiftIntervals.length) {
+      shiftIntervals.forEach((interval) => {
+        const dateKey = interval && interval.dateKey ? String(interval.dateKey) : '';
+        if (!dateKey) return;
+
+        const startText = normalizeShiftTime(interval.start);
+        const endText = normalizeShiftTime(interval.end);
+        if (!startText || !endText) return;
+
+        const token = `${startText}-${endText}`;
+        if (!shiftTextByDateKey[dateKey]) {
+          shiftTextByDateKey[dateKey] = [];
+        }
+        if (shiftTextByDateKey[dateKey].indexOf(token) === -1) {
+          shiftTextByDateKey[dateKey].push(token);
+        }
+      });
+    }
+
+    const formatShiftSummaryByDateKey = (dateKey) => {
+      const key = String(dateKey || '');
+      const list = shiftTextByDateKey[key];
+      if (!Array.isArray(list) || !list.length) return '';
+      return list.join(' / ');
+    };
     const tickDateKeysSet = new Set();
     operationLines.forEach((op) => {
       if (!op || !op.start) return;
@@ -5674,12 +5713,15 @@ function renderPerformanceTimeline(detail, options = {}) {
         const weekday = formatWeekdayShortPt(dateKey);
         const formatted = formatDateKeyPt(dateKey);
         const leftPct = ((dateObj.getTime() - timelineStartMs) / timelineRangeMs) * 100;
+        const shiftText = formatShiftSummaryByDateKey(dateKey);
+
         return {
           dateKey,
           weekday,
           formatted,
           leftPct,
           dateObj,
+          shiftText,
         };
       })
       .filter(Boolean);
@@ -5710,12 +5752,13 @@ function renderPerformanceTimeline(detail, options = {}) {
           <div class="performance-timeline-header-scale">
            ${highlightWidthPct > 0 ? `<span class="performance-timeline-selection-range" style="left:${highlightStartPct.toFixed(4)}%; width:${highlightWidthPct.toFixed(4)}%;"></span>` : ''}
            <div class="performance-timeline-header-container">
-             ${dateHeaderItems.map((item, idx) => `
-               <div class="performance-timeline-header-item${item.dateKey === selectedHeaderDate ? ' is-selected' : ''}${idx === 0 ? ' is-edge-start' : ''}${idx === (dateHeaderItems.length - 1) ? ' is-edge-end' : ''}" data-date-key="${item.dateKey}" style="left:${item.leftPct.toFixed(2)}%;">
-                 <div class="performance-timeline-header-label">${escapeHtml(item.weekday)}</div>
-                 <div class="performance-timeline-header-date">${escapeHtml(item.formatted)}</div>
-               </div>
-            `).join('')}
+              ${dateHeaderItems.map((item, idx) => `
+                <div class="performance-timeline-header-item${item.dateKey === selectedHeaderDate ? ' is-selected' : ''}${idx === 0 ? ' is-edge-start' : ''}${idx === (dateHeaderItems.length - 1) ? ' is-edge-end' : ''}" data-date-key="${item.dateKey}" style="left:${item.leftPct.toFixed(2)}%;">
+                  <div class="performance-timeline-header-label">${escapeHtml(item.weekday)}</div>
+                  <div class="performance-timeline-header-date">${escapeHtml(item.formatted)}</div>
+                  ${item.shiftText ? `<div class="performance-timeline-header-shift">${escapeHtml(item.shiftText)}</div>` : ''}
+                </div>
+             `).join('')}
             ${isNowInRange ? `<span class="performance-timeline-now-marker" style="left:${nowPct.toFixed(2)}%;"><span class="performance-timeline-now-label">AGORA</span></span>` : ''}
           </div>
         </div>

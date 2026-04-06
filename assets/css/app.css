@@ -3104,6 +3104,15 @@ select {
     border-radius: 3px;
 }
 
+.performance-timeline-header-shift {
+    font-size: 9px;
+    font-weight: 600;
+    color: rgba(71, 85, 105, 0.76);
+    letter-spacing: 0.1px;
+    margin-top: 1px;
+    white-space: nowrap;
+}
+
 .performance-timeline-header-info {
     /* Espa?ador para alinhar com row-info */
 }

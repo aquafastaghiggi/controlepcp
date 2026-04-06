@@ -5740,7 +5740,13 @@ function renderPerformanceTimeline(detail, options = {}) {
       .filter(Boolean);
 
     const defaultDateKey = dateHeaderItems.length ? dateHeaderItems[dateHeaderItems.length - 1].dateKey : null;
-    const selectedHeaderDate = selectionState.dateKey || defaultDateKey;
+    const nowDateKey = toDateKeyLocal(new Date());
+    const hasToday = dateHeaderItems.some((item) => item.dateKey === nowDateKey);
+    if (hasToday && selectionState.dateKey !== nowDateKey) {
+      updatePerformanceTimelineSelection(nowDateKey);
+      selectionState.dateKey = nowDateKey;
+    }
+    const selectedHeaderDate = selectionState.dateKey || (hasToday ? nowDateKey : defaultDateKey);
     const highlightStartPct = (hasManualSelection && selectionStartMs !== null)
       ? Math.max(0, Math.min(100, ((selectionStartMs - timelineStartMs) / timelineRangeMs) * 100))
       : 0;

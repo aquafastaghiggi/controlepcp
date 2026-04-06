@@ -5603,13 +5603,27 @@ function renderPerformanceTimeline(detail, options = {}) {
       const endTime = formatTimeFromMs(itemEnd);
       const formattedDate = formatDateFromKey(itemDate);
       
+      // Extrair número da OP a partir do elemento pai
+      let opNumber = '—';
+      const timelineRow = timelineItem.closest('.performance-timeline-row');
+      if (timelineRow) {
+        const opInfoElement = timelineRow.querySelector('.performance-timeline-row-op-info');
+        if (opInfoElement) {
+          const opText = opInfoElement.textContent; // "OP: 201613 / Seq 25"
+          const opMatch = opText.match(/OP:\s*(\d+)/);
+          if (opMatch && opMatch[1]) {
+            opNumber = opMatch[1];
+          }
+        }
+      }
+      
       // Preencher tabela
       const tableBody = document.getElementById('performance-data-table-body');
       if (tableBody) {
         // Limpar tabela
         tableBody.innerHTML = `
           <tr>
-            <td>1</td>
+            <td>${safeHtml(opNumber) || '—'}</td>
             <td>${safeHtml(itemSeq) || '—'}</td>
             <td>1</td>
             <td>${itemDuration}m</td>

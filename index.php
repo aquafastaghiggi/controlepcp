@@ -499,7 +499,7 @@ if ($rawFeatureFlags !== '') {
                         <table class="performance-data-table">
                             <thead>
                                 <tr>
-                                    <th>Seq</th>
+                                    <th>OP</th>
                                     <th>SEQ</th>
                                     <th>Qtd</th>
                                     <th>Duração</th>

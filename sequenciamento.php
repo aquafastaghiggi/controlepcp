@@ -1,9 +1,12 @@
 <?php
-session_start();
-if (!isset($_SESSION['user_id'])) {
-    header('Location: /login.php');
-    exit;
-}
+declare(strict_types=1);
+
+require __DIR__ . '/src/bootstrap.php';
+
+use App\Auth\Auth;
+
+Auth::startSession();
+Auth::requireLogin();
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">

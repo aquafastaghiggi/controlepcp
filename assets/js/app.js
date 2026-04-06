@@ -5659,12 +5659,8 @@ function renderPerformanceTimeline(detail, options = {}) {
         const endMs = Math.min(itemEnd.getTime(), timelineEndMsClamped);
         const clampedStartMs = Math.max(startMs, timelineStartMs);
         if (endMs <= clampedStartMs) return '';
-        const shouldExtendToSelectedDate = hasManualSelection
-          && Number.isFinite(selectionEndMs)
-          && clampedStartMs < selectionEndMs;
-        const renderEndMs = shouldExtendToSelectedDate
-          ? Math.max(endMs, selectionEndMs)
-          : endMs;
+        // Use real end time for accurate proportional bar width
+        const renderEndMs = endMs;
         const itemStartPct = ((clampedStartMs - timelineStartMs) / timelineRangeMs) * 100;
         const itemWidthPct = Math.max(0, ((Math.min(renderEndMs, timelineEndMsClamped) - clampedStartMs) / timelineRangeMs) * 100);
         const itemStartTime = formatTimeOnlyPt(itemStart);

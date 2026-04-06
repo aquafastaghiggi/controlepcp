@@ -556,6 +556,15 @@ if ($rawFeatureFlags !== '') {
                             </label>
                         </div>
                         <div class="performance-timeline-title">Linha de Tempo - Operações por Data</div>
+                        <!-- ========== ETAPA 6: Legenda Visual ========== -->
+                        <div class="performance-timeline-legend">
+                            <div class="performance-timeline-legend-item setup">
+                                <span>Setup</span>
+                            </div>
+                            <div class="performance-timeline-legend-item prod">
+                                <span>Produção</span>
+                            </div>
+                        </div>
                         <div class="performance-timeline-body" id="performance-timeline-body"></div>
                     </div>
 

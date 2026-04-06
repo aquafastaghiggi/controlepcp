@@ -2229,9 +2229,43 @@ select {
 .performance-timeline-body {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 0;
     min-height: 120px;
-    padding-top: 8px;
+    padding-top: 12px;
+    position: relative;
+}
+
+/* Legenda Visual Setup/Produção */
+.performance-timeline-legend {
+    display: flex;
+    gap: 24px;
+    margin-bottom: 16px;
+    font-size: 12px;
+    padding: 0 4px;
+}
+
+.performance-timeline-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: rgba(15, 23, 42, 0.8);
+    font-weight: 600;
+}
+
+.performance-timeline-legend-item::before {
+    content: '';
+    display: inline-block;
+    width: 16px;
+    height: 12px;
+    border-radius: 2px;
+}
+
+.performance-timeline-legend-item.setup::before {
+    background: linear-gradient(90deg, #EA580C, #D94600);
+}
+
+.performance-timeline-legend-item.prod::before {
+    background: linear-gradient(90deg, #3B82F6, #2563EB);
 }
 
 .performance-timeline-row-wrapper {
@@ -2254,7 +2288,8 @@ select {
     grid-template-columns: 120px 1fr 140px;
     gap: 12px;
     align-items: center;
-    padding: 6px 14px;
+    padding: 8px 14px;
+    margin-bottom: 8px;
     background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.9));
     border-radius: 8px;
     border: 1px solid rgba(148, 163, 184, 0.3);
@@ -2298,8 +2333,16 @@ select {
 
 .performance-timeline-row-bars {
     position: relative;
-    height: 36px;
-    background: rgba(148, 163, 184, 0.1);
+    height: 28px;
+    background: 
+        repeating-linear-gradient(
+            90deg,
+            rgba(0, 0, 0, 0.04) 0px,
+            rgba(0, 0, 0, 0.04) 1px,
+            transparent 1px,
+            transparent 60px
+        ),
+        rgba(148, 163, 184, 0.08);
     border-radius: 4px;
     overflow: hidden;
 }
@@ -2312,8 +2355,9 @@ select {
 
 .performance-timeline-item {
     position: absolute;
-    top: 0;
-    height: 100%;
+    top: 50%;
+    transform: translateY(-50%);
+    height: 20px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -2326,10 +2370,16 @@ select {
     cursor: pointer;
     min-width: 4px;
     will-change: box-shadow, opacity, transform;
-    /* Custom properties para sincronismo e precis?o */
+    /* Custom properties para sincronismo e precisao */
     --timeline-start-ms: 0;
     --timeline-end-ms: 0;
     --timeline-range-ms: 1;
+}
+
+.performance-timeline-item:hover {
+    height: 24px;
+    filter: brightness(1.15);
+    z-index: 5;
 }
 
 /* Tooltip customizado ao hover */

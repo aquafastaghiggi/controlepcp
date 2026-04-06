@@ -5747,7 +5747,7 @@ function renderPerformanceTimeline(detail, options = {}) {
     const highlightEndPct = (hasManualSelection && selectionEndMs !== null)
       ? Math.max(0, Math.min(100, (((selectionEndMs + 1) - timelineStartMs) / timelineRangeMs) * 100))
       : 0;
-    const highlightWidthPct = hasManualSelection ? Math.max(0, highlightEndPct - highlightStartPct) : 0;
+    let highlightWidthPct = hasManualSelection ? Math.max(0, highlightEndPct - highlightStartPct) : 0;
 
     const selectedHeaderIndex = dateHeaderItems.findIndex((item) => item.dateKey === selectedHeaderDate);
     const selectedHeaderItem = selectedHeaderIndex >= 0 ? dateHeaderItems[selectedHeaderIndex] : null;
@@ -5759,6 +5759,20 @@ function renderPerformanceTimeline(detail, options = {}) {
       highlightTickWidthPct = Math.max(highlightTickWidthPct, nextGap);
     }
 
+    let highlightOps = null;
+    if (hasManualSelection && visibleOperationLines.length) {
+      const minStart = Math.min(...visibleOperationLines.map((op) => op.start?.getTime() || Infinity));
+      const maxEnd = Math.max(...visibleOperationLines.map((op) => op.end?.getTime() || -Infinity));
+      if (Number.isFinite(minStart) && Number.isFinite(maxEnd) && maxEnd >= minStart) {
+        const left = ((minStart - timelineStartMs) / timelineRangeMs) * 100;
+        const width = ((maxEnd - minStart) / timelineRangeMs) * 100;
+        highlightOps = {
+          leftPct: Math.max(0, Math.min(100, left)),
+          widthPct: Math.max(0, Math.min(100, width)),
+        };
+      }
+    }
+
     // ========== ETAPA 3: Calcular posição do marcador "AGORA" ==========
     const now = new Date();
     const nowMs = now.getTime();
@@ -5768,12 +5782,17 @@ function renderPerformanceTimeline(detail, options = {}) {
     // Armazenar para o intervalo acessar depois
     window.__performanceTimelineRange = { timelineStartMs, timelineEndMsClamped, timelineRangeMs };
 
+    const highlightRender = highlightOps ? highlightOps : {
+      leftPct: highlightTickLeftPct,
+      widthPct: highlightTickWidthPct,
+    };
+
     // Renderizar header de datas
     const headerHtml = `
         <div class="performance-timeline-header">
           <div class="performance-timeline-header-spacer"></div>
           <div class="performance-timeline-header-scale">
-            ${highlightTickWidthPct > 0 ? `<span class="performance-timeline-selection-range" style="left:${highlightTickLeftPct.toFixed(4)}%; width:${highlightTickWidthPct.toFixed(4)}%;"></span>` : ''}
+            ${highlightRender.widthPct > 0 ? `<span class="performance-timeline-selection-range" style="left:${highlightRender.leftPct.toFixed(4)}%; width:${highlightRender.widthPct.toFixed(4)}%;"></span>` : ''}
            <div class="performance-timeline-header-container">
               ${dateHeaderItems.map((item, idx) => `
                 <div class="performance-timeline-header-item${item.dateKey === selectedHeaderDate ? ' is-selected' : ''}${idx === 0 ? ' is-edge-start' : ''}${idx === (dateHeaderItems.length - 1) ? ' is-edge-end' : ''}" data-date-key="${item.dateKey}" style="left:${item.leftPct.toFixed(2)}%;">

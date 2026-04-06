@@ -494,6 +494,30 @@ if ($rawFeatureFlags !== '') {
                     <div id="performance-summary" class="performance-summary muted"></div>
                     <div id="performance-kpis" class="performance-kpis"></div>
                     
+                    <!-- ========== ETAPA 1: Dashboard de Status (Novo) ========== -->
+                    <div class="performance-status-dashboard">
+                        <div class="performance-status-item">
+                            <span class="performance-status-label">OP ATUAL</span>
+                            <span class="performance-status-value" id="performance-current-op">—</span>
+                        </div>
+                        <div class="performance-status-item">
+                            <span class="performance-status-label">PRÓXIMA OP</span>
+                            <span class="performance-status-value" id="performance-next-op">—</span>
+                        </div>
+                        <div class="performance-status-item">
+                            <span class="performance-status-label">STATUS</span>
+                            <span class="performance-status-badge" id="performance-status-badge">—</span>
+                        </div>
+                        <div class="performance-status-item">
+                            <span class="performance-status-label">% CONCLUSÃO</span>
+                            <span class="performance-status-value" id="performance-completion">—</span>
+                        </div>
+                        <div class="performance-status-item">
+                            <span class="performance-status-label">EFICIÊNCIA</span>
+                            <span class="performance-status-value" id="performance-efficiency">—</span>
+                        </div>
+                    </div>
+                    
                     <!-- ========== ETAPA 4: Tabela de Contexto (Repositionado para topo) ========== -->
                     <div class="performance-data-table-wrapper">
                         <table class="performance-data-table">

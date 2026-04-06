@@ -5152,6 +5152,92 @@ function updatePerformanceTimelineSelection(dateKey) {
   return true;
 }
 
+// ========== ETAPA 1: Função para Atualizar Dashboard de Status ==========
+function updatePerformanceStatusDashboard(operationLines, detail) {
+  const now = new Date();
+  let currentOp = null;
+  let nextOp = null;
+  let totalDuration = 0;
+  let completedDuration = 0;
+  
+  // Processa todas as operações para encontrar a atual e próxima
+  operationLines.forEach((op, idx) => {
+    totalDuration += (op.end.getTime() - op.start.getTime()) / (1000 * 60); // em minutos
+    
+    // Se a operação ainda não começou
+    if (op.start > now && !nextOp) {
+      nextOp = op;
+    }
+    // Se a operação está rodando agora
+    if (op.start <= now && op.end > now) {
+      currentOp = op;
+    }
+    // Se a operação já terminou
+    if (op.end <= now) {
+      completedDuration += (op.end.getTime() - op.start.getTime()) / (1000 * 60);
+    }
+  });
+  
+  // Calcular percentual de conclusão
+  const completionPercent = totalDuration > 0 ? Math.round((completedDuration / totalDuration) * 100) : 0;
+  
+  // Determinar status
+  let statusClass = 'status-ok';
+  let statusText = 'NO PRAZO';
+  
+  if (!currentOp && nextOp) {
+    const diffMs = nextOp.start.getTime() - now.getTime();
+    const diffMinutes = diffMs / (1000 * 60);
+    if (diffMinutes < 30) {
+      statusClass = 'status-warning';
+      statusText = 'ATENÇÃO';
+    }
+  } else if (currentOp) {
+    const diffMs = currentOp.end.getTime() - now.getTime();
+    const diffMinutes = diffMs / (1000 * 60);
+    if (diffMinutes < 15) {
+      statusClass = 'status-warning';
+      statusText = 'ATENÇÃO';
+    }
+  } else if (!currentOp && !nextOp) {
+    statusClass = 'status-alert';
+    statusText = 'CONCLUÍDO';
+  } else if (!currentOp && nextOp) {
+    const diffMs = nextOp.start.getTime() - now.getTime();
+    if (diffMs < 0) {
+      statusClass = 'status-alert';
+      statusText = 'ATRASO';
+    }
+  }
+  
+  // Buscar eficiência do detail
+  const efficiency = detail?.programacao?.prg_eficiencia ?? '--';
+  
+  // Atualizar elementos do dashboard
+  const currentOpEl = document.getElementById('performance-current-op');
+  const nextOpEl = document.getElementById('performance-next-op');
+  const statusBadgeEl = document.getElementById('performance-status-badge');
+  const completionEl = document.getElementById('performance-completion');
+  const efficiencyEl = document.getElementById('performance-efficiency');
+  
+  if (currentOpEl) {
+    currentOpEl.textContent = currentOp ? `OP ${currentOp.numProgramacao || '—'}` : '—';
+  }
+  if (nextOpEl) {
+    nextOpEl.textContent = nextOp ? `OP ${nextOp.numProgramacao || '—'}` : '—';
+  }
+  if (statusBadgeEl) {
+    statusBadgeEl.textContent = statusText;
+    statusBadgeEl.className = `performance-status-badge ${statusClass}`;
+  }
+  if (completionEl) {
+    completionEl.textContent = `${completionPercent}%`;
+  }
+  if (efficiencyEl) {
+    efficiencyEl.textContent = `${efficiency}%`;
+  }
+}
+
 function renderPerformanceTimeline(detail, options = {}) {
   const containerId = options?.containerId || 'performance-timeline';
   const bodyId = options?.bodyId || 'performance-timeline-body';
@@ -5553,6 +5639,9 @@ function renderPerformanceTimeline(detail, options = {}) {
   }
 
   container.classList.remove('hidden');
+  
+  // ========== ETAPA 1: Atualizar Dashboard de Status ==========
+  updatePerformanceStatusDashboard(operationLines, detail);
 
   // ========== ETAPA 7: Listener de click SEMPRE acionado (fora do check de listener) ==========
   // Adicionar listeners para clique nas barras (sem check, sempre atualiza)

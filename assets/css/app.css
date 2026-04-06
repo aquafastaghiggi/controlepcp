@@ -1369,6 +1369,71 @@ select {
 .performance-kpi-efficiency {
     display: none;
 }
+
+/* ========== ETAPA 1: Dashboard de Status ========== */
+.performance-status-dashboard {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+    margin-top: 12px;
+    padding: 14px;
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(99, 102, 241, 0.05) 100%);
+    border: 1px solid rgba(59, 130, 246, 0.15);
+    border-radius: 12px;
+}
+
+.performance-status-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px;
+    background: rgba(255, 255, 255, 0.7);
+    border: 1px solid rgba(59, 130, 246, 0.12);
+    border-radius: 8px;
+}
+
+.performance-status-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: rgba(71, 85, 105, 0.75);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.performance-status-value {
+    font-size: 14px;
+    font-weight: 800;
+    color: rgba(15, 23, 42, 0.95);
+}
+
+.performance-status-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 6px 10px;
+    border-radius: 6px;
+    width: fit-content;
+    background: rgba(100, 116, 139, 0.15);
+    color: rgba(51, 65, 85, 0.9);
+}
+
+.performance-status-badge.status-ok {
+    background: rgba(34, 197, 94, 0.18);
+    color: rgba(22, 163, 74, 0.9);
+}
+
+.performance-status-badge.status-warning {
+    background: rgba(245, 158, 11, 0.18);
+    color: rgba(180, 83, 9, 0.9);
+}
+
+.performance-status-badge.status-alert {
+    background: rgba(239, 68, 68, 0.18);
+    color: rgba(185, 28, 28, 0.9);
+}
+
 .performance-gantt {
     --performance-gantt-zoom: 1;
     margin-top: 10px;

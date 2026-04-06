@@ -2197,11 +2197,17 @@ select {
 #performance-timeline { display: flex !important; }
 #performance-timeline.hidden { display: flex !important; }
 
+/* ========== REPOSITIONAMENTO: Ocultar controles desnecessários ========== */
 .performance-timeline-controls {
-    display: flex;
-    gap: 16px;
-    padding-bottom: 12px;
-    border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+    display: none;
+}
+
+.performance-zoom {
+    display: none;
+}
+
+#performance-zoom-controls {
+    display: none;
 }
 
 .performance-timeline-filter {

@@ -5255,12 +5255,12 @@ function updatePerformanceTimeSummary(operationLines) {
     }
   });
   
-  // Converter para horas e minutos
+  // Converter para horas e minutos (formato HH:MM)
   const formatHourMin = (ms) => {
     const totalMinutes = Math.round(ms / (1000 * 60));
     const hours = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
-    return `${hours}h ${minutes}m`;
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
   };
   
   const prodFormatted = formatHourMin(totalProdMs);

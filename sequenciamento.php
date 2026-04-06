@@ -1,29 +1,16 @@
 <?php
-
-declare(strict_types=1);
-
-require __DIR__ . '/src/bootstrap.php';
-
-use App\Auth\Auth;
-
-Auth::startSession();
-Auth::requireLogin();
-
-// Se tem ID na query, passa para o JS
-$prgId = (int) ($_GET['id'] ?? 0);
-
+session_start();
+if (!isset($_SESSION['user_id'])) {
+    header('Location: /login.php');
+    exit;
+}
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gráfico de Sequenciamento - ControlePCP</title>
-    
-    <!-- Frappe Gantt CDN -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.css">
-    <script src="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.js"></script>
-
+    <title>Gráfico de Sequenciamento</title>
     <style>
         * {
             margin: 0;
@@ -33,751 +20,673 @@ $prgId = (int) ($_GET['id'] ?? 0);
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-            min-height: 100vh;
-            padding: 20px;
-            color: #333;
+            background: #f5f7fa;
+            color: #2d3748;
         }
 
         .container {
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-
-        header {
-            background: white;
-            padding: 24px;
-            border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-            margin-bottom: 24px;
-        }
-
-        header h1 {
-            font-size: 28px;
-            margin-bottom: 8px;
-            color: #1a202c;
-        }
-
-        header p {
-            color: #718096;
-            font-size: 14px;
-        }
-
-        .header-controls {
             display: flex;
-            gap: 12px;
-            margin-top: 16px;
-            flex-wrap: wrap;
-            align-items: center;
+            height: 100vh;
+            overflow: hidden;
         }
 
-        .header-controls select {
-            padding: 8px 12px;
-            border: 1px solid #cbd5e1;
-            border-radius: 6px;
-            font-size: 14px;
-            background: white;
-            cursor: pointer;
-            min-width: 200px;
-        }
-
-        .header-controls select:focus {
-            outline: none;
-            border-color: #3b82f6;
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-        }
-
-        .btn {
-            padding: 8px 16px;
-            border: 1px solid #cbd5e1;
-            border-radius: 6px;
-            background: white;
-            font-size: 14px;
-            cursor: pointer;
-            transition: all 0.2s;
-            font-weight: 500;
-            color: #4b5563;
-        }
-
-        .btn:hover {
-            background: #f1f5f9;
-            border-color: #94a3b8;
-        }
-
-        .btn.primary {
-            background: #3b82f6;
-            color: white;
-            border-color: #3b82f6;
-        }
-
-        .btn.primary:hover {
-            background: #2563eb;
-            border-color: #2563eb;
-        }
-
-        .main-content {
-            display: grid;
-            grid-template-columns: 250px 1fr;
-            gap: 20px;
-        }
-
+        /* ========== SIDEBAR ESQUERDO ========== */
         .sidebar {
+            width: 280px;
             background: white;
-            padding: 16px;
-            border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-            height: fit-content;
-            max-height: 75vh;
+            border-right: 1px solid #e2e8f0;
             overflow-y: auto;
+            display: flex;
+            flex-direction: column;
         }
 
-        .sidebar h3 {
+        .sidebar-header {
+            padding: 16px;
+            border-bottom: 1px solid #e2e8f0;
+            background: #f7fafc;
+        }
+
+        .sidebar-header h3 {
             font-size: 14px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            color: #718096;
-            margin-bottom: 12px;
             font-weight: 600;
+            text-transform: uppercase;
+            color: #4a5568;
+            letter-spacing: 0.5px;
         }
 
         .sidebar-list {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
+            flex: 1;
+            overflow-y: auto;
         }
 
         .sidebar-item {
-            padding: 10px 12px;
-            border: 1px solid #e2e8f0;
-            border-radius: 6px;
+            padding: 12px 16px;
+            border-bottom: 1px solid #edf2f7;
             cursor: pointer;
             transition: all 0.2s;
-            font-size: 13px;
-            background: #f8fafc;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
         }
 
         .sidebar-item:hover {
-            background: #eef2f5;
-            border-color: #cbd5e1;
+            background: #edf2f7;
         }
 
         .sidebar-item.active {
-            background: #3b82f6;
-            color: white;
-            border-color: #3b82f6;
+            background: #e6fffa;
+            border-left: 3px solid #14b8a6;
+            padding-left: 13px;
         }
 
         .sidebar-item-op {
             font-weight: 600;
-            color: #1a202c;
+            font-size: 13px;
+            color: #2d3748;
         }
 
         .sidebar-item-meta {
-            display: block;
             font-size: 12px;
-            color: #a0aec0;
-            margin-top: 2px;
-        }
-
-        .sidebar-item.active .sidebar-item-meta {
-            color: rgba(255, 255, 255, 0.8);
-        }
-
-        .content-area {
-            background: white;
-            padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-        }
-
-        .content-header {
-            margin-bottom: 20px;
-            padding-bottom: 16px;
-            border-bottom: 1px solid #e2e8f0;
-        }
-
-        .content-header h2 {
-            font-size: 18px;
-            color: #1a202c;
-            margin-bottom: 8px;
-        }
-
-        .content-meta {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 12px;
-            font-size: 13px;
-        }
-
-        .meta-item {
-            display: flex;
-            justify-content: space-between;
-            padding: 8px 0;
-            border-bottom: 1px solid #f1f5f9;
-        }
-
-        .meta-label {
             color: #718096;
-            font-weight: 500;
         }
 
-        .meta-value {
-            color: #1a202c;
-            font-weight: 600;
-        }
-
-        .gantt-container {
-            margin-top: 20px;
-            background: #f8fafc;
-            border-radius: 8px;
+        /* ========== ÁREA PRINCIPAL ========== */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
             overflow: hidden;
-            border: 1px solid #e2e8f0;
         }
 
-        #gantt {
-            width: 100%;
+        .toolbar {
+            padding: 16px;
+            background: white;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .toolbar-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .periodo-select {
+            display: flex;
+            gap: 8px;
+            background: #f7fafc;
+            padding: 8px;
+            border-radius: 6px;
+        }
+
+        .periodo-btn {
+            padding: 8px 12px;
+            border: 1px solid #cbd5e0;
+            background: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+            transition: all 0.2s;
+            color: #4a5568;
+        }
+
+        .periodo-btn:hover {
+            background: #edf2f7;
+        }
+
+        .periodo-btn.active {
+            background: #14b8a6;
+            color: white;
+            border-color: #14b8a6;
+        }
+
+        /* ========== TIMELINE ========== */
+        .timeline-wrapper {
+            flex: 1;
+            overflow: auto;
             background: white;
         }
 
-        /* Frappe Gantt customization */
-        .gantt-container ::-webkit-scrollbar {
-            height: 8px;
-            width: 8px;
+        .timeline-container {
+            display: flex;
+            flex-direction: column;
+            padding: 16px;
         }
 
-        .gantt-container ::-webkit-scrollbar-track {
-            background: #f1f5f9;
+        /* Cabeçalho de datas/horas */
+        .timeline-header {
+            display: flex;
+            margin-bottom: 16px;
+            position: sticky;
+            top: 0;
+            background: white;
+            z-index: 10;
         }
 
-        .gantt-container ::-webkit-scrollbar-thumb {
-            background: #cbd5e1;
-            border-radius: 4px;
+        .timeline-labels-col {
+            width: 200px;
+            flex-shrink: 0;
+            padding-right: 16px;
         }
 
-        .gantt-container ::-webkit-scrollbar-thumb:hover {
-            background: #94a3b8;
+        .timeline-header-scroll {
+            flex: 1;
+            overflow-x: auto;
+            overflow-y: hidden;
         }
 
-        /* Task colors */
-        .bar.task-setup {
-            background: #EA580C !important;
-            stroke: #D94600 !important;
+        .timeline-header-content {
+            display: flex;
+            height: 60px;
         }
 
-        .bar.task-produção {
-            background: #3B82F6 !important;
-            stroke: #2563EB !important;
-        }
-
-        .bar.task-pausa {
-            background: #F8B4D1 !important;
-            stroke: #F08DB8 !important;
-        }
-
-        .bar.task-manutencao {
-            background: #8B5CF6 !important;
-            stroke: #7C3AED !important;
-        }
-
-        .bar-label {
+        .timeline-hour {
+            min-width: 60px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            padding-bottom: 8px;
+            border-right: 1px solid #e2e8f0;
             font-size: 12px;
+            font-weight: 500;
+            color: #718096;
+        }
+
+        /* Linhas de programação */
+        .timeline-body {
+            flex: 1;
+            overflow-x: auto;
+            overflow-y: auto;
+        }
+
+        .timeline-row {
+            display: flex;
+            margin-bottom: 16px;
+            align-items: center;
+            min-height: 50px;
+            border-bottom: 1px solid #edf2f7;
+        }
+
+        .timeline-row-label {
+            width: 200px;
+            flex-shrink: 0;
+            padding-right: 16px;
+            text-align: right;
+            padding-bottom: 0;
+        }
+
+        .timeline-row-label-text {
+            font-size: 12px;
+            font-weight: 500;
+            color: #4a5568;
+        }
+
+        .timeline-row-label-op {
+            font-size: 13px;
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .timeline-row-content {
+            flex: 1;
+            position: relative;
+            height: 50px;
+            background: linear-gradient(90deg, transparent 0%, transparent calc(100% - 1px), #e2e8f0 calc(100% - 1px), #e2e8f0 100%);
+            background-size: 60px 100%;
+            background-position: 0 0;
+        }
+
+        /* Barras de schedule */
+        .timeline-bar {
+            position: absolute;
+            top: 5px;
+            height: 40px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 600;
+            color: white;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            white-space: nowrap;
+            padding: 0 8px;
+        }
+
+        .timeline-bar:hover {
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+            transform: translateY(-2px);
+        }
+
+        /* Cores por tipo */
+        .timeline-bar.producao {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        }
+
+        .timeline-bar.setup {
+            background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+        }
+
+        .timeline-bar.pausa {
+            background: linear-gradient(135deg, #f87171 0%, #dc2626 100%);
+        }
+
+        .timeline-bar.manutencao {
+            background: linear-gradient(135deg, #a78bfa 0%, #7c3aed 100%);
+        }
+
+        /* Timeline de referência (base) */
+        .timeline-reference {
+            height: 30px;
+            background: #f7fafc;
+            border-top: 1px solid #e2e8f0;
+            display: flex;
+            font-size: 11px;
+            color: #718096;
+        }
+
+        .timeline-reference-label {
+            width: 200px;
+            flex-shrink: 0;
+            padding-right: 16px;
+            text-align: right;
+            padding-top: 8px;
+        }
+
+        .timeline-reference-scroll {
+            flex: 1;
+            overflow-x: auto;
+            overflow-y: hidden;
+        }
+
+        .timeline-reference-content {
+            display: flex;
+            height: 30px;
+        }
+
+        .timeline-ref-mark {
+            min-width: 60px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-right: 1px solid #cbd5e0;
             font-weight: 500;
         }
 
-        /* Falha ao carregar */
-        .error-state {
-            padding: 40px;
-            text-align: center;
-            color: #dc2626;
-        }
-
-        .error-state svg {
-            width: 64px;
-            height: 64px;
-            margin-bottom: 16px;
-            opacity: 0.5;
-        }
-
-        .loading-state {
-            padding: 40px;
-            text-align: center;
-            color: #64748b;
+        /* ========== LOADING ========== */
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 200px;
+            color: #718096;
+            font-size: 14px;
         }
 
         .spinner {
-            display: inline-block;
-            width: 32px;
-            height: 32px;
             border: 3px solid #e2e8f0;
-            border-top-color: #3b82f6;
+            border-top-color: #14b8a6;
             border-radius: 50%;
+            width: 24px;
+            height: 24px;
             animation: spin 0.8s linear infinite;
-            margin-bottom: 16px;
+            margin-right: 12px;
         }
 
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
 
-        .legend {
-            display: flex;
-            gap: 20px;
-            margin-bottom: 16px;
-            flex-wrap: wrap;
-            font-size: 13px;
+        /* ========== SCROLLBAR ========== */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
         }
 
-        .legend-item {
-            display: flex;
-            align-items: center;
-            gap: 6px;
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
         }
 
-        .legend-color {
-            width: 20px;
-            height: 12px;
-            border-radius: 2px;
-            border: 1px solid rgba(0, 0, 0, 0.1);
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e0;
+            border-radius: 4px;
         }
 
-        @media (max-width: 768px) {
-            .main-content {
-                grid-template-columns: 1fr;
-            }
-
-            .sidebar {
-                max-height: none;
-            }
-
-            .header-controls {
-                flex-direction: column;
-            }
-
-            .header-controls select,
-            .btn {
-                width: 100%;
-            }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #a0aec0;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <header>
-            <h1>📊 Gráfico de Sequenciamento</h1>
-            <p>Visualize a sequência de produção em timeline interativa com dados do CODI</p>
-            
-            <div class="header-controls">
-                <select id="programacaoSelect" onchange="carregarProgramacao()">
-                    <option value="">-- Selecione uma programação --</option>
-                </select>
-                <button class="btn primary" onclick="atualizarGantt()">Atualizar</button>
-                <button class="btn" onclick="exportarPDF()">Exportar PDF</button>
+        <!-- SIDEBAR -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h3>Programações</h3>
             </div>
-        </header>
+            <div class="sidebar-list" id="sidebarList">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    Carregando...
+                </div>
+            </div>
+        </div>
 
+        <!-- MAIN CONTENT -->
         <div class="main-content">
-            <aside class="sidebar">
-                <h3>Programações com Dados</h3>
-                <div class="sidebar-list" id="sidebarList">
-                    <div style="color: #a0aec0; font-size: 12px; padding: 8px; text-align: center;">
-                        Carregando...
-                    </div>
+            <!-- TOOLBAR -->
+            <div class="toolbar">
+                <span class="toolbar-title">Gráfico de Sequenciamento</span>
+                
+                <div class="periodo-select">
+                    <button class="periodo-btn active" data-periodo="4h">4h</button>
+                    <button class="periodo-btn" data-periodo="8h">8h</button>
+                    <button class="periodo-btn" data-periodo="12h">12h</button>
+                    <button class="periodo-btn" data-periodo="24h">24h</button>
+                    <button class="periodo-btn" data-periodo="tudo">Tudo</button>
                 </div>
-            </aside>
+            </div>
 
-            <div class="content-area">
-                <div id="contentHeader" style="display: none;">
-                    <div class="content-header">
-                        <h2 id="programacaoTitulo">Programação</h2>
-                        <div class="content-meta">
-                            <div class="meta-item">
-                                <span class="meta-label">OP</span>
-                                <span class="meta-value" id="metaOp">-</span>
-                            </div>
-                            <div class="meta-item">
-                                <span class="meta-label">Linha</span>
-                                <span class="meta-value" id="metaLinha">-</span>
-                            </div>
-                            <div class="meta-item">
-                                <span class="meta-label">Eficiência</span>
-                                <span class="meta-value" id="metaEficiencia">-</span>
-                            </div>
-                            <div class="meta-item">
-                                <span class="meta-label">Status</span>
-                                <span class="meta-value" id="metaStatus">-</span>
+            <!-- TIMELINE -->
+            <div class="timeline-wrapper">
+                <div class="timeline-container">
+                    <!-- HEADER COM HORAS -->
+                    <div class="timeline-header">
+                        <div class="timeline-labels-col"></div>
+                        <div class="timeline-header-scroll" id="headerScroll">
+                            <div class="timeline-header-content" id="timelineHeaderContent">
+                                <!-- Gerado por JavaScript -->
                             </div>
                         </div>
                     </div>
 
-                    <div class="legend">
-                        <div class="legend-item">
-                            <div class="legend-color" style="background: #3B82F6; border-color: #2563EB;"></div>
-                            <span>Produção</span>
-                        </div>
-                        <div class="legend-item">
-                            <div class="legend-color" style="background: #EA580C; border-color: #D94600;"></div>
-                            <span>Setup</span>
-                        </div>
-                        <div class="legend-item">
-                            <div class="legend-color" style="background: #F8B4D1; border-color: #F08DB8;"></div>
-                            <span>Pausa</span>
-                        </div>
-                        <div class="legend-item">
-                            <div class="legend-color" style="background: #8B5CF6; border-color: #7C3AED;"></div>
-                            <span>Manutenção</span>
+                    <!-- BODY COM LINHAS -->
+                    <div class="timeline-body" id="timelineBody">
+                        <div class="loading">
+                            <div class="spinner"></div>
+                            Carregando dados...
                         </div>
                     </div>
 
-                    <div class="gantt-container">
-                        <div id="gantt"></div>
+                    <!-- TIMELINE DE REFERÊNCIA -->
+                    <div class="timeline-reference">
+                        <div class="timeline-reference-label">Hoje</div>
+                        <div class="timeline-reference-scroll" id="refScroll">
+                            <div class="timeline-reference-content" id="timelineRefContent">
+                                <!-- Gerado por JavaScript -->
+                            </div>
+                        </div>
                     </div>
-                </div>
-
-                <div id="emptyState" class="loading-state">
-                    <p style="color: #94a3b8;">Selecione uma programação para visualizar o gráfico</p>
                 </div>
             </div>
         </div>
     </div>
 
     <script>
-        let ganttInstance = null;
-        
-        // Detectar caminho correto dinamicamente
-        // Suporta: /sequenciamento.php ou /controlepcp_sandbox/sequenciamento.php
-        const currentPath = window.location.pathname;
-        const pathParts = currentPath.split('/').filter(p => p && p !== 'sequenciamento.php');
-        
-        // Se tem pasta antes, usa ela. Se não, usa raiz
-        const apiBase = pathParts.length > 0 
-            ? '/' + pathParts.join('/') + '/api/sequenciamento.php'
-            : '/api/sequenciamento.php';
-        
-        // Capturar prgId da URL
-        const urlParams = new URLSearchParams(window.location.search);
-        window.urlPrgId = parseInt(urlParams.get('id') || 0);
-        
-        console.log('🔹 Current Path:', currentPath);
-        console.log('🔹 Path Parts:', pathParts);
-        console.log('📌 API Base:', apiBase);
+        // ====== STATE ======
+        let currentPeriodo = '4h';
+        let syncScroll = true;
 
-        /**
-         * Selecionar programação pela sidebar
-         */
-        function selecionarProgramacao(id) {
-            const select = document.getElementById('programacaoSelect');
-            select.value = id;
-            atualizarGantt();
+        // ====== API BASE ======
+        const apiBase = (() => {
+            const pathParts = window.location.pathname.split('/').filter(p => p && p !== 'sequenciamento.php');
+            return pathParts.length > 0 
+                ? '/' + pathParts.join('/') + '/api/sequenciamento.php'
+                : '/api/sequenciamento.php';
+        })();
 
-            // Atualizar sidebar visualmente
-            document.querySelectorAll('.sidebar-item').forEach(el => {
-                el.classList.remove('active');
-            });
-            event.target.closest('.sidebar-item').classList.add('active');
-        }
+        // ====== INICIALIZAR ======
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('🚀 Inicializando Sequenciamento...');
+            console.log('📡 API Base:', apiBase);
 
-        /**
-         * Carregar programação do select
-         */
-        function carregarProgramacao() {
-            atualizarGantt();
-        }
-
-        /**
-         * Atualizar Gantt com programação selecionada
-         */
-        async function atualizarGantt() {
-            const select = document.getElementById('programacaoSelect');
-            const prgId = parseInt(select.value);
-
-            if (!prgId || prgId <= 0) {
-                document.getElementById('contentHeader').style.display = 'none';
-                document.getElementById('emptyState').style.display = 'block';
-                return;
-            }
-
-            document.getElementById('emptyState').innerHTML = `
-                <div class="spinner"></div>
-                <p>Carregando programação...</p>
-            `;
-            document.getElementById('emptyState').style.display = 'block';
-            document.getElementById('contentHeader').style.display = 'none';
-
-            try {
-                // Buscar dados formatados para Gantt
-                const response = await fetch(`${apiBase}?action=gantt&id=${prgId}`);
-                const json = await response.json();
-
-                if (!json.sucesso) {
-                    throw new Error(json.erro || 'Erro ao carregar');
-                }
-
-                const prog = json.programacao;
-                const tasks = json.tasks || [];
-
-                // Atualizar metadados
-                document.getElementById('programacaoTitulo').textContent = 
-                    `Programação ${prog.numero_op || 'N/A'} - ${prog.linha || 'N/A'}`;
-                document.getElementById('metaOp').textContent = prog.numero_op || '-';
-                document.getElementById('metaLinha').textContent = prog.linha || '-';
-                document.getElementById('metaEficiencia').textContent = 
-                    Number(prog.eficiencia || 0).toFixed(1) + '%';
-                document.getElementById('metaStatus').textContent = 
-                    prog.status ? prog.status.charAt(0).toUpperCase() + prog.status.slice(1) : '-';
-
-                // Renderizar Gantt
-                renderGantt(tasks);
-
-                // Mostrar conteúdo
-                document.getElementById('emptyState').style.display = 'none';
-                document.getElementById('contentHeader').style.display = 'block';
-
-            } catch (error) {
-                console.error('Erro:', error);
-                document.getElementById('emptyState').innerHTML = `
-                    <div class="error-state">
-                        <p>❌ Erro ao carregar: ${error.message}</p>
-                    </div>
-                `;
-                document.getElementById('emptyState').style.display = 'block';
-                document.getElementById('contentHeader').style.display = 'none';
-            }
-        }
-
-        /**
-         * Renderizar gráfico Frappe Gantt
-         */
-        function renderGantt(tasks) {
-            // Destruir gantt anterior se existir
-            if (ganttInstance) {
-                ganttInstance = null;
-                document.getElementById('gantt').innerHTML = '';
-            }
-
-            if (!tasks || tasks.length === 0) {
-                document.getElementById('gantt').innerHTML = 
-                    '<div style="padding: 40px; text-align: center; color: #94a3b8;">Nenhuma tarefa encontrada</div>';
-                return;
-            }
-
-            // Transformar dados para Frappe Gantt
-            const ganttTasks = tasks.map(task => ({
-                id: task.id,
-                name: task.name,
-                start: new Date(task.start),
-                end: new Date(task.end),
-                progress: task.progress || 0,
-                dependencies: task.dependencies || '',
-                custom_class: task.custom_class || '',
-            }));
-
-            // Criar Gantt
-            ganttInstance = new Gantt('#gantt', ganttTasks, {
-                header_height: 50,
-                column_width: 30,
-                step: 24,
-                view_modes: ['Quarter Day', 'Half Day', 'Day', 'Week'],
-                bar_height: 28,
-                bar_corner_radius: 4,
-                arrow_curve: 5,
-                padding: 18,
-                view_mode: 'Week',
-                date_format: 'DD MMM',
-                popup_trigger: 'click',
-                dependencies: true,
-                on_click: handleTaskClick,
-                on_date_change: handleDateChange,
-                on_progress_change: handleProgressChange,
-                on_view_change: handleViewChange,
+            // Setup periodo buttons
+            document.querySelectorAll('.periodo-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    document.querySelectorAll('.periodo-btn').forEach(b => b.classList.remove('active'));
+                    e.target.classList.add('active');
+                    currentPeriodo = e.target.dataset.periodo;
+                    renderTimeline();
+                });
             });
 
-            // Adicionar tooltips customizados
-            document.querySelectorAll('.bar').forEach((bar, index) => {
-                const task = tasks[index];
-                if (task && task.tooltip) {
-                    const tooltipText = Object.entries(task.tooltip)
-                        .map(([k, v]) => `${k}: ${v}`)
-                        .join('\n');
-                    bar.title = tooltipText;
-                    bar.style.cursor = 'pointer';
-                }
-            });
-        }
+            // Setup scroll sync
+            const headerScroll = document.getElementById('headerScroll');
+            const refScroll = document.getElementById('refScroll');
+            const timelineBody = document.getElementById('timelineBody');
 
-        /**
-         * Event handlers do Gantt
-         */
-        function handleTaskClick(task) {
-            console.log('Task clicked:', task);
-        }
-
-        function handleDateChange(task, start, end) {
-            console.log('Date changed:', task.id, start, end);
-        }
-
-        function handleProgressChange(task, progress) {
-            console.log('Progress changed:', task.id, progress);
-        }
-
-        function handleViewChange(mode) {
-            console.log('View changed:', mode);
-        }
-
-        /**
-         * Carregando lista de programações da API
-         */
-        async function carregarProgramacoes() {
-            try {
-                console.log('═══════════════════════════════════════');
-                console.log('➡️ Iniciando carregamento de programações...');
-                console.log('🔗 API Base:', apiBase);
-                console.log('═══════════════════════════════════════');
-                
-                // 1. Teste de conectividade simples
-                console.log('\n📋 [ETAPA 1] Testando connectividade básica...');
-                const testUrl = apiBase.replace('sequenciamento.php', 'ping.php');
-                console.log('🧪 URL de teste:', testUrl);
-                
-                try {
-                    const testResponse = await fetch(testUrl);
-                    console.log('✅ Status PING:', testResponse.status, testResponse.statusText);
-                } catch (pingErr) {
-                    console.warn('⚠️ Ping failed (não é fatal):', pingErr.message);
-                }
-                
-                // 2. Teste de banco de dados
-                console.log('\n📋 [ETAPA 2] Testando conexão com banco...');
-                const dbTestUrl = apiBase.replace('sequenciamento.php', 'test_db.php');
-                console.log('🧪 URL db test:', dbTestUrl);
-                
-                try {
-                    const dbResponse = await fetch(dbTestUrl);
-                    const dbData = await dbResponse.json();
-                    console.log('✅ DB Test:', dbResponse.status, dbData);
-                    if (dbData.sucesso) {
-                        console.log('   📊 prg_programas:', dbData.banco.prg_programas);
-                        console.log('   📊 sch_linhas:', dbData.banco.sch_linhas);
-                    } else {
-                        console.warn('⚠️ DB Test falhou:', dbData.erro);
+            if (headerScroll && refScroll && timelineBody) {
+                headerScroll.addEventListener('scroll', () => {
+                    if (syncScroll) {
+                        syncScroll = false;
+                        timelineBody.scrollLeft = headerScroll.scrollLeft;
+                        refScroll.scrollLeft = headerScroll.scrollLeft;
+                        syncScroll = true;
                     }
-                } catch (dbErr) {
-                    console.warn('⚠️ DB Test error:', dbErr.message);
-                }
-                
-                // 3. Teste de status da API
-                console.log('\n📋 [ETAPA 3] Checando status da API...');
-                const statusUrl = apiBase + '?action=status';
-                console.log('🧪 URL status:', statusUrl);
-                
-                try {
-                    const statusResponse = await fetch(statusUrl);
-                    console.log('✅ Status API:', statusResponse.status);
-                    const statusData = await statusResponse.json();
-                    console.log('   ✅', statusData);
-                } catch (statusErr) {
-                    console.warn('⚠️ Status check falhou:', statusErr.message);
-                }
-                
-                // 4. Chamar API principal - LISTAR programações
-                console.log('\n📋 [ETAPA 4] Buscando programações...');
-                const mainUrl = apiBase + '?action=listar&limit=50';
-                console.log('📡 URL completa:', mainUrl);
-                
-                const response = await fetch(mainUrl);
-                console.log('📊 Response Status:', response.status, response.statusText);
+                });
+
+                timelineBody.addEventListener('scroll', () => {
+                    if (syncScroll) {
+                        syncScroll = false;
+                        headerScroll.scrollLeft = timelineBody.scrollLeft;
+                        refScroll.scrollLeft = timelineBody.scrollLeft;
+                        syncScroll = true;
+                    }
+                });
+            }
+
+            // Load initial data
+            loadProgramacoes();
+            renderTimeline();
+        });
+
+        // ====== CARREGAR PROGRAMAÇÕES (SIDEBAR) ======
+        async function loadProgramacoes() {
+            try {
+                console.log('📋 Carregando programações para sidebar...');
+                const response = await fetch(apiBase + '?action=listar&limit=50');
                 
                 if (!response.ok) {
-                    const errorText = await response.text();
-                    console.error('❌ Response Error Body:');
-                    console.error(errorText);
-                    throw new Error(`API ${response.status}: ${response.statusText}`);
+                    throw new Error(`HTTP ${response.status}`);
                 }
+
+                const json = await response.json();
                 
-                const text = await response.text();
-                console.log('✅ Raw Response (primeiros 300 chars):');
-                console.log(text.substring(0, 300));
-                
-                // Verificar se é JSON válido
-                let json;
-                try {
-                    json = JSON.parse(text);
-                    console.log('✅ JSON parse OK');
-                } catch (jsonErr) {
-                    console.error('❌ JSON Parse Error:', jsonErr.message);
-                    console.error('❌ Raw text:', text);
-                    throw jsonErr;
+                if (!json.sucesso || !json.data) {
+                    throw new Error(json.erro || 'Erro desconhecido');
                 }
 
-                if (!json.sucesso) {
-                    console.error('❌ API retornou sucesso=false:', json);
-                    throw new Error(json.erro || 'Erro desconhecido da API');
-                }
+                console.log('✅ Programações carregadas:', json.data.length);
 
-                if (!json.data || json.data.length === 0) {
-                    console.warn('⚠️ API retornou vazio - pode não ter dados no banco');
-                    json.data = [];
-                }
-
-                console.log('✅ Total de programações recebidas:', json.data.length);
-
-                const programacoes = json.data;
-                const select = document.getElementById('programacaoSelect');
                 const sidebar = document.getElementById('sidebarList');
+                sidebar.innerHTML = json.data.map(p => `
+                    <div class="sidebar-item" onclick="selecionarProgramacao(${p.id})">
+                        <div class="sidebar-item-op">${p.numero_op}</div>
+                        <div class="sidebar-item-meta">${p.linha} · ${Number(p.eficiencia).toFixed(1)}%</div>
+                    </div>
+                `).join('');
 
-                // Popular select
-                const optsHtml = programacoes.map(p => 
-                    `<option value="${p.id}" ${window.urlPrgId === p.id ? 'selected' : ''}>
-                        ${p.numero_op} (${p.linha} - ${Number(p.eficiencia).toFixed(1)}%)
-                    </option>`
-                ).join('');
+            } catch (err) {
+                console.error('❌ Erro ao carregar programações:', err);
+                document.getElementById('sidebarList').innerHTML = `
+                    <div class="loading" style="color: #dc2626;">
+                        Erro ao carregar
+                    </div>
+                `;
+            }
+        }
+
+        // ====== RENDERIZAR TIMELINE ======
+        async function renderTimeline() {
+            try {
+                console.log('📊 Renderizando timeline para período:', currentPeriodo);
+
+                const response = await fetch(apiBase + '?action=timeline&periodo=' + currentPeriodo);
                 
-                select.innerHTML = '<option value="">-- Selecione uma programação --</option>' + optsHtml;
-
-                // Popular sidebar
-                const sidebarHtml = programacoes.slice(0, 15).map(p =>
-                    `<div class="sidebar-item ${window.urlPrgId === p.id ? 'active' : ''}" onclick="selecionarProgramacao(${p.id})">
-                        <span class="sidebar-item-op">${p.numero_op}</span>
-                        <span class="sidebar-item-meta">${p.linha} · ${Number(p.eficiencia).toFixed(1)}%</span>
-                    </div>`
-                ).join('');
-
-                sidebar.innerHTML = sidebarHtml || '<div style="color: #a0aec0; font-size: 12px; padding: 8px;">Nenhuma programação com histórico</div>';
-
-                // Se havia prgId na URL, carregar automaticamente
-                if (window.urlPrgId && window.urlPrgId > 0) {
-                    select.value = window.urlPrgId;
-                    setTimeout(() => atualizarGantt(), 300);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
                 }
+
+                const json = await response.json();
                 
-                console.log('✅ Carregamento concluído com sucesso!');
+                if (!json.sucesso) {
+                    throw new Error(json.erro || 'Erro desconhecido');
+                }
 
-            } catch (error) {
-                console.error('❌ Erro completo:', error);
-                document.getElementById('sidebarList').innerHTML = 
-                    `<div style="color: #dc2626; font-size: 12px; padding: 8px;">❌ Erro: ${error.message}<br><small>Verifique console (F12) para detalhes</small></div>`;
+                console.log('✅ Timeline data:', json.programacoes.length, 'programações');
+
+                // Renderizar cabeçalho de horas
+                renderTimelineHeader(json.data_ini, json.data_fim);
+
+                // Renderizar linhas
+                renderTimelineRows(json.programacoes, json.data_ini, json.data_fim);
+
+                // Renderizar referência
+                renderTimelineReference(json.data_ini, json.data_fim);
+
+            } catch (err) {
+                console.error('❌ Erro ao renderizar timeline:', err);
+                document.getElementById('timelineBody').innerHTML = `
+                    <div class="loading" style="color: #dc2626;">
+                        Erro ao carregar timeline: ${err.message}
+                    </div>
+                `;
             }
         }
 
-        /**
-         * Exportar para PDF
-         */
-        function exportarPDF() {
-            const select = document.getElementById('programacaoSelect');
-            const prgId = parseInt(select.value);
+        // ====== RENDERIZAR CABEÇALHO ======
+        function renderTimelineHeader(dataIniStr, dataFimStr) {
+            const dataIni = new Date(dataIniStr);
+            const dataFim = new Date(dataFimStr);
             
-            if (!prgId || prgId <= 0) {
-                alert('Selecione uma programação primeiro');
-                return;
+            const container = document.getElementById('timelineHeaderContent');
+            let html = '';
+
+            let current = new Date(dataIni);
+            while (current < dataFim) {
+                const horas = current.getHours().toString().padStart(2, '0') + ':00';
+                html += `<div class="timeline-hour">${horas}</div>`;
+                current.setHours(current.getHours() + 1);
             }
 
-            // Abrir preview em nova janela
-            window.open(`/controlepcp_sandbox/assets/js/app.js?action=openHistoryPreview&prgId=${prgId}`, '_blank');
+            container.innerHTML = html;
         }
 
-        // Carregar programação atual se tiver ID na URL
-        window.addEventListener('load', () => {
-            carregarProgramacoes();
-        });
+        // ====== RENDERIZAR LINHAS ======
+        function renderTimelineRows(programacoes, dataIniStr, dataFimStr) {
+            const dataIni = new Date(dataIniStr);
+            const dataFim = new Date(dataFimStr);
+            const duracao = dataFim - dataIni; // ms
+
+            const container = document.getElementById('timelineBody');
+            let html = '';
+
+            programacoes.forEach(prog => {
+                html += `
+                    <div class="timeline-row">
+                        <div class="timeline-row-label">
+                            <div class="timeline-row-label-op">${prog.numero_op}</div>
+                            <div class="timeline-row-label-text">${prog.linha}</div>
+                        </div>
+                        <div class="timeline-row-content" data-prg-id="${prog.id}">
+                            ${renderScheduleLinhas(prog.linhas, dataIni, dataFim, duracao)}
+                        </div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html || '<div class="loading">Sem dados para este período</div>';
+        }
+
+        // ====== RENDERIZAR BARRAS DE SCHEDULE ======
+        function renderScheduleLinhas(linhas, dataIni, dataFim, duracao) {
+            let html = '';
+
+            linhas.forEach(linha => {
+                // Parsear data/hora
+                const [dataStr] = (linha.data_inicio || '2026-04-06').split(' ');
+                const [anoStr, mesStr, diaStr] = dataStr.split('-');
+                const dataInicio = new Date(`${anoStr}-${mesStr}-${diaStr}T${linha.hora_inicio}`);
+                const dataFimLinha = new Date(`${anoStr}-${mesStr}-${diaStr}T${linha.hora_fim}`);
+
+                // Calcular posição e tamanho
+                if (dataInicio >= dataFimLinha || dataInicio < dataIni || dataInicio > dataFim) {
+                    return; // Fora do período
+                }
+
+                const distInicio = Math.max(0, dataInicio - dataIni);
+                const distFim = Math.min(duracao, dataFimLinha - dataIni);
+                const duracaoVis = distFim - distInicio;
+
+                const posLeft = (distInicio / duracao) * 100;
+                const width = (duracaoVis / duracao) * 100;
+
+                const tipos = {
+                    'Produção': 'producao',
+                    'Setup': 'setup',
+                    'Pausa': 'pausa',
+                    'Manutenção': 'manutencao'
+                };
+
+                const tipo = tipos[linha.tipo] || 'producao';
+                const label = `${linha.sku} (${formataDuracao(linha.duracao_minutos)})`;
+
+                html += `
+                    <div class="timeline-bar ${tipo}" 
+                         style="left: ${posLeft}%; width: ${Math.max(2, width)}%;" 
+                         title="${label}">
+                        ${width > 8 ? label : ''}
+                    </div>
+                `;
+            });
+
+            return html;
+        }
+
+        // ====== RENDERIZAR REFERÊNCIA ======
+        function renderTimelineReference(dataIniStr, dataFimStr) {
+            const dataIni = new Date(dataIniStr);
+            const dataFim = new Date(dataFimStr);
+            
+            const container = document.getElementById('timelineRefContent');
+            let html = '';
+
+            let current = new Date(dataIni);
+            while (current < dataFim) {
+                const dia = current.getDate().toString().padStart(2, '0');
+                const mes = (current.getMonth() + 1).toString().padStart(2, '0');
+                const ref = `${dia}/${mes}`;
+                html += `<div class="timeline-ref-mark">${ref}</div>`;
+                current.setHours(current.getHours() + 1);
+            }
+
+            container.innerHTML = html;
+        }
+
+        // ====== UTIL: Formatar duração ======
+        function formataDuracao(minutos) {
+            const h = Math.floor(minutos / 60);
+            const m = minutos % 60;
+            if (h > 0) {
+                return `${h}h${m > 0 ? m + 'm' : ''}`;
+            }
+            return `${m}m`;
+        }
+
+        // ====== Selecionar programação ======
+        function selecionarProgramacao(prgId) {
+            console.log('📌 Selecionado programação:', prgId);
+            // TODO: Highlight na timeline
+        }
     </script>
 </body>
 </html>

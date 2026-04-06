@@ -88,6 +88,10 @@ try {
             handleGantt($repo);
             break;
 
+        case 'timeline':
+            handleTimeline();
+            break;
+
         default:
             http_response_code(400);
             echo json_encode([
@@ -378,6 +382,153 @@ function handleGantt(ProgramacaoRepository $repo): void
         'tasks' => $tasks,
         'recursos' => array_keys($recursoMap),
     ], JSON_UNESCAPED_UNICODE);
+}
+
+/**
+ * Retorna dados formatados para timeline com período
+ * Parâmetros: periodo=24h|12h|8h|4h|tudo (default: 24h)
+ */
+function handleTimeline(): void
+{
+    error_log('🔵 handleTimeline() iniciado');
+    
+    $periodo = $_GET['periodo'] ?? '24h';
+    $prgId = (int) ($_GET['prg_id'] ?? 0);
+    
+    try {
+        $pdo = \App\Database\Connection::get();
+        
+        // Determinar datas baseado no período
+        $agora = new DateTime('now', new DateTimeZone('America/Sao_Paulo'));
+        
+        switch ($periodo) {
+            case '4h':
+                $duracao = 4 * 60; // minutos
+                break;
+            case '8h':
+                $duracao = 8 * 60;
+                break;
+            case '12h':
+                $duracao = 12 * 60;
+                break;
+            case '24h':
+                $duracao = 24 * 60;
+                break;
+            case 'tudo':
+                $duracao = null; // sem limite
+                break;
+            default:
+                $duracao = 24 * 60;
+        }
+        
+        // Se for 'tudo', busca do primeiro ao último
+        if ($duracao === null) {
+            $dataIni = $agora->modify('-7 days');
+            $dataFim = $agora->modify('+7 days');
+        } else {
+            $dataIni = clone $agora;
+            $dataFim = clone $agora;
+            $dataFim->modify("+{$duracao} minutes");
+        }
+        
+        error_log('📅 Período: ' . $dataIni->format('Y-m-d H:i') . ' a ' . $dataFim->format('Y-m-d H:i'));
+        
+        // Query para buscar programações + schedule
+        if ($prgId > 0) {
+            // Uma programação específica
+            $sql = "
+                SELECT 
+                    p.prg_id,
+                    p.prg_numero_op,
+                    l.lin_codigo,
+                    p.prg_eficiencia,
+                    s.sch_id,
+                    s.sch_sequencia,
+                    s.sch_tipo,
+                    s.sch_sku,
+                    s.sch_duracao_minutos,
+                    s.sch_data_inicio,
+                    s.sch_hora_inicio,
+                    s.sch_hora_fim
+                FROM prg_programas p
+                LEFT JOIN lin_linhas l ON l.lin_id = p.prg_linha_id
+                LEFT JOIN sch_linhas s ON s.sch_programa_id = p.prg_id
+                WHERE p.prg_id = :prg_id
+                ORDER BY s.sch_sequencia ASC
+            ";
+            $stmt = $pdo->prepare($sql);
+            $stmt->bindValue(':prg_id', $prgId, PDO::PARAM_INT);
+            $stmt->execute();
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } else {
+            // Todas programações com schedule neste período
+            $sql = "
+                SELECT 
+                    p.prg_id,
+                    p.prg_numero_op,
+                    l.lin_codigo,
+                    p.prg_eficiencia,
+                    s.sch_id,
+                    s.sch_sequencia,
+                    s.sch_tipo,
+                    s.sch_sku,
+                    s.sch_duracao_minutos,
+                    s.sch_data_inicio,
+                    s.sch_hora_inicio,
+                    s.sch_hora_fim
+                FROM prg_programas p
+                LEFT JOIN lin_linhas l ON l.lin_id = p.prg_linha_id
+                LEFT JOIN sch_linhas s ON s.sch_programa_id = p.prg_id
+                WHERE s.sch_id IS NOT NULL
+                GROUP BY p.prg_id, s.sch_id
+                ORDER BY p.prg_criado_em DESC, s.sch_sequencia ASC
+                LIMIT 50
+            ";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute();
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        }
+        
+        // Agrupar por programação
+        $programacoes = [];
+        foreach ($rows as $row) {
+            $id = (int) $row['prg_id'];
+            if (!isset($programacoes[$id])) {
+                $programacoes[$id] = [
+                    'id' => $id,
+                    'numero_op' => $row['prg_numero_op'],
+                    'linha' => $row['lin_codigo'],
+                    'eficiencia' => (float) $row['prg_eficiencia'],
+                    'linhas' => []
+                ];
+            }
+            
+            if ($row['sch_id']) {
+                $programacoes[$id]['linhas'][] = [
+                    'id' => (int) $row['sch_id'],
+                    'sequencia' => (int) $row['sch_sequencia'],
+                    'tipo' => $row['sch_tipo'],
+                    'sku' => $row['sch_sku'],
+                    'duracao_minutos' => (int) $row['sch_duracao_minutos'],
+                    'data_inicio' => $row['sch_data_inicio'],
+                    'hora_inicio' => $row['sch_hora_inicio'],
+                    'hora_fim' => $row['sch_hora_fim']
+                ];
+            }
+        }
+        
+        echo json_encode([
+            'sucesso' => true,
+            'periodo' => $periodo,
+            'data_ini' => $dataIni->format('Y-m-d H:i:s'),
+            'data_fim' => $dataFim->format('Y-m-d H:i:s'),
+            'programacoes' => array_values($programacoes)
+        ], JSON_UNESCAPED_UNICODE);
+        
+    } catch (Exception $e) {
+        error_log('🔴 Erro em handleTimeline: ' . $e->getMessage());
+        throw $e;
+    }
 }
 
 /**

@@ -5570,6 +5570,70 @@ function renderPerformanceTimeline(detail, options = {}) {
       
       // Log para debug
       console.log('Timeline item selecionado:', timelineItem.getAttribute('data-item-seq'));
+      
+      // ========== ETAPA 8: Populate tabela ao clicar ==========
+      const itemSeq = timelineItem.getAttribute('data-item-seq') || '';
+      const itemDuration = timelineItem.getAttribute('data-item-duration') || '0';
+      const itemDesc = timelineItem.getAttribute('data-item-desc') || '';
+      const itemType = timelineItem.getAttribute('data-item-type') || 'prod';
+      const itemDate = timelineItem.getAttribute('data-item-date') || '';
+      const itemStart = timelineItem.getAttribute('data-item-start') || '0';
+      const itemEnd = timelineItem.getAttribute('data-item-end') || '0';
+      
+      // Formatar data e horários
+      const formatTimeFromMs = (ms) => {
+        const dt = new Date(Number(ms));
+        if (Number.isNaN(dt.getTime())) return '--:--';
+        return `${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`;
+      };
+      
+      const formatDateFromKey = (key) => {
+        if (!key) return '--/--';
+        const parts = String(key).split('-');
+        if (parts.length !== 3) return key;
+        return `${parts[2]}/${parts[1]}`;
+      };
+      
+      const startTime = formatTimeFromMs(itemStart);
+      const endTime = formatTimeFromMs(itemEnd);
+      const formattedDate = formatDateFromKey(itemDate);
+      
+      // Preencher tabela
+      const tableBody = document.getElementById('performance-data-table-body');
+      if (tableBody) {
+        const row = tableBody.querySelector('tr');
+        if (row && row.querySelector('.text-muted')) {
+          // Primeira vez - remover mensagem vazia
+          tableBody.innerHTML = '';
+        }
+        
+        // Adicionar nova linha ou atualizar
+        tableBody.innerHTML = `
+          <tr>
+            <td>${rowCounter || '1'}</td>
+            <td>${escapeHtml(itemSeq) || '—'}</td>
+            <td>1</td>
+            <td>${itemDuration}m</td>
+            <td>${formattedDate}</td>
+            <td>${startTime}</td>
+            <td>${endTime}</td>
+          </tr>
+        `;
+      }
+      
+      // ========== ETAPA 8: Atualizar KPIs ==========
+      const kpisContainer = document.getElementById('performance-kpis');
+      if (kpisContainer) {
+        const kpiDuration = kpisContainer.querySelector('[data-kpi="duration"]');
+        const kpiStart = kpisContainer.querySelector('[data-kpi="start"]');
+        const kpiEnd = kpisContainer.querySelector('[data-kpi="end"]');
+        const kpiType = kpisContainer.querySelector('[data-kpi="type"]');
+        
+        if (kpiDuration) kpiDuration.textContent = `${itemDuration}m`;
+        if (kpiStart) kpiStart.textContent = startTime;
+        if (kpiEnd) kpiEnd.textContent = endTime;
+        if (kpiType) kpiType.textContent = itemType === 'setup' ? 'Setup' : 'Produção';
+      }
     }
     
     if (timelineItem && window.__performanceAltState) {

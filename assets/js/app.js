@@ -5605,9 +5605,9 @@ function renderPerformanceTimeline(detail, options = {}) {
       
       // Extrair número da OP a partir do elemento pai
       let opNumber = '—';
-      const timelineRow = timelineItem.closest('.performance-timeline-row');
-      if (timelineRow) {
-        const opInfoElement = timelineRow.querySelector('.performance-timeline-row-op-info');
+      const timelineWrapper = timelineItem.closest('.performance-timeline-row-wrapper');
+      if (timelineWrapper) {
+        const opInfoElement = timelineWrapper.querySelector('.performance-timeline-row-op-info');
         if (opInfoElement) {
           const opText = opInfoElement.textContent; // "OP: 201613 / Seq 25"
           const opMatch = opText.match(/OP:\s*(\d+)/);

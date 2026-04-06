@@ -521,6 +521,28 @@ if ($rawFeatureFlags !== '') {
                         <div class="performance-alt-body" id="performance-alt-body"></div>
                     </div>
 
+                    <!-- ========== ETAPA 4: Tabela de Contexto ========== -->
+                    <div class="performance-data-table-wrapper">
+                        <table class="performance-data-table">
+                            <thead>
+                                <tr>
+                                    <th>Seq</th>
+                                    <th>SKU</th>
+                                    <th>Qtd</th>
+                                    <th>Duração</th>
+                                    <th>Data</th>
+                                    <th>Início</th>
+                                    <th>Fim</th>
+                                </tr>
+                            </thead>
+                            <tbody id="performance-data-table-body">
+                                <tr>
+                                    <td colspan="7" class="text-muted">Nenhum dado selecionado</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
                     <!-- Novo Gráfico Timeline (Horizontal) - PARALELO -->
                     <div id="performance-timeline" class="performance-timeline hidden">
                         <div id="performance-timeline-controls" class="performance-timeline-controls">

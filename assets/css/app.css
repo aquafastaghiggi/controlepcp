@@ -69,7 +69,7 @@ body::before {
     pointer-events: none;
 }
 
-/* Badge fixo para evitar confusão (apenas no SANDBOX). */
+/* Badge fixo para evitar confus?o (apenas no SANDBOX). */
 body[data-app-env="sandbox"]::after {
     content: "AMBIENTE SANDBOX";
     position: fixed;
@@ -108,7 +108,7 @@ body[data-app-env="sandbox"]::after {
     margin-bottom: 20px;
 }
 
-/* Header (logo + Painel Inicial) um pouco mais baixo, sem mexer em lógica */
+/* Header (logo + Painel Inicial) um pouco mais baixo, sem mexer em l?gica */
 header.hero > .hero-copy {
     padding: 14px 18px;
     gap: 12px;
@@ -246,7 +246,7 @@ input, select {
 }
 
 .entry-table-wrap {
-    /* Evita scrollbar interna na tabela de programação (usa scroll da página). */
+    /* Evita scrollbar interna na tabela de programa??o (usa scroll da p?gina). */
     max-height: none !important;
 }
 
@@ -688,7 +688,7 @@ select {
     display: none;
 }
 
-/* UI experimental (reversível): ações fixas para evitar scroll até "Calcular programação". */
+/* UI experimental (revers?vel): a??es fixas para evitar scroll at? "Calcular programa??o". */
 .programacao-sticky-actions {
     position: fixed;
     right: 16px;
@@ -742,7 +742,7 @@ select {
     }
 }
 
-/* Painel inicial (PCP): foco em Operação x Parâmetros (apenas UI). */
+/* Painel inicial (PCP): foco em Opera??o x Par?metros (apenas UI). */
 #section-home .home-actions-bar {
     display: flex;
     justify-content: flex-end;
@@ -838,17 +838,17 @@ select {
     display: none !important;
 }
 
-/* Programação PCP: ocultar botão "Adicionar item" (mantém no DOM). */
+/* Programa??o PCP: ocultar bot?o "Adicionar item" (mant?m no DOM). */
 #section-program #add-row {
     display: none !important;
 }
 
-/* Histórico: ocultar botão "Atualizar" (mantém no DOM). */
+/* Hist?rico: ocultar bot?o "Atualizar" (mant?m no DOM). */
 #section-programacoes #history-refresh {
     display: none !important;
 }
 
-/* Painel inicial: ocultar somente as métricas/badge do card "Programação de PCP" (mantém no DOM/JS). */
+/* Painel inicial: ocultar somente as m?tricas/badge do card "Programa??o de PCP" (mant?m no DOM/JS). */
 #section-home [data-home-badge="program"],
 #section-home [data-home-meta="program"] {
     display: none !important;
@@ -999,7 +999,7 @@ select {
     }
 }
 
-/* Central de Publicação (somente sandbox) */
+/* Central de Publica??o (somente sandbox) */
 .release-center {
     margin-top: 8px;
 }
@@ -1438,7 +1438,7 @@ select {
 }
 
 .performance-gantt-scroll {
-    max-height: 380px;
+    min-height: 200px;
     overflow: auto;
     padding-right: 6px;
     --performance-gantt-shift-height: 0;
@@ -2126,14 +2126,14 @@ select {
 }
 
 /* ================================================================ */
-/* PERFORMANCE TIMELINE - Novo Gráfico Horizontal (Etapa 3+)       */
+/* PERFORMANCE TIMELINE - Novo Gr?fico Horizontal (Etapa 3+)       */
 /* ================================================================ */
 
 .performance-timeline {
     display: flex;
     flex-direction: column;
     gap: 16px;
-    padding: 16px;
+    padding: 20px;
     background: rgba(248, 250, 252, 0.5);
     border-radius: 10px;
     border: 1px solid rgba(148, 163, 184, 0.3);
@@ -2143,6 +2143,59 @@ select {
 .performance-timeline.hidden {
     display: none;
 }
+
+/* ========== ETAPA 4: Tabela de Contexto ========== */
+.performance-data-table-wrapper {
+    margin-bottom: 20px;
+    overflow-x: auto;
+}
+
+.performance-data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    background: #fff;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.performance-data-table thead {
+    background: rgba(59, 130, 246, 0.08);
+    border-bottom: 2px solid rgba(59, 130, 246, 0.2);
+}
+
+.performance-data-table th {
+    padding: 10px 12px;
+    text-align: left;
+    font-weight: 700;
+    color: rgba(15, 23, 42, 0.9);
+    letter-spacing: -0.3px;
+}
+
+.performance-data-table tbody tr {
+    border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+    transition: background 120ms ease;
+}
+
+.performance-data-table tbody tr:hover {
+    background: rgba(59, 130, 246, 0.04);
+}
+
+.performance-data-table td {
+    padding: 8px 12px;
+    color: rgba(15, 23, 42, 0.8);
+}
+
+.performance-data-table .text-muted {
+    text-align: center;
+    color: #94a3b8;
+    font-style: italic;
+}
+
+/* ========== ETAPA 1: CONSOLIDAÇÃO - Ativar Timeline (remover hidden) ========== */
+#performance-timeline { display: flex !important; }
+#performance-timeline.hidden { display: flex !important; }
 
 .performance-timeline-controls {
     display: flex;
@@ -2198,7 +2251,7 @@ select {
 
 .performance-timeline-row {
     display: grid;
-    grid-template-columns: 240px 1fr 160px;
+    grid-template-columns: 120px 1fr 140px;
     gap: 12px;
     align-items: center;
     padding: 6px 14px;
@@ -2265,15 +2318,15 @@ select {
     align-items: center;
     justify-content: center;
     border-radius: 3px;
-    opacity: 0.85;
+    opacity: 0.95;
     transition: all 120ms ease;
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
     color: white;
     cursor: pointer;
     min-width: 4px;
     will-change: box-shadow, opacity, transform;
-    /* Custom properties para sincronismo e precisão */
+    /* Custom properties para sincronismo e precis?o */
     --timeline-start-ms: 0;
     --timeline-end-ms: 0;
     --timeline-range-ms: 1;
@@ -2281,7 +2334,7 @@ select {
 
 /* Tooltip customizado ao hover */
 .performance-timeline-item::before {
-    content: attr(data-item-seq) " • " attr(data-item-duration) "m";
+    content: attr(data-item-seq) " ??? " attr(data-item-duration) "m";
     position: absolute;
     bottom: calc(100% + 8px);
     left: 50%;
@@ -2306,15 +2359,15 @@ select {
 }
 
 .performance-timeline-item.is-setup {
-    background: linear-gradient(90deg, rgba(245, 158, 11, 0.6), rgba(234, 88, 12, 0.7));
-    border: 2px solid rgba(234, 88, 12, 0.6);
-    box-shadow: 0 2px 4px rgba(234, 88, 12, 0.2);
+    background: linear-gradient(90deg, #EA580C, #D94600);
+    border: 2px solid #D94600;
+    box-shadow: 0 2px 6px rgba(234, 88, 12, 0.3);
 }
 
 .performance-timeline-item.is-prod {
-    background: linear-gradient(90deg, rgba(59, 130, 246, 0.6), rgba(37, 99, 235, 0.7));
-    border: 2px solid rgba(37, 99, 235, 0.6);
-    box-shadow: 0 2px 4px rgba(59, 130, 246, 0.2);
+    background: linear-gradient(90deg, #3B82F6, #2563EB);
+    border: 2px solid #2563EB;
+    box-shadow: 0 2px 6px rgba(59, 130, 246, 0.3);
 }
 
 .performance-timeline-item:hover {
@@ -2356,7 +2409,7 @@ select {
     text-overflow: ellipsis;
 }
 
-/* Novo label com informações de Seq e Duração */
+/* Novo label com informa??es de Seq e Dura??o */
 .performance-timeline-item-info {
     position: absolute;
     bottom: 2px;
@@ -2411,7 +2464,7 @@ select {
     position: sticky;
     top: 16px;
     display: grid;
-    grid-template-columns: 240px 1fr 160px;
+    grid-template-columns: 120px 1fr 140px;
     gap: 12px;
     padding: 0 0 12px 0;
     margin-bottom: 8px;
@@ -2422,7 +2475,7 @@ select {
 }
 
 .performance-timeline-header-spacer {
-    /* Espaçador para alinhar com row-header */
+    /* Espa?ador para alinhar com row-header */
 }
 
 .performance-timeline-header-scale {
@@ -2537,7 +2590,7 @@ select {
 }
 
 .performance-timeline-header-info {
-    /* Espaçador para alinhar com row-info */
+    /* Espa?ador para alinhar com row-info */
 }
 
 /* Responsivo Mobile */
@@ -2709,7 +2762,7 @@ select {
     font-weight: 800;
 }
 
-/* Etapa 11 — Modo compacto para dias com alta densidade (>= 6 itens) */
+/* Etapa 11 ??" Modo compacto para dias com alta densidade (>= 6 itens) */
 .performance-alt-day.is-compact .performance-alt-day-badge.is-compact-badge {
     color: #92400e;
     background: rgba(254, 243, 199, 0.95);
@@ -2851,22 +2904,6 @@ select {
         gap: 6px;
     }
 }
-
-/* Responsivo Mobile: <= 768px */
-@media (max-width: 768px) {
-    .performance-alt-item {
-        padding: 6px 8px;
-        gap: 6px;
-        font-size: 11px;
-    }
-    .performance-alt-item-time {
-        max-width: 110px;
-        font-size: 10px;
-    }
-    .performance-alt-item-label {
-        font-size: 11px;
-    }
-}
 .history-preview-table {
     width: 100%;
     border-collapse: collapse;
@@ -2886,3 +2923,4 @@ select {
     background: #fff;
     z-index: 2;
 }
+

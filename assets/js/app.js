@@ -274,7 +274,7 @@
     }
 
     function escapeHtml(value) {
-        const text = String(value ?? '');
+        const text = String(value || '');
         const map = {
             '&': '&amp;',
             '<': '&lt;',
@@ -336,7 +336,7 @@
                 description: product?.description || '',
                 reference_setup: product?.reference_setup || product?.description || '',
                 line: product?.line || 'L2',
-                rate_per_hour: product?.rate_per_hour ?? 0,
+                rate_per_hour: product?.rate_per_hour || 0,
                 unit: product?.unit || 'cx',
             };
         });

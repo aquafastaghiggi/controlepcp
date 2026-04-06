@@ -5594,6 +5594,11 @@ function renderPerformanceTimeline(detail, options = {}) {
         return `${parts[2]}/${parts[1]}`;
       };
       
+      const safeHtml = (text) => {
+        const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+        return String(text || '').replace(/[&<>"']/g, (ch) => map[ch] || ch);
+      };
+      
       const startTime = formatTimeFromMs(itemStart);
       const endTime = formatTimeFromMs(itemEnd);
       const formattedDate = formatDateFromKey(itemDate);
@@ -5601,17 +5606,11 @@ function renderPerformanceTimeline(detail, options = {}) {
       // Preencher tabela
       const tableBody = document.getElementById('performance-data-table-body');
       if (tableBody) {
-        const row = tableBody.querySelector('tr');
-        if (row && row.querySelector('.text-muted')) {
-          // Primeira vez - remover mensagem vazia
-          tableBody.innerHTML = '';
-        }
-        
-        // Adicionar nova linha ou atualizar
+        // Limpar tabela
         tableBody.innerHTML = `
           <tr>
-            <td>${rowCounter || '1'}</td>
-            <td>${escapeHtml(itemSeq) || '—'}</td>
+            <td>1</td>
+            <td>${safeHtml(itemSeq) || '—'}</td>
             <td>1</td>
             <td>${itemDuration}m</td>
             <td>${formattedDate}</td>

@@ -331,6 +331,174 @@ Auth::requireLogin();
             background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%);
         }
 
+        .timeline-bar.selected {
+            box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.5);
+            z-index: 100 !important;
+        }
+
+        /* ========== TOOLTIPS (FASE 2) ========== */
+        .tooltip {
+            position: absolute;
+            background: #1f2937;
+            color: #fff;
+            padding: 12px 16px;
+            border-radius: 6px;
+            font-size: 12px;
+            pointer-events: none;
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            display: none;
+            max-width: 400px;
+            white-space: normal;
+        }
+
+        .tooltip.visible {
+            display: block;
+        }
+
+        .tooltip-line {
+            margin: 2px 0;
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+        }
+
+        .tooltip-label {
+            font-weight: 600;
+            color: #9ca3af;
+        }
+
+        .tooltip-value {
+            color: #fff;
+        }
+
+        .tooltip-section {
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid #4b5563;
+        }
+
+        /* ========== EXPANDED DETALHES (FASE 3) ========== */
+        .timeline-row.expanded .timeline-row-content {
+            background: #edf2f7;
+            border-bottom: 2px solid #cbd5e0;
+        }
+
+        .timeline-row-expanded {
+            display: none;
+            background: #f7fafc;
+            border-bottom: 1px solid #edf2f7;
+            padding: 12px 16px;
+        }
+
+        .timeline-row.expanded + .timeline-row-expanded {
+            display: block;
+        }
+
+        .timeline-row-expanded-content {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
+        }
+
+        .timeline-row-expanded-item {
+            padding: 8px;
+            background: white;
+            border-radius: 4px;
+            border-left: 3px solid #0ea5e9;
+        }
+
+        .timeline-row-expanded-label {
+            font-weight: 600;
+            font-size: 11px;
+            color: #718096;
+            text-transform: uppercase;
+        }
+
+        .timeline-row-expanded-value {
+            font-size: 14px;
+            color: #2d3748;
+            margin-top: 4px;
+            word-break: break-word;
+        }
+
+        .timeline-row-expanded-value.executado {
+            color: #059669;
+            font-weight: 600;
+        }
+
+        /* ========== FILTROS (FASE 4) ========== */
+        .toolbar-filters {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            margin-right: 12px;
+            flex: 1;
+            min-width: 300px;
+        }
+
+        .filter-group {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .filter-group label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #718096;
+            text-transform: uppercase;
+        }
+
+        .filter-group input,
+        .filter-group select {
+            padding: 6px 10px;
+            border: 1px solid #cbd5e0;
+            border-radius: 4px;
+            font-size: 12px;
+            background: white;
+            color: #2d3748;
+        }
+
+        .filter-group input:focus,
+        .filter-group select:focus {
+            outline: none;
+            border-color: #0ea5e9;
+            box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.1);
+        }
+
+        .filter-group input[type="text"] {
+            flex: 1;
+            min-width: 150px;
+        }
+
+        .filter-btn {
+            padding: 6px 12px;
+            background: #e5e7eb;
+            border: none;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #374151;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .filter-btn:hover {
+            background: #d1d5db;
+        }
+
+        .filter-btn.active {
+            background: #0ea5e9;
+            color: white;
+        }
+
+        .filter-status {
+            font-size: 12px;
+            color: #718096;
+            white-space: nowrap;
+        }
+
         /* ========== SCROLLBAR ========== */
         ::-webkit-scrollbar {
             width: 8px;
@@ -371,6 +539,31 @@ Auth::requireLogin();
             <!-- TOOLBAR -->
             <div class="toolbar">
                 <span class="toolbar-title">Gráfico de Sequenciamento</span>
+                
+                <!-- FILTROS (FASE 4) -->
+                <div class="toolbar-filters">
+                    <div class="filter-group">
+                        <input type="text" id="searchSku" placeholder="Buscar SKU..." style="width: 150px;">
+                    </div>
+                    <div class="filter-group">
+                        <label>Tipo:</label>
+                        <select id="filterTipo">
+                            <option value="">Todos</option>
+                            <option value="setup">Setup</option>
+                            <option value="producao">Produção</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Status:</label>
+                        <select id="filterStatusSelect">
+                            <option value="">Todos</option>
+                            <option value="executado">Executado</option>
+                            <option value="planejado">Planejado</option>
+                        </select>
+                    </div>
+                    <button class="filter-btn" id="filterClear" title="Limpar filtros">✕ Limpar</button>
+                    <div class="filter-status" id="filterStatusInfo" style="margin-left: auto;"></div>
+                </div>
                 
                 <div class="periodo-select">
                     <button class="periodo-btn active" data-periodo="4h">4h</button>
@@ -417,9 +610,16 @@ Auth::requireLogin();
     </div>
 
     <script>
-        // ====== STATE ======
+        // ====== STATE (FASES 2-4) ======
         let currentPeriodo = '4h';
         let syncScroll = true;
+        let allLinhasData = []; // Armazena todos os dados para filtro
+        let currentFilters = {
+            sku: '',
+            tipo: '',
+            status: ''
+        };
+        let selectedBarId = null;
 
         // ====== API BASE ======
         const apiBase = (() => {
@@ -442,6 +642,30 @@ Auth::requireLogin();
                     currentPeriodo = e.target.dataset.periodo;
                     renderTimeline();
                 });
+            });
+
+            // Setup filtros (FASE 4)
+            document.getElementById('searchSku')?.addEventListener('keyup', (e) => {
+                currentFilters.sku = e.target.value.toUpperCase();
+                applyFilters();
+            });
+
+            document.getElementById('filterTipo')?.addEventListener('change', (e) => {
+                currentFilters.tipo = e.target.value;
+                applyFilters();
+            });
+
+            document.getElementById('filterStatusSelect')?.addEventListener('change', (e) => {
+                currentFilters.status = e.target.value;
+                applyFilters();
+            });
+
+            document.getElementById('filterClear')?.addEventListener('click', () => {
+                currentFilters = { sku: '', tipo: '', status: '' };
+                document.getElementById('searchSku').value = '';
+                document.getElementById('filterTipo').value = '';
+                document.getElementById('filterStatusSelect').value = '';
+                applyFilters();
             });
 
             // Setup scroll sync
@@ -623,14 +847,28 @@ Auth::requireLogin();
             return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
         }
 
-        // ====== RENDERIZAR LINHAS ======
+        // ====== RENDERIZAR LINHAS (COM SUPORTE A FILTROS) ======
         function renderTimelineRows(programacoes, dataIni, dataFim) {
             const duracao = dataFim - dataIni; // ms
 
             const container = document.getElementById('timelineBody');
             let html = '';
 
+            // Flatten e armazenar todos os dados para filtro
+            allLinhasData = [];
+
             programacoes.forEach(prog => {
+                prog.linhas.forEach(linha => {
+                    allLinhasData.push({
+                        prg_id: prog.id,
+                        numero_op: prog.numero_op,
+                        linha_codigo: prog.linha,
+                        eficiencia: prog.eficiencia,
+                        sch_id: linha.id,
+                        ...linha
+                    });
+                });
+                
                 // Linha principal com programação
                 html += `
                     <div class="timeline-row" data-prg-id="${prog.id}">
@@ -642,17 +880,22 @@ Auth::requireLogin();
                             ${renderScheduleLinhas(prog.linhas, dataIni, dataFim, duracao)}
                         </div>
                     </div>
+                    <div class="timeline-row-expanded" id="expanded-${prog.id}"></div>
                 `;
             });
 
             container.innerHTML = html || '<div class="loading">Sem dados para este período</div>';
+            
+            // Attach listeners após renderizar
+            attachTimelineEventListeners();
+            applyFilters();
         }
 
-        // ====== RENDERIZAR BARRAS DE SCHEDULE ======
+        // ====== RENDERIZAR BARRAS DE SCHEDULE (COM TOOLTIPS E INTERATIVIDADE) ======
         function renderScheduleLinhas(linhas, dataIni, dataFim, duracao) {
             let html = '';
 
-            linhas.forEach(linha => {
+            linhas.forEach((linha, idx) => {
                 try {
                     // Parsear data - formato: "2026-04-06"
                     const dataStr = linha.data_inicio ? linha.data_inicio.substring(0, 10) : '2026-04-06';
@@ -689,19 +932,31 @@ Auth::requireLogin();
                     const width = (duracaoVis / duracao) * 100;
 
                     const tipos = {
-                        'Produção': 'producao',
+                        'setup': 'setup',
+                        'producao': 'producao',
                         'Setup': 'setup',
+                        'Produção': 'producao',
                         'Pausa': 'pausa',
                         'Manutenção': 'manutencao'
                     };
 
                     const tipo = tipos[linha.tipo] || 'producao';
                     const label = `${linha.sku} (${formataDuracao(linha.duracao_minutos)})`;
+                    const barId = `bar-${linha.id}-${idx}`;
+                    const statusExe = linha.foi_executado ? 'executado' : 'planejado';
 
                     html += `
                         <div class="timeline-bar ${tipo}" 
+                             id="${barId}"
+                             data-sch-id="${linha.id}"
+                             data-sku="${linha.sku ? linha.sku.toUpperCase() : ''}"
+                             data-tipo="${tipo}"
+                             data-status="${statusExe}"
                              style="left: ${posLeft}%; width: ${Math.max(1, width)}%;" 
-                             title="${label}">
+                             title="${label}"
+                             onmouseover="mostrarTooltip(event, ${JSON.stringify(linha).replace(/"/g, '&quot;')})"
+                             onmouseout="esconderTooltip()"
+                             onclick="expandirLinha(event, ${linha.id})">
                             ${width > 8 ? label : ''}
                         </div>
                     `;
@@ -711,6 +966,240 @@ Auth::requireLogin();
             });
 
             return html;
+        }
+
+        // ====== TOOLTIP RICO (FASE 2) ======
+        function mostrarTooltip(event, linha) {
+            const x = event.clientX;
+            const y = event.clientY;
+
+            const duraçãoReal = linha.fim_producao 
+                ? calcularDuracao(linha.inicio_producao, linha.fim_producao)
+                : null;
+
+            let html = `
+                <div class="tooltip-line">
+                    <span class="tooltip-label">SKU:</span>
+                    <span class="tooltip-value">${linha.sku || 'N/A'}</span>
+                </div>
+                <div class="tooltip-line">
+                    <span class="tooltip-label">Tipo:</span>
+                    <span class="tooltip-value">${linha.tipo}</span>
+                </div>
+                <div class="tooltip-line">
+                    <span class="tooltip-label">Duração (plan.):</span>
+                    <span class="tooltip-value">${formataDuracao(linha.duracao_minutos)}</span>
+                </div>
+            `;
+
+            if (linha.quantidade) {
+                html += `
+                    <div class="tooltip-line">
+                        <span class="tooltip-label">Qtd.:</span>
+                        <span class="tooltip-value">${Number(linha.quantidade).toFixed(0)}</span>
+                    </div>
+                `;
+            }
+
+            if (linha.sku_anterior) {
+                html += `
+                    <div class="tooltip-line">
+                        <span class="tooltip-label">De:</span>
+                        <span class="tooltip-value">${linha.sku_anterior}</span>
+                    </div>
+                `;
+            }
+
+            if (duraçãoReal) {
+                html += `
+                    <div class="tooltip-section">
+                        <div class="tooltip-line">
+                            <span class="tooltip-label">⏱️ Duração (real):</span>
+                            <span class="tooltip-value">${duraçãoReal}</span>
+                        </div>
+                    </div>
+                `;
+            }
+
+            if (linha.foi_executado) {
+                html += `
+                    <div class="tooltip-section">
+                        <div class="tooltip-line">
+                            <span class="tooltip-label">✓ Executado:</span>
+                            <span class="tooltip-value">Sim</span>
+                        </div>
+                        ${linha.produzido_estimado ? `
+                        <div class="tooltip-line">
+                            <span class="tooltip-label">Produzido:</span>
+                            <span class="tooltip-value">${Number(linha.produzido_estimado).toFixed(0)}</span>
+                        </div>
+                        ` : ''}
+                    </div>
+                `;
+            }
+
+            let tooltip = document.getElementById('tooltip');
+            if (!tooltip) {
+                tooltip = document.createElement('div');
+                tooltip.id = 'tooltip';
+                tooltip.className = 'tooltip';
+                document.body.appendChild(tooltip);
+            }
+
+            tooltip.innerHTML = html;
+            tooltip.classList.add('visible');
+            tooltip.style.left = x + 10 + 'px';
+            tooltip.style.top = y + 10 + 'px';
+        }
+
+        function esconderTooltip() {
+            const tooltip = document.getElementById('tooltip');
+            if (tooltip) {
+                tooltip.classList.remove('visible');
+            }
+        }
+
+        // ====== CLICK INTERACTIONS (FASE 3) ======
+        function expandirLinha(event, prgId) {
+            event.stopPropagation();
+            
+            const row = document.querySelector(`[data-prg-id="${prgId}"]`);
+            const expanded = document.getElementById(`expanded-${prgId}`);
+            
+            if (!row || !expanded) return;
+
+            // Toggle expanded state
+            const wasExpanded = row.classList.contains('expanded');
+            
+            // Close all others
+            document.querySelectorAll('.timeline-row.expanded').forEach(r => {
+                r.classList.remove('expanded');
+            });
+            document.querySelectorAll('.timeline-row-expanded').forEach(e => {
+                e.innerHTML = '';
+            });
+
+            if (wasExpanded) {
+                row.classList.remove('expanded');
+                return;
+            }
+
+            row.classList.add('expanded');
+
+            // Fetch detailed data
+            fetcheExpanidoDados(prgId, expanded);
+        }
+
+        async function fetcheExpanidoDados(prgId, container) {
+            try {
+                const response = await fetch(apiBase + '?action=detalhe&id=' + prgId);
+                const json = await response.json();
+
+                if (!json.sucesso || !json.programacao) {
+                    container.innerHTML = '<div style="color: #dc2626;">Erro ao carregar detalhes</div>';
+                    return;
+                }
+
+                const prog = json.programacao;
+                let html = '<div class="timeline-row-expanded-content">';
+
+                html += `
+                    <div class="timeline-row-expanded-item">
+                        <div class="timeline-row-expanded-label">OP</div>
+                        <div class="timeline-row-expanded-value">${prog.numero_op}</div>
+                    </div>
+                    <div class="timeline-row-expanded-item">
+                        <div class="timeline-row-expanded-label">Linha</div>
+                        <div class="timeline-row-expanded-value">${prog.linha}</div>
+                    </div>
+                    <div class="timeline-row-expanded-item">
+                        <div class="timeline-row-expanded-label">Eficiência</div>
+                        <div class="timeline-row-expanded-value">${Number(prog.eficiencia).toFixed(1)}%</div>
+                    </div>
+                    <div class="timeline-row-expanded-item">
+                        <div class="timeline-row-expanded-label">Status</div>
+                        <div class="timeline-row-expanded-value">${prog.status}</div>
+                    </div>
+                `;
+
+                if (json.schedule && Array.isArray(json.schedule)) {
+                    const executados = json.schedule.filter(s => s.sch_fim_producao).length;
+                    html += `
+                        <div class="timeline-row-expanded-item">
+                            <div class="timeline-row-expanded-label">Itens Executados</div>
+                            <div class="timeline-row-expanded-value executado">${executados}/${json.schedule.length}</div>
+                        </div>
+                    `;
+                }
+
+                html += '</div>';
+                container.innerHTML = html;
+
+            } catch (err) {
+                console.error('❌ Erro ao buscar detalhes:', err);
+                container.innerHTML = `<div style="color: #dc2626;">Erro: ${err.message}</div>`;
+            }
+        }
+
+        // ====== FILTROS (FASE 4) ======
+        function applyFilters() {
+            let rows = 0, hidden = 0;
+            
+            document.querySelectorAll('.timeline-row').forEach(row => {
+                const bars = row.querySelectorAll('.timeline-bar');
+                let hasVisibleBar = false;
+
+                bars.forEach(bar => {
+                    const sku = bar.dataset.sku || '';
+                    const tipo = bar.dataset.tipo || '';
+                    const status = bar.dataset.status || '';
+
+                    const matchSku = !currentFilters.sku || sku.includes(currentFilters.sku);
+                    const matchTipo = !currentFilters.tipo || tipo === currentFilters.tipo;
+                    const matchStatus = !currentFilters.status || status === currentFilters.status;
+
+                    if (matchSku && matchTipo && matchStatus) {
+                        bar.style.opacity = '1';
+                        hasVisibleBar = true;
+                    } else {
+                        bar.style.opacity = '0.3';
+                    }
+                });
+
+                rows++;
+                if (hasVisibleBar) {
+                    row.style.display = 'flex';
+                } else {
+                    row.style.display = 'none';
+                    hidden++;
+                }
+            });
+
+            // Update filter status
+            let statusText = '';
+            if (currentFilters.sku) statusText += `SKU: ${currentFilters.sku} | `;
+            if (currentFilters.tipo) statusText += `Tipo: ${currentFilters.tipo} | `;
+            if (currentFilters.status) statusText += `Status: ${currentFilters.status} | `;
+            
+            if (statusText) {
+                statusText += `${rows - hidden}/${rows} visíveis`;
+            }
+
+            const statusInfo = document.getElementById('filterStatusInfo');
+            if (statusInfo) {
+                statusInfo.textContent = statusText;
+            }
+        }
+
+        function attachTimelineEventListeners() {
+            document.querySelectorAll('.timeline-bar').forEach(bar => {
+                bar.addEventListener('mouseover', (e) => {
+                    e.currentTarget.style.zIndex = '50';
+                });
+                bar.addEventListener('mouseout', (e) => {
+                    e.currentTarget.style.zIndex = 'auto';
+                });
+            });
         }
 
         // ====== RENDERIZAR REFERÊNCIA ======
@@ -735,6 +1224,7 @@ Auth::requireLogin();
 
         // ====== UTIL: Formatar duração ======
         function formataDuracao(minutos) {
+            if (!minutos) return '0m';
             const h = Math.floor(minutos / 60);
             const m = minutos % 60;
             if (h > 0) {
@@ -743,10 +1233,26 @@ Auth::requireLogin();
             return `${m}m`;
         }
 
+        // ====== UTIL: Calcular duração entre datas ======
+        function calcularDuracao(dataInicio, dataFim) {
+            if (!dataInicio || !dataFim) return null;
+            try {
+                const ini = typeof dataInicio === 'string' ? new Date(dataInicio.replace(' ', 'T')) : dataInicio;
+                const fim = typeof dataFim === 'string' ? new Date(dataFim.replace(' ', 'T')) : dataFim;
+                const minutos = Math.floor((fim - ini) / (1000 * 60));
+                return formataDuracao(minutos);
+            } catch (e) {
+                return null;
+            }
+        }
+
         // ====== Selecionar programação ======
         function selecionarProgramacao(prgId) {
             console.log('📌 Selecionado programação:', prgId);
-            // TODO: Highlight na timeline
+            // Highlight na timeline
+            document.querySelectorAll(`[data-prg-id]`).forEach(el => {
+                el.style.backgroundColor = el.dataset.prgId == prgId ? '#edf2f7' : '';
+            });
         }
     </script>
 </body>

@@ -92,6 +92,14 @@ try {
             handleTimeline();
             break;
 
+        case 'diagnostico':
+            handleDiagnostico();
+            break;
+
+        case 'historicos':
+            handleHistoricos();
+            break;
+
         default:
             http_response_code(400);
             echo json_encode([
@@ -508,4 +516,263 @@ function formatDurationMinutes($minutes): string
     $hours = (int) floor($minutes / 60);
     $mins = $minutes % 60;
     return sprintf('%02d:%02d', $hours, $mins);
+}
+
+/**
+ * ETAPA 1.1 - DIAGNÓSTICO DE HISTÓRICOS
+ * Analisa dados históricos: contas executadas vs planejadas
+ */
+function handleDiagnostico(): void
+{
+    error_log('🔵 handleDiagnostico() iniciado');
+    
+    try {
+        $pdo = \App\Database\Connection::get();
+        
+        // Total de linhas de schedule
+        $sql_total = "SELECT COUNT(*) as total FROM sch_linhas WHERE sch_id IS NOT NULL";
+        $stmt = $pdo->prepare($sql_total);
+        $stmt->execute();
+        $total = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+        error_log("📊 Total linhas: $total");
+        
+        // Quantas foram executadas (têm fim_producao)
+        $sql_exec = "SELECT COUNT(*) as executadas FROM sch_linhas WHERE sch_fim_producao IS NOT NULL";
+        $stmt = $pdo->prepare($sql_exec);
+        $stmt->execute();
+        $executadas = $stmt->fetch(PDO::FETCH_ASSOC)['executadas'] ?? 0;
+        error_log("✅ Executadas: $executadas");
+        
+        // Datas min/max
+        $sql_datas = "
+            SELECT 
+                MIN(sch_data_inicio) as data_min,
+                MAX(sch_data_inicio) as data_max,
+                COUNT(DISTINCT sch_programa_id) as programas,
+                COUNT(DISTINCT sch_sku) as skus
+            FROM sch_linhas
+            WHERE sch_data_inicio IS NOT NULL
+        ";
+        $stmt = $pdo->prepare($sql_datas);
+        $stmt->execute();
+        $datas = $stmt->fetch(PDO::FETCH_ASSOC);
+        error_log("📅 Período: {$datas['data_min']} a {$datas['data_max']}");
+        
+        // Distribuição por tipo
+        $sql_tipo = "
+            SELECT 
+                sch_tipo,
+                COUNT(*) as qtd,
+                COUNT(CASE WHEN sch_fim_producao IS NOT NULL THEN 1 END) as executadas
+            FROM sch_linhas
+            WHERE sch_tipo IS NOT NULL
+            GROUP BY sch_tipo
+        ";
+        $stmt = $pdo->prepare($sql_tipo);
+        $stmt->execute();
+        $tipos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        error_log("🔹 Distribuição por tipo: " . json_encode($tipos));
+        
+        // Desvio médio dos executados
+        $sql_desvio = "
+            SELECT 
+                AVG(TIMESTAMPDIFF(MINUTE, sch_inicio_planejado, sch_fim_producao)) as desvio_medio_minutos,
+                COUNT(*) as com_desvio
+            FROM sch_linhas
+            WHERE sch_inicio_planejado IS NOT NULL 
+            AND sch_fim_producao IS NOT NULL
+        ";
+        $stmt = $pdo->prepare($sql_desvio);
+        $stmt->execute();
+        $desvio = $stmt->fetch(PDO::FETCH_ASSOC);
+        error_log("📊 Desvio médio: {$desvio['desvio_medio_minutos']} min");
+        
+        echo json_encode([
+            'sucesso' => true,
+            'diagnostico' => [
+                'total_linhas' => (int) $total,
+                'executadas' => (int) $executadas,
+                'planejadas' => (int) ($total - $executadas),
+                'percentual_executadas' => $total > 0 ? round(($executadas / $total) * 100, 2) : 0,
+                'periodo' => [
+                    'data_inicio' => $datas['data_min'],
+                    'data_fim' => $datas['data_max'],
+                    'programacoes' => (int) $datas['programas'],
+                    'skus_unicos' => (int) $datas['skus']
+                ],
+                'por_tipo' => array_map(fn($t) => [
+                    'tipo' => $t['sch_tipo'],
+                    'total' => (int) $t['qtd'],
+                    'executadas' => (int) $t['executadas'],
+                    'percentual' => round((($t['executadas'] ?? 0) / ($t['qtd'] ?? 1)) * 100, 2)
+                ], $tipos),
+                'desvio' => [
+                    'media_minutos' => round((float) ($desvio['desvio_medio_minutos'] ?? 0), 2),
+                    'registros_com_desvio' => (int) ($desvio['com_desvio'] ?? 0)
+                ],
+                'timestamp' => date('Y-m-d H:i:s')
+            ]
+        ], JSON_UNESCAPED_UNICODE);
+        
+    } catch (Exception $e) {
+        error_log('🔴 Erro em handleDiagnostico: ' . $e->getMessage());
+        throw $e;
+    }
+}
+
+/**
+ * ETAPA 1.2 - HISTÓRICOS COM DESVIOS
+ * Retorna dados históricos executados com comparação planejado vs realizado
+ * Parâmetro: periodo=7d (últimos 7 dias), data_inicio, data_fim
+ */
+function handleHistoricos(): void
+{
+    error_log('🔵 handleHistoricos() iniciado');
+    
+    $periodo = $_GET['periodo'] ?? '7d';
+    $dataInicio = $_GET['data_inicio'] ?? null;
+    $dataFim = $_GET['data_fim'] ?? null;
+    $prgId = (int) ($_GET['prg_id'] ?? 0);
+    
+    try {
+        $pdo = \App\Database\Connection::get();
+        $agora = new DateTime('now', new DateTimeZone('America/Sao_Paulo'));
+        
+        // Determinar datas
+        $dataSql = clone $agora;
+        
+        if (!$dataInicio || !$dataFim) {
+            // Usar período
+            if ($periodo === '7d') {
+                $dataSql->modify('-7 days');
+                $dataInicio = $dataSql->format('Y-m-d');
+                $dataFim = $agora->format('Y-m-d');
+            } elseif ($periodo === '30d') {
+                $dataSql->modify('-30 days');
+                $dataInicio = $dataSql->format('Y-m-d');
+                $dataFim = $agora->format('Y-m-d');
+            }
+        }
+        
+        error_log("📅 Período: $dataInicio a $dataFim");
+        
+        // Query: históricos enriquecida com cálculos
+        $sql = "
+            SELECT 
+                p.prg_id,
+                p.prg_numero_op,
+                l.lin_codigo,
+                p.prg_eficiencia,
+                s.sch_id,
+                s.sch_sequencia,
+                s.sch_tipo,
+                s.sch_sku,
+                s.sch_descricao,
+                s.sch_quantidade,
+                s.sch_taxa_por_hora,
+                s.sch_duracao_minutos,
+                s.sch_sku_anterior,
+                s.sch_data_inicio,
+                s.sch_hora_inicio,
+                s.sch_hora_fim,
+                s.sch_inicio_planejado,
+                s.sch_inicio_producao,
+                s.sch_fim_producao,
+                s.sch_produzido_estimado,
+                s.sch_status,
+                TIMESTAMPDIFF(MINUTE, s.sch_inicio_planejado, s.sch_fim_producao) as duracao_real_minutos,
+                TIMESTAMPDIFF(MINUTE, s.sch_inicio_planejado, s.sch_fim_producao) - s.sch_duracao_minutos as desvio_minutos,
+                ROUND((TIMESTAMPDIFF(MINUTE, s.sch_inicio_planejado, s.sch_fim_producao) - s.sch_duracao_minutos) / s.sch_duracao_minutos * 100, 2) as desvio_percentual
+            FROM prg_programas p
+            LEFT JOIN lin_linhas l ON l.lin_id = p.prg_linha_id
+            LEFT JOIN sch_linhas s ON s.sch_programa_id = p.prg_id
+            WHERE s.sch_fim_producao IS NOT NULL
+            AND s.sch_sku IS NOT NULL
+            AND DATE(s.sch_data_inicio) >= :data_inicio
+            AND DATE(s.sch_data_inicio) <= :data_fim
+        ";
+        
+        if ($prgId > 0) {
+            $sql .= " AND p.prg_id = :prg_id";
+        }
+        
+        $sql .= " ORDER BY s.sch_data_inicio DESC, s.sch_sequencia ASC";
+        
+        error_log('🟡 Preparando query...');
+        $stmt = $pdo->prepare($sql);
+        $stmt->bindValue(':data_inicio', $dataInicio);
+        $stmt->bindValue(':data_fim', $dataFim);
+        if ($prgId > 0) {
+            $stmt->bindValue(':prg_id', $prgId, PDO::PARAM_INT);
+        }
+        
+        error_log('🟡 Executando query...');
+        $stmt->execute();
+        $historicos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        error_log('✅ Históricos carregados: ' . count($historicos));
+        
+        // Calcular resumo
+        $totalExec = count($historicos);
+        $noProzo = 0;
+        $atrasado = 0;
+        $desvioCumulativo = 0;
+        
+        foreach ($historicos as $h) {
+            $desvio = (float) ($h['desvio_percentual'] ?? 0);
+            $desvioCumulativo += abs($desvio);
+            
+            if ($desvio <= 5 && $desvio >= -5) {
+                $noProzo++;
+            } else {
+                $atrasado++;
+            }
+        }
+        
+        $resumo = [
+            'periodo' => $periodo,
+            'data_inicio' => $dataInicio,
+            'data_fim' => $dataFim,
+            'total_executados' => $totalExec,
+            'no_praze_pct' => $totalExec > 0 ? round(($noProzo / $totalExec) * 100, 2) : 0,
+            'atrasados_pct' => $totalExec > 0 ? round(($atrasado / $totalExec) * 100, 2) : 0,
+            'desvio_medio_pct' => $totalExec > 0 ? round($desvioCumulativo / $totalExec, 2) : 0
+        ];
+        
+        // Formatar dados
+        $dados = array_map(fn($h) => [
+            'prg_id' => (int) $h['prg_id'],
+            'numero_op' => $h['prg_numero_op'] ?? 'OP Sem Número',
+            'linha' => $h['lin_codigo'] ?? 'N/A',
+            'eficiencia_prg' => (float) $h['prg_eficiencia'],
+            'sch_id' => (int) $h['sch_id'],
+            'sequencia' => (int) $h['sch_sequencia'],
+            'tipo' => $h['sch_tipo'],
+            'sku' => $h['sch_sku'],
+            'descricao' => $h['sch_descricao'],
+            'quantidade_planejada' => (float) ($h['sch_quantidade'] ?? 0),
+            'quantidade_produzida' => (float) ($h['sch_produzido_estimado'] ?? 0),
+            'duracao_planejada_minutos' => (int) $h['sch_duracao_minutos'],
+            'duracao_real_minutos' => (int) ($h['duracao_real_minutos'] ?? 0),
+            'desvio_minutos' => (float) ($h['desvio_minutos'] ?? 0),
+            'desvio_percentual' => (float) ($h['desvio_percentual'] ?? 0),
+            'data_execucao' => $h['sch_data_inicio'],
+            'hora_inicio_planejada' => $h['sch_hora_inicio'],
+            'hora_fim_planejada' => $h['sch_hora_fim'],
+            'hora_inicio_real' => $h['sch_inicio_producao'] ? substr($h['sch_inicio_producao'], 11, 5) : null,
+            'hora_fim_real' => $h['sch_fim_producao'] ? substr($h['sch_fim_producao'], 11, 5) : null,
+            'status_execucao' => $h['sch_status'],
+            'pontual' => (float) ($h['desvio_percentual'] ?? 0) <= 5,
+            'sku_anterior' => $h['sch_sku_anterior']
+        ], $historicos);
+        
+        echo json_encode([
+            'sucesso' => true,
+            'resumo' => $resumo,
+            'historicos' => $dados
+        ], JSON_UNESCAPED_UNICODE);
+        
+    } catch (Exception $e) {
+        error_log('🔴 Erro em handleHistoricos: ' . $e->getMessage());
+        throw $e;
+    }
 }

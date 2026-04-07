@@ -24,6 +24,7 @@ document.addEventListener('DOMContentLoaded', function () {
   var currentProgramacao = null;
   var currentProgramacaoLabel = '';
   var programOpLookup = {};
+  var sequenceOpMap = {};
 
   var params = new URLSearchParams(window.location.search);
   var prefill = params.get('prg_id');

@@ -192,6 +192,90 @@ if (!empty($schedule)) {
         .gantt_task_content { font-size: 11px; font-weight: bold; }
         .gantt_grid_head_cell { font-weight: bold; color: #555; }
         .gantt_scale_cell { font-weight: bold; color: #2c3e50; border-right: 1px solid #ebebeb; }
+
+        /* Permitir 2 linhas na coluna de texto (OP em cima, produto abaixo) */
+        .gantt_grid_data .gantt_cell,
+        .gantt_grid_data .gantt_tree_content {
+            white-space: normal !important;
+            line-height: 1.15;
+        }
+
+        .pcp-grid-op {
+            font-weight: 800;
+            color: #0f172a;
+        }
+
+        .pcp-grid-setup {
+            width: 100%;
+            text-align: right;
+            padding-right: 10px;
+            font-weight: 900;
+            color: #0f172a;
+            line-height: 44px; /* alinha no meio da linha (row_height) */
+        }
+
+        .pcp-grid-prod {
+            font-size: 11px;
+            font-weight: 600;
+            color: #64748b;
+            margin-top: 2px;
+        }
+
+        /* Centralizar verticalmente os badges Previsto/Realizado dentro da linha */
+        .pcp-realizado-cell {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            height: 100%;
+            width: 100%;
+        }
+
+        /* Para SETUP: deixar o "-" bem a direita na coluna */
+        .pcp-realizado-cell--setup {
+            justify-content: flex-end;
+            padding-right: 10px;
+            text-align: right;
+        }
+
+        .pcp-realizado-setup {
+            display: block;
+            width: 100%;
+            text-align: right;
+            color: #94a3b8;
+            font-weight: 800;
+        }
+
+        /* Garante centralizacao vertical do conteudo na coluna Previsto|Realizado */
+        .gantt_grid_data .gantt_cell[data-column-name="realizado"] {
+            display: flex;
+            align-items: center;
+        }
+
+        .pcp-realizado-sep {
+            color: #94a3b8;
+            font-weight: 700;
+        }
+
+        .pcp-realizado-badge {
+            color: #fff;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: 800;
+            display: inline-block;
+            text-align: center;
+            line-height: 1.25;
+            min-width: 60px;
+        }
+
+        .pcp-realizado-badge--prev {
+            background: #10b981;
+        }
+
+        .pcp-realizado-badge--real {
+            min-width: 95px;
+        }
         
         /* Forçar visibilidade das barras de scroll - APARECER SEMPRE QUE NECESSÁRIO */
         .gantt_hor_scroll { 
@@ -274,6 +358,16 @@ if (!empty($schedule)) {
     // Localização para Português (Deve vir antes da config)
     gantt.i18n.setLocale("pt");
 
+    function escapeHtml(text) {
+        if (text === null || text === undefined) return "";
+        return String(text)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/\"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
     // Configurações Básicas
     gantt.config.date_format = "%d-%m-%Y %H:%i";
     gantt.config.readonly = true;
@@ -307,7 +401,20 @@ if (!empty($schedule)) {
             tree: true,
             template: function(task) {
                 // Simplesmente retornar o text - ele já contém a quebra de linha e descrição
-                return task.text;
+                // OP na primeira linha e produto abaixo (mesma linha/raia no grid).
+                var isSetup = (task.tipo && String(task.tipo).toLowerCase() === "setup")
+                    || (task.text && task.text.indexOf("SETUP") !== -1);
+
+                if (isSetup) {
+                    // Move o "SETUP" para a coluna Previsto | Realizado (no lugar do "-").
+                    return '<div class="pcp-grid-op">&nbsp;</div>';
+                }
+
+                var op = escapeHtml(task.op || "");
+                var prod = escapeHtml(task.descricao_produto || "-");
+
+                return '<div class="pcp-grid-op">OP ' + op + '</div>' +
+                       '<div class="pcp-grid-prod">' + prod + '</div>';
             }
         },
         {
@@ -317,7 +424,7 @@ if (!empty($schedule)) {
             template: function(task) {
                 // Se for SETUP, não mostrar
                 if(task.text && task.text.indexOf("SETUP") !== -1) {
-                    return '<span style="color: #999;">-</span>';
+                    return '<div class="pcp-realizado-cell pcp-realizado-cell--setup"><span class="pcp-realizado-setup">SETUP</span></div>';
                 }
                 
                 var prev = task.quantidade_prevista || 0;
@@ -330,16 +437,13 @@ if (!empty($schedule)) {
                     bgColorRealizado = pct >= 100 ? '#10b981' : (pct >= 80 ? '#f59e0b' : '#ef4444');
                 }
                 
-                // PREVISTO sempre em verde
-                var bgColorPrevisto = '#10b981';
-                
-                return '<span style="background: ' + bgColorPrevisto + '; color: white; padding: 2px 4px; border-radius: 3px; font-size: 11px; font-weight: bold; display: inline-block; width: 60px; text-align: center;">' +
-                       prev.toFixed(0) +
+                return '<div class="pcp-realizado-cell">' +
+                       '<span class="pcp-realizado-badge pcp-realizado-badge--prev">' + prev.toFixed(0) + '</span>' +
+                       '<span class="pcp-realizado-sep">|</span>' +
+                       '<span class="pcp-realizado-badge pcp-realizado-badge--real" style="background:' + bgColorRealizado + ';">' +
+                          real.toFixed(0) + ' (' + pct.toFixed(0) + '%)' +
                        '</span>' +
-                       '<span style="color: #999; margin: 0 8px; display: inline-block;">|</span>' +
-                       '<span style="background: ' + bgColorRealizado + '; color: white; padding: 2px 4px; border-radius: 3px; font-size: 11px; font-weight: bold; display: inline-block; width: 80px;">' +
-                       real.toFixed(0) + ' (' + pct.toFixed(0) + '%)' +
-                       '</span>';
+                       '</div>';
             }
         }
     ];
@@ -355,7 +459,8 @@ if (!empty($schedule)) {
 
     // Ajustes de Dimensões para forçar o scroll horizontal
     gantt.config.scale_height = 50;
-    gantt.config.row_height = 32;
+    // 2 linhas no grid: OP + produto
+    gantt.config.row_height = 44;
     gantt.config.min_column_width = 100;
 
     // Esconder coluna "realizado" (informação agora está nas barras)
@@ -392,12 +497,17 @@ if (!empty($schedule)) {
         // Criar overlay com informação - REALIZADO | PREVISTO
         var overlay = document.createElement('div');
         overlay.style.position = 'absolute';
-        overlay.style.top = '2px';
-        overlay.style.left = '3px';
+        // Centraliza verticalmente dentro da barra (evita ficar "colado" no topo nas linhas de baixo).
+        overlay.style.top = '50%';
+        overlay.style.left = '6px';
+        overlay.style.transform = 'translateY(-50%)';
         overlay.style.fontSize = '9px';
         overlay.style.fontWeight = 'bold';
         overlay.style.color = '#fff';
-        overlay.style.padding = '1px 4px';
+        overlay.style.display = 'flex';
+        overlay.style.alignItems = 'center';
+        overlay.style.gap = '4px';
+        overlay.style.padding = '1px 3px';
         overlay.style.borderRadius = '2px';
         overlay.style.whiteSpace = 'nowrap';
         overlay.style.pointerEvents = 'none';
@@ -406,17 +516,16 @@ if (!empty($schedule)) {
         // Criar spans para cada número com cores diferentes
         var realSpan = document.createElement('span');
         realSpan.style.backgroundColor = '#ef4444';  // Vermelho para realizado
-        realSpan.style.padding = '0 2px';
+        realSpan.style.padding = '0 3px';
         realSpan.textContent = real.toFixed(0);
         
         var divider = document.createElement('span');
         divider.style.color = '#999';
-        divider.style.margin = '0 2px';
         divider.textContent = '|';
         
         var prevSpan = document.createElement('span');
         prevSpan.style.backgroundColor = '#10b981';  // Verde para previsto
-        prevSpan.style.padding = '0 2px';
+        prevSpan.style.padding = '0 3px';
         prevSpan.textContent = prev.toFixed(0);
         
         var pctSpan = document.createElement('span');

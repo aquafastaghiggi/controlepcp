@@ -1,0 +1,66 @@
+INSTRUÇÕES POSTMAN - BUSCAR OP 201055 FINALIZADA
+
+=== OPÇÃO 1: VERIFICAR STATUS GERAL ===
+
+1. Criar nova requisição GET
+   URL: http://192.168.8.246:8080/action/ger/webservice/rest/ordemProducao/23599
+
+2. Abas:
+   - Headers: 
+     Authorization: Basic (após clicar, copiar este base64)
+     User: Aghiggi
+     Password: @Ag0351@
+   
+   OU manualmente:
+     Authorization: Basic QWdoaWdnaToAQWcwMzUxQA==
+
+3. Enviar (Send)
+
+4. Verificar no Response:
+   - Campo "status" - procura por: FINALIZADO, CONCLUIDO, PARADA
+   - Campo "ultimaAlteracao" - data de quando foi marcado como finalizado
+
+
+=== OPÇÃO 2: VER RELATÓRIO DE EVENTOS (produção em máquinas) ===
+
+1. Criar nova requisição GET
+   URL: http://192.168.8.246:8080/action/ger/webservice/rest/relatorioEvento?page=1&pageSize=100
+
+2. Headers:
+   - Authorization: Basic QWdoaWdnaToAQWcwMzUxQA==
+
+3. Body (raw, JSON):
+{
+  "codOrdemProducao": 23599
+}
+
+4. Enviar
+
+5. No Response, procurar pelo último evento com:
+   - campo "estado": PARADA (significa parado/finalizado)
+   - campo "fim": data/hora quando parou
+
+
+=== OPÇÃO 3: LISTAR TODOS OS STATUS POSSÍVEIS (Debug) ===
+
+1. Requisição GET
+   URL: http://192.168.8.246:8080/action/ger/webservice/rest/ordemProducao?pageSize=50&page=1
+
+2. Headers:
+   - Authorization: Basic QWdoaWdnaToAQWcwMzUxQA==
+
+3. Enviar
+
+4. Procurar no Response por diferentes valores do campo "status"
+   (vai mostrar ordens com status INICIADO, FINALIZADO, etc.)
+
+
+=== CREDENCIAIS BASE64 ===
+User: Aghiggi
+Password: @Ag0351@
+Base64 (copie e cole): QWdoaWdnaToAQWcwMzUxQA==
+
+Ao usar Basic Auth do Postman:
+- Username: Aghiggi
+- Password: @Ag0351@
+- Clique em "Send" - Postman encoda automaticamente

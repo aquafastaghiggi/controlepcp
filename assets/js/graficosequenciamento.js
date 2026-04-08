@@ -12,13 +12,23 @@ document.addEventListener('DOMContentLoaded', function () {
   var axis = document.getElementById('sequenciamento-axis');
   var statusArea = document.getElementById('sequenciamento-status-area');
   var programSelect = document.getElementById('sequenciamento-programacao');
-  var resourceInput = document.getElementById('sequenciamento-recurso');
+  var resourceSelect = document.getElementById('sequenciamento-recurso');
   var statusFilter = document.getElementById('sequenciamento-status');
   var periodSelect = document.getElementById('sequenciamento-periodo');
+  var viewModeSelect = document.getElementById('sequenciamento-visao');
   var buscarButton = document.getElementById('sequenciamento-buscar');
   var tooltip = document.createElement('div');
   tooltip.className = 'sequenciamento-tooltips';
   document.body.appendChild(tooltip);
+  var detailPanel = document.getElementById('sequenciamento-detail-panel');
+  var detailContent = detailPanel ? detailPanel.querySelector('.sequenciamento-detail-content') : null;
+  var activeRow = null;
+  var summaryProductionEl = document.getElementById('summary-production');
+  var summarySetupEl = document.getElementById('summary-setup');
+  var summaryCountEl = document.getElementById('summary-count');
+  var resourceHeader = document.getElementById('resource-list');
+  var periodButtons = document.querySelectorAll('.period-btn');
+  var viewMode = viewModeSelect ? viewModeSelect.value || 'planejado' : 'planejado';
 
   var tasks = [];
   var currentProgramacao = null;
@@ -112,17 +122,40 @@ document.addEventListener('DOMContentLoaded', function () {
 
   if (periodSelect) {
     periodSelect.addEventListener('change', function () {
+      setActivePeriodButton(periodSelect.value);
       handleFilterChange('Período');
     });
+  }
+  if (periodButtons.length) {
+    periodButtons.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var period = btn.dataset.period;
+        if (!period) {
+          return;
+        }
+        if (periodSelect) {
+          periodSelect.value = period;
+        }
+        setActivePeriodButton(period);
+        handleFilterChange('Período');
+      });
+    });
+    setActivePeriodButton(periodSelect ? periodSelect.value : 'tudo');
   }
   if (statusFilter) {
     statusFilter.addEventListener('change', function () {
       handleFilterChange('Status');
     });
   }
-  if (resourceInput) {
-    resourceInput.addEventListener('input', function () {
+  if (resourceSelect) {
+    resourceSelect.addEventListener('change', function () {
       handleFilterChange('Recurso');
+    });
+  }
+  if (viewModeSelect) {
+    viewModeSelect.addEventListener('change', function () {
+      viewMode = viewModeSelect.value || 'planejado';
+      handleFilterChange('Visão');
     });
   }
 
@@ -148,7 +181,9 @@ document.addEventListener('DOMContentLoaded', function () {
         currentProgramacaoLabel = programOpLookup[identifier] || ''
           || (programacaoData.prg_numero_op || programacaoData.numero_op || '');
         currentProgramacao = programacaoData;
+        sequenceOpMap = buildSequenceOpMap(programacaoData.itens || []);
         tasks = buildTasksFromSchedule(scheduleData || []);
+        updateResourceOptions(tasks);
         var count = renderCurrentView();
         if (!count) {
           setStatus('Nenhuma tarefa encontrada com os filtros selecionados.', 'info');
@@ -186,16 +221,20 @@ document.addEventListener('DOMContentLoaded', function () {
   function renderCurrentView() {
     clearChart();
     if (!tasks.length) {
+      updateSummary([]);
       return 0;
     }
     var filtered = filtrarTarefas(tasks);
     if (!filtered.length) {
+      updateSummary([]);
       return 0;
     }
-    var range = getTimelineRange(filtered);
-    var visible = applyWindowRange(range);
-    renderAxis(filtered, visible);
-    renderTasks(filtered, visible);
+    var fullRange = getTimelineRange(filtered);
+    var viewRange = applyWindowRange(fullRange);
+    renderAxis(filtered, fullRange);
+    renderTasks(filtered, fullRange, viewRange);
+    updateResourceHeader(filtered);
+    updateSummary(filtered);
     return filtered.length;
   }
 
@@ -224,11 +263,8 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function filtrarTarefas(items) {
-    var recursoBusca = '';
+    var selectedResources = getSelectedResources();
     var statusValor = 'todos';
-    if (resourceInput && resourceInput.value) {
-      recursoBusca = resourceInput.value.trim().toLowerCase();
-    }
     if (statusFilter && statusFilter.value) {
       statusValor = statusFilter.value.toLowerCase();
     }
@@ -241,8 +277,14 @@ document.addEventListener('DOMContentLoaded', function () {
       if (statusValor !== 'todos' && tipo !== statusValor) {
         return false;
       }
-      if (recursoBusca && (task.recurso || '').toLowerCase().indexOf(recursoBusca) === -1) {
-        return false;
+      if (selectedResources.length) {
+        var resourceNormalized = (task.recurso || '').toLowerCase();
+        var matches = selectedResources.some(function (res) {
+          return res === resourceNormalized;
+        });
+        if (!matches) {
+          return false;
+        }
       }
       return true;
     });
@@ -282,6 +324,27 @@ document.addEventListener('DOMContentLoaded', function () {
       span.style.width = 100 / totalDays + '%';
       daysContainer.appendChild(span);
     });
+    renderHourRow(dayList, totalDays);
+  }
+
+  function renderHourRow(dayList, totalDays) {
+    var hourContainer = document.createElement('div');
+    hourContainer.className = 'axis-hours';
+    var hours = [0, 6, 12, 18];
+    var totalCells = totalDays * hours.length;
+    if (!totalCells) {
+      return;
+    }
+    dayList.forEach(function (day) {
+      hours.forEach(function (hour, idx) {
+        var span = document.createElement('span');
+        var label = pad(hour);
+        span.textContent = label + ':00';
+        span.style.width = 100 / totalCells + '%';
+        hourContainer.appendChild(span);
+      });
+    });
+    axis.appendChild(hourContainer);
   }
 
   function buildDayList(range) {
@@ -355,11 +418,19 @@ document.addEventListener('DOMContentLoaded', function () {
     for (var i = 0; i < items.length; i++) {
       var start = parseDate(items[i].start);
       var end = parseDate(items[i].end);
+      var actualStart = parseDate(items[i].actualStart);
+      var actualEnd = parseDate(items[i].actualEnd);
       if (start && start < min) {
         min = start;
       }
       if (end && end > max) {
         max = end;
+      }
+      if (actualStart && actualStart < min) {
+        min = actualStart;
+      }
+      if (actualEnd && actualEnd > max) {
+        max = actualEnd;
       }
     }
     return { start: isFinite(min) ? min : null, end: isFinite(max) ? max : null };
@@ -367,12 +438,17 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function applyWindowRange(range) {
     if (!range.start || !range.end) {
-      return range;
+      return { viewStart: null, viewEnd: null };
     }
     var periodMap = {
       semana: 7,
       '14dias': 14,
       mes: 30,
+      '24h': 1,
+      '12h': 0.5,
+      '8h': 0.33,
+      '4h': 0.17,
+      tudo: 30,
     };
     var periodValue = 'mes';
     if (periodSelect && periodSelect.value) {
@@ -382,20 +458,20 @@ document.addEventListener('DOMContentLoaded', function () {
     var requestedMs = days * 24 * 60 * 60 * 1000;
     var span = range.end - range.start;
     if (span <= requestedMs) {
-      return range;
+      return { viewStart: range.start, viewEnd: range.end };
     }
     var now = Date.now();
-    var end = Math.min(range.end, Math.max(range.start + requestedMs / 2, now));
-    var start = end - requestedMs;
-    if (start < range.start) {
-      start = range.start;
-      end = Math.min(range.start + requestedMs, range.end);
+    var viewEnd = Math.min(range.end, Math.max(range.start + requestedMs / 2, now));
+    var viewStart = viewEnd - requestedMs;
+    if (viewStart < range.start) {
+      viewStart = range.start;
+      viewEnd = Math.min(range.start + requestedMs, range.end);
     }
-    if (end > range.end) {
-      end = range.end;
-      start = Math.max(range.start, range.end - requestedMs);
+    if (viewEnd > range.end) {
+      viewEnd = range.end;
+      viewStart = Math.max(range.start, range.end - requestedMs);
     }
-    return { start: start, end: end };
+    return { viewStart: viewStart, viewEnd: viewEnd };
   }
 
   function buildDayLabels(startMs, endMs) {
@@ -412,13 +488,15 @@ document.addEventListener('DOMContentLoaded', function () {
     return labels;
   }
 
-  function renderTasks(items, visibleRange) {
-    var range = visibleRange || getTimelineRange(items);
+  function renderTasks(items, fullRange, viewRange) {
+    var range = fullRange || getTimelineRange(items);
     if (!range.start || !range.end) {
       chart.innerHTML = '';
       return;
     }
-    var totalMs = range.end - range.start || 1;
+    var longestDuration = getLongestTaskDuration(items);
+    var totalMs = Math.max(range.end - range.start, longestDuration, 1);
+    var timelineStart = range.start;
     chart.innerHTML = '';
     var sorted = items.slice().sort(function (a, b) {
       var startA = parseDate(a.start) || 0;
@@ -427,8 +505,6 @@ document.addEventListener('DOMContentLoaded', function () {
     });
     for (var i = 0; i < sorted.length; i++) {
       var task = sorted[i];
-      var rawStart = parseDate(task.start);
-      var rawEnd = parseDate(task.end);
       var row = document.createElement('div');
       row.className = 'sequenciamento-row';
       var label = document.createElement('div');
@@ -445,39 +521,111 @@ document.addEventListener('DOMContentLoaded', function () {
       barArea.className = 'sequenciamento-row-bar-area';
       row.appendChild(label);
       row.appendChild(barArea);
-      if (!rawStart || !rawEnd) {
+      var planRange = getTaskRange(task, 'planejado');
+      var actualRange = getTaskRange(task, 'execucao');
+      var appended = false;
+      if (planRange.start && planRange.end && planRange.end > planRange.start) {
+      var planBar = renderBar(
+        planRange,
+        task.color || '#3B82F6',
+        'plan',
+        timelineStart,
+        totalMs,
+        viewMode === 'execucao'
+      );
+        if (planBar) {
+          var tooltipText = buildTooltipText(task);
+          var timelineLabel = formatTimelineRange(task.start, task.end);
+          var fullTooltip = [timelineLabel, tooltipText].filter(Boolean).join(' · ');
+          planBar.dataset.count = task.tooltip && task.tooltip.Quant ? formatNumber(task.tooltip.Quant) : '';
+          planBar.setAttribute('title', fullTooltip);
+          bindBarEvents(planBar, row, task, fullTooltip);
+          barArea.appendChild(planBar);
+          appended = true;
+        }
+      }
+      if (viewMode === 'execucao' && actualRange.start && actualRange.end && actualRange.end > actualRange.start) {
+        var actualBar = renderBar(actualRange, '#10B981', 'actual', timelineStart, totalMs);
+        if (actualBar) {
+          actualBar.setAttribute('title', 'Execução real');
+          bindBarEvents(actualBar, row, task, 'Execução real');
+          barArea.appendChild(actualBar);
+          appended = true;
+        }
+      }
+      if (!appended) {
         chart.appendChild(row);
         continue;
       }
-      var taskStart = Math.max(range.start, rawStart);
-      var taskEnd = Math.min(range.end, rawEnd);
-      if (taskEnd <= taskStart) {
-        chart.appendChild(row);
-        continue;
-      }
-      var left = ((taskStart - range.start) / totalMs) * 100;
-      var width = ((taskEnd - taskStart) / totalMs) * 100;
-      var bar = document.createElement('span');
-      bar.className = 'sequenciamento-bar';
-      bar.style.left = Math.max(0, Math.min(100, left)) + '%';
-      bar.style.width = Math.max(1, Math.min(100, width)) + '%';
-      bar.style.background = task.color || '#3B82F6';
-      bar.dataset.count = task.tooltip && task.tooltip.Quant ? formatNumber(task.tooltip.Quant) : '';
-      var tooltipText = buildTooltipText(task);
-      var timelineLabel = formatTimelineRange(task.start, task.end);
-      var fullTooltip = [timelineLabel, tooltipText].filter(Boolean).join(' · ');
-      bar.setAttribute('title', fullTooltip);
-      (function (barEl, tooltipValue) {
-        barEl.addEventListener('mousemove', function (event) {
-          showTooltip(event, tooltipValue);
-        });
-        barEl.addEventListener('mouseout', function () {
-          hideTooltip();
-        });
-      })(bar, fullTooltip);
-      barArea.appendChild(bar);
       chart.appendChild(row);
     }
+  }
+
+  function bindBarEvents(barEl, rowEl, taskData, tooltipValue) {
+    barEl.addEventListener('mousemove', function (event) {
+      showTooltip(event, tooltipValue);
+    });
+    barEl.addEventListener('mouseout', function () {
+      hideTooltip();
+    });
+    barEl.addEventListener('click', function () {
+      highlightRow(rowEl);
+      showDetailPanel(taskData);
+    });
+  }
+
+  function getTaskRange(task, mode) {
+    if (!task) {
+      return { start: null, end: null };
+    }
+    var start =
+      mode === 'execucao'
+        ? parseDate(task.actualStart) || parseDate(task.start)
+        : parseDate(task.start);
+    var end =
+      mode === 'execucao'
+        ? parseDate(task.actualEnd) || parseDate(task.end)
+        : parseDate(task.end);
+    return { start: start, end: end };
+  }
+
+  function renderBar(range, color, barType, timelineStart, totalMs, dimmed) {
+    if (!range.start || !range.end) {
+      return null;
+    }
+    var leftPercent = ((range.start - timelineStart) / totalMs) * 100;
+    var widthPercent = ((range.end - range.start) / totalMs) * 100;
+    var bar = document.createElement('span');
+    var classList = ['sequenciamento-bar'];
+    classList.push(barType === 'actual' ? 'actual' : 'plan');
+    if (dimmed && barType === 'plan') {
+      classList.push('plan-dimmed');
+    }
+    bar.className = classList.join(' ');
+    bar.style.left = Math.max(0, Math.min(100, leftPercent)) + '%';
+    bar.style.width = Math.max(1, Math.min(100, widthPercent)) + '%';
+    bar.style.background = color;
+    return bar;
+  }
+
+  function getLongestTaskDuration(items) {
+    var max = 0;
+    if (!Array.isArray(items)) {
+      return max;
+    }
+    for (var i = 0; i < items.length; i++) {
+      var start = parseDate(items[i].start);
+      var end = parseDate(items[i].end);
+      var actualStart = parseDate(items[i].actualStart);
+      var actualEnd = parseDate(items[i].actualEnd);
+      if (start && end) {
+        max = Math.max(max, end - start);
+      }
+      if (actualStart && actualEnd) {
+        max = Math.max(max, actualEnd - actualStart);
+      }
+    }
+    return max;
   }
 
   function buildTasksFromSchedule(schedule) {
@@ -503,6 +651,9 @@ document.addEventListener('DOMContentLoaded', function () {
       var tipo = (row.sch_tipo || 'Produção').toString().trim();
       var tipoKey = tipo.toLowerCase();
       var name = row.sch_descricao || row.sch_sku || tipo;
+      var durationMinutes = getDurationMinutes(row);
+      var actualStartDate = parseFlexibleDate(row.sch_inicio_producao);
+      var actualEndDate = parseFlexibleDate(row.sch_fim_producao);
       var task = {
         start: formatIso(start),
         end: formatIso(end),
@@ -515,12 +666,65 @@ document.addEventListener('DOMContentLoaded', function () {
           Quant: row.sch_quantidade || '',
           Tipo: tipo,
         },
-        programacaoOp: getProgramLabel(),
+        programacaoOp: resolveOpForScheduleRow(row),
+        durationMinutes: durationMinutes,
+        actualStart: actualStartDate ? formatIso(actualStartDate) : null,
+        actualEnd: actualEndDate ? formatIso(actualEndDate) : null,
         name: name,
       };
       items.push(task);
     }
     return items;
+  }
+
+  function buildSequenceOpMap(itens) {
+    var map = {};
+    if (!Array.isArray(itens) || !itens.length) {
+      return map;
+    }
+    for (var i = 0; i < itens.length; i++) {
+      var item = itens[i];
+      var seqKey = safeString(item.prg_sequencia ?? item.sequencia ?? item.sch_sequencia);
+      var opValue = safeString(item.prg_itens_op ?? item.op);
+      if (seqKey && opValue) {
+        map[seqKey] = opValue;
+      }
+    }
+    return map;
+  }
+
+  function resolveOpForScheduleRow(row) {
+    if (!row) {
+      return '';
+    }
+    var seqKey = safeString(row.sch_sequencia ?? row.prg_sequencia ?? row.sch_sequence);
+    if (seqKey && sequenceOpMap[seqKey]) {
+      return sequenceOpMap[seqKey];
+    }
+    var fallback = safeString(
+      row.sch_numero_programacao ||
+        row.prg_numero_op ||
+        row.numero_op ||
+        row.itens_op ||
+        row.op
+    );
+    if (fallback) {
+      return fallback;
+    }
+    if (currentProgramacaoLabel) {
+      return currentProgramacaoLabel;
+    }
+    if (currentProgramacao) {
+      return safeString(currentProgramacao.prg_numero_op || currentProgramacao.numero_op);
+    }
+    return '';
+  }
+
+  function safeString(value) {
+    if (value === undefined || value === null) {
+      return '';
+    }
+    return String(value).trim();
   }
 
   function buildRowLabel(task) {
@@ -544,6 +748,84 @@ document.addEventListener('DOMContentLoaded', function () {
     return { resource: resource, detail: detail };
   }
 
+  function getSelectedResourceValues() {
+    if (!resourceSelect) {
+      return [];
+    }
+    var values = Array.from(resourceSelect.selectedOptions)
+      .map(function (opt) {
+        return opt.value;
+      })
+      .filter(function (value) {
+        return value && value !== '__all__';
+      });
+    return values;
+  }
+
+  function getSelectedResources() {
+    return getSelectedResourceValues().map(function (value) {
+      return value.toLowerCase();
+    });
+  }
+
+  function updateResourceOptions(tasks) {
+    if (!resourceSelect) {
+      return;
+    }
+    var preserved = getSelectedResourceValues();
+    var resources = Array.from(
+      new Set(
+        (tasks || [])
+          .map(function (task) {
+            return task.recurso;
+          })
+          .filter(Boolean)
+      )
+    ).sort();
+    var html = '<option value="__all__"' + (preserved.length === 0 ? ' selected' : '') + '>Todos</option>';
+    resources.forEach(function (resource) {
+      var escaped = escapeHtml(resource);
+      html += '<option value="' + escaped + '">' + escaped + '</option>';
+    });
+    resourceSelect.innerHTML = html;
+    preserved.forEach(function (value) {
+      var option = resourceSelect.querySelector('option[value="' + value.replace(/"/g, '&quot;') + '"]');
+      if (option) {
+        option.selected = true;
+      }
+    });
+  }
+
+  function updateSummary(items) {
+    if (!summaryProductionEl || !summarySetupEl || !summaryCountEl) {
+      return;
+    }
+    var productionMinutes = 0;
+    var setupMinutes = 0;
+    var uniqueResources = new Set();
+    (items || []).forEach(function (task) {
+      if (!task) {
+        return;
+      }
+      if (task.recurso) {
+        uniqueResources.add(task.recurso);
+      }
+      var minutes = task.durationMinutes || 0;
+      if (minutes <= 0) {
+        return;
+      }
+      var tipo = (task.tipo || '').toLowerCase();
+      if (tipo.indexOf('setup') !== -1) {
+        setupMinutes += minutes;
+      } else {
+        productionMinutes += minutes;
+      }
+    });
+    summaryProductionEl.textContent = formatDurationLabel(productionMinutes);
+    summarySetupEl.textContent = formatDurationLabel(setupMinutes);
+    summaryCountEl.textContent = String(items.length || 0);
+  }
+
   function escapeHtml(text) {
     if (!text) {
       return '';
@@ -565,16 +847,40 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!candidate && row.sch_hora_fim) {
       candidate = buildDateTime(row.sch_data_inicio, row.sch_hora_fim);
     }
+    if (candidate && candidate <= start) {
+      candidate = null;
+    }
+
     if (!candidate) {
-      var duration = parseInt(row.sch_duracao_minutos, 10) || 0;
+      var duration = getDurationMinutes(row);
       if (duration > 0) {
         candidate = new Date(start.getTime() + duration * 60 * 1000);
       }
     }
+
     if (!candidate) {
       candidate = new Date(start.getTime() + 30 * 60 * 1000);
     }
     return candidate;
+  }
+
+  function getDurationMinutes(row) {
+    if (!row) {
+      return 0;
+    }
+    var duration = parseInt(row.sch_duracao_minutos, 10);
+    if (!isNaN(duration) && duration > 0) {
+      return duration;
+    }
+    var start = buildDateTime(row.sch_data_inicio, row.sch_hora_inicio);
+    var finish = buildDateTime(row.sch_data_inicio, row.sch_hora_fim);
+    if (start && finish) {
+      var diff = finish.getTime() - start.getTime();
+      if (diff > 0) {
+        return Math.round(diff / (60 * 1000));
+      }
+    }
+    return 0;
   }
 
   function buildDateTime(dateStr, timeStr) {
@@ -631,6 +937,28 @@ document.addEventListener('DOMContentLoaded', function () {
       pad(endDate.getDate()) + '/' + pad(endDate.getMonth() + 1) + ' ' + pad(endDate.getHours()) + ':' + pad(endDate.getMinutes());
   }
 
+  function setActivePeriodButton(period) {
+    if (!periodButtons.length) {
+      return;
+    }
+    var matched = false;
+    periodButtons.forEach(function (btn) {
+      if (btn.dataset.period === period) {
+        btn.classList.add('active');
+        matched = true;
+      } else {
+        btn.classList.remove('active');
+      }
+    });
+    if (!matched) {
+      periodButtons.forEach(function (btn) {
+        if (btn.dataset.period === 'tudo') {
+          btn.classList.add('active');
+        }
+      });
+    }
+  }
+
   function buildTooltipText(task) {
     var infoParts = [];
     if (task.tooltip) {
@@ -644,10 +972,53 @@ document.addEventListener('DOMContentLoaded', function () {
         }
       }
     }
+    if (task.durationMinutes > 0) {
+      infoParts.unshift('Duração: ' + formatDurationLabel(task.durationMinutes));
+    }
     if (task.name) {
       infoParts.unshift(task.name);
     }
     return infoParts.join(' / ');
+  }
+
+  function updateResourceHeader(items) {
+    if (!resourceHeader) {
+      return;
+    }
+    var resources = Array.from(
+      new Set(
+        (items || [])
+          .map(function (task) {
+            return task.recurso;
+          })
+          .filter(Boolean)
+      )
+    );
+    if (!resources.length) {
+      resourceHeader.textContent = 'Recurso: --';
+    return;
+  }
+  resourceHeader.textContent = 'Recursos: ' + resources.slice(0, 3).join(', ');
+  if (resources.length > 3) {
+    resourceHeader.textContent += ' + ' + (resources.length - 3) + ' outros';
+  }
+}
+
+  function clearResourceHeader() {
+    if (!resourceHeader) {
+      return;
+    }
+    resourceHeader.textContent = 'Recurso: --';
+  }
+
+  function formatDurationLabel(minutes) {
+    var mins = parseInt(minutes, 10);
+    if (isNaN(mins) || mins < 0) {
+      mins = 0;
+    }
+    var hours = Math.floor(mins / 60);
+    var remaining = mins % 60;
+    return hours + 'h ' + pad(remaining) + 'm';
   }
 
   function parseDate(value) {
@@ -671,6 +1042,78 @@ document.addEventListener('DOMContentLoaded', function () {
     return num.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
   }
 
+  function showDetailPanel(task) {
+    if (!detailContent) {
+      return;
+    }
+    var rows = [];
+    rows.push(buildDetailRow('OP', task.programacaoOp || '—'));
+    rows.push(buildDetailRow('Sequência', task.tooltip?.Seq || '—'));
+    rows.push(buildDetailRow('Tipo', task.tooltip?.Tipo || '—'));
+    rows.push(buildDetailRow('SKU', task.tooltip?.SKU || '—'));
+    rows.push(buildDetailRow('Quantidade', task.tooltip?.Quant ? formatNumber(task.tooltip.Quant) : '—'));
+    rows.push(buildDetailRow('Início', formatDateTimeDisplay(task.start) || '—'));
+    rows.push(buildDetailRow('Fim', formatDateTimeDisplay(task.end) || '—'));
+    if (task.durationMinutes > 0) {
+      rows.push(buildDetailRow('Duração', formatDurationLabel(task.durationMinutes)));
+    }
+    detailContent.innerHTML = rows.join('');
+    detailPanel?.classList.add('has-data');
+  }
+
+  function clearDetailPanel() {
+    if (!detailContent) {
+      return;
+    }
+    detailContent.innerHTML = '<p class="sequenciamento-detail-empty">Clique em uma barra para ver os dados completos.</p>';
+    detailPanel?.classList.remove('has-data');
+    if (activeRow) {
+      activeRow.classList.remove('is-active');
+      activeRow = null;
+    }
+  }
+
+  function highlightRow(rowEl) {
+    if (!rowEl) {
+      return;
+    }
+    if (activeRow && activeRow !== rowEl) {
+      activeRow.classList.remove('is-active');
+    }
+    rowEl.classList.add('is-active');
+    activeRow = rowEl;
+  }
+
+  function buildDetailRow(label, value) {
+    return (
+      '<div class="sequenciamento-detail-row">' +
+      '<span class="sequenciamento-detail-label">' +
+      label +
+      '</span>' +
+      '<span class="sequenciamento-detail-value">' +
+      value +
+      '</span>' +
+      '</div>'
+    );
+  }
+
+  function formatDateTimeDisplay(value) {
+    var parsed = parseDate(value);
+    if (!parsed) {
+      return '';
+    }
+    var date = new Date(parsed);
+    return (
+      pad(date.getDate()) +
+      '/' +
+      pad(date.getMonth() + 1) +
+      ' ' +
+      pad(date.getHours()) +
+      ':' +
+      pad(date.getMinutes())
+    );
+  }
+
   function pad(num) {
     return String(num).padStart(2, '0');
   }
@@ -682,6 +1125,8 @@ document.addEventListener('DOMContentLoaded', function () {
     if (chart) {
       chart.innerHTML = '';
     }
+    clearDetailPanel();
+    clearResourceHeader();
   }
 
   function setStatus(text, state) {

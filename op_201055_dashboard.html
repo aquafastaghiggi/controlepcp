@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OP 201055 - Planejado vs Realizado CODI</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 5px;
+        }
+        
+        .header p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+        
+        .content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            padding: 30px;
+        }
+        
+        @media (max-width: 1024px) {
+            .content {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .card {
+            border-radius: 8px;
+            padding: 20px;
+            border: 2px solid #e0e0e0;
+        }
+        
+        .card.planejado {
+            border-left: 6px solid #4CAF50;
+            background: #f1f8f4;
+        }
+        
+        .card.realizado {
+            border-left: 6px solid #2196F3;
+            background: #f1f5f9;
+        }
+        
+        .card h2 {
+            font-size: 18px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .card.planejado h2 {
+            color: #4CAF50;
+        }
+        
+        .card.realizado h2 {
+            color: #2196F3;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .badge.local {
+            background: #4CAF50;
+            color: white;
+        }
+        
+        .badge.codi {
+            background: #2196F3;
+            color: white;
+        }
+        
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(0,0,0,0.1);
+            font-size: 14px;
+        }
+        
+        .info-row:last-child {
+            border-bottom: none;
+        }
+        
+        .info-row label {
+            font-weight: 600;
+            color: #666;
+            flex: 1;
+        }
+        
+        .info-row value {
+            color: #333;
+            flex: 1;
+            text-align: right;
+            font-weight: 500;
+        }
+        
+        .quantity-section {
+            margin-top: 20px;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid rgba(0,0,0,0.1);
+        }
+        
+        .quantity-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            font-size: 14px;
+        }
+        
+        .quantity-item label {
+            font-weight: 500;
+            color: #666;
+        }
+        
+        .quantity-item value {
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .comparison {
+            grid-column: 1 / -1;
+            padding: 30px;
+            background: #f5f5f5;
+            border-radius: 8px;
+            border: 2px solid #e0e0e0;
+        }
+        
+        .comparison h2 {
+            margin-bottom: 20px;
+            color: #333;
+            font-size: 18px;
+        }
+        
+        .comparison-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+        
+        .comparison-item {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            border: 1px solid #e0e0e0;
+        }
+        
+        .comparison-item label {
+            display: block;
+            font-size: 12px;
+            color: #999;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+        
+        .comparison-item value {
+            display: block;
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .status-success {
+            color: #4CAF50;
+        }
+        
+        .status-not-found {
+            color: #f44336;
+        }
+        
+        .status-section {
+            grid-column: 1 / -1;
+            padding: 20px;
+            background: #fffbea;
+            border: 2px solid #ffeb3b;
+            border-radius: 8px;
+            margin-top: 10px;
+        }
+        
+        .status-section h3 {
+            margin-bottom: 10px;
+            color: #f57c00;
+            font-size: 14px;
+        }
+        
+        .status-section p {
+            margin: 5px 0;
+            font-size: 13px;
+            color: #666;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+            font-size: 16px;
+        }
+        
+        .error {
+            background: #ffebee;
+            border: 2px solid #f44336;
+            color: #c62828;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px;
+        }
+        
+        .sku-details {
+            margin-top: 20px;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            font-size: 13px;
+        }
+        
+        .sku-row {
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .sku-row:last-child {
+            border-bottom: none;
+        }
+        
+        .sku-label {
+            color: #666;
+            font-weight: 500;
+        }
+        
+        .sku-value {
+            color: #333;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 OP 201055</h1>
+            <p>Comparativo: Planejado (seu sistema) vs Realizado (CODI)</p>
+        </div>
+        
+        <div id="content" class="content">
+            <div class="loading">
+                <p>⏳ Carregando dados...</p>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        async function loadData() {
+            try {
+                const response = await fetch('api_integrated.php?action=detalhe_op&op=201055');
+                const data = await response.json();
+                
+                console.log('Data received:', data);
+                
+                const content = document.getElementById('content');
+                
+                // Check if planejado found
+                if (!data.planejado.encontrado && !data.realizado.encontrado) {
+                    content.innerHTML = '<div class="error" style="grid-column: 1/-1;">❌ OP 201055 não encontrada em nenhum sistema</div>';
+                    return;
+                }
+                
+                let html = '';
+                
+                // PLANEJADO Card
+                if (data.planejado.encontrado) {
+                    html += `
+                        <div class="card planejado">
+                            <h2>
+                                <span style="font-size:24px;">📋</span>
+                                PLANEJADO
+                                <span class="badge local">Seu Sistema</span>
+                            </h2>
+                            <div class="info-row">
+                                <label>OP:</label>
+                                <value>${data.op}</value>
+                            </div>
+                            <div class="info-row">
+                                <label>SKU(s):</label>
+                                <value>${data.planejado.total_itens}</value>
+                            </div>
+                            <div class="info-row">
+                                <label>Total Planejado:</label>
+                                <value style="color: #4CAF50; font-size: 16px;">${data.planejado.total_quantidade.toLocaleString('pt-BR')} un</value>
+                            </div>
+                            <div class="info-row">
+                                <label>Status:</label>
+                                <value>✓ Planejado</value>
+                            </div>
+                            <div class="quantity-section">
+                                <h4 style="margin-bottom: 15px; color: #4CAF50;">Detalhes dos SKUs:</h4>
+                                ${data.planejado.itens.map(item => `
+                                    <div class="sku-details">
+                                        <div class="sku-row">
+                                            <span class="sku-label">SKU:</span>
+                                            <span class="sku-value">${item.sku}</span>
+                                        </div>
+                                        <div class="sku-row">
+                                            <span class="sku-label">Quantidade:</span>
+                                            <span class="sku-value">${Number(item.quantidade).toLocaleString('pt-BR')} un</span>
+                                        </div>
+                                        <div class="sku-row">
+                                            <span class="sku-label">Linhas de Schedule:</span>
+                                            <span class="sku-value">${item.schedules_count}</span>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                // REALIZADO Card
+                if (data.realizado.encontrado) {
+                    const codi = data.realizado.dados;
+                    const item = codi.item || {};
+                    
+                    html += `
+                        <div class="card realizado">
+                            <h2>
+                                <span style="font-size:24px;">✓</span>
+                                REALIZADO
+                                <span class="badge codi">CODI</span>
+                            </h2>
+                            <div class="info-row">
+                                <label>OP na CODI:</label>
+                                <value>${codi.ordem}</value>
+                            </div>
+                            <div class="info-row">
+                                <label>Status:</label>
+                                <value style="color: #2196F3; font-weight: bold;">${codi.status}</value>
+                            </div>
+                            <div class="info-row">
+                                <label>Quantidade:</label>
+                                <value style="color: #2196F3; font-size: 16px;">${Number(codi.quantidade).toLocaleString('pt-BR')} un</value>
+                            </div>
+                            <div class="info-row">
+                                <label>SKU (CODI):</label>
+                                <value>${item.codItem || 'N/A'}</value>
+                            </div>
+                            <div class="info-row">
+                                <label>Produto:</label>
+                                <value style="font-size: 12px;">${item.nomeItem || 'N/A'}</value>
+                            </div>
+                            <div class="info-row">
+                                <label>Última Alteração:</label>
+                                <value style="font-size: 12px;">${new Date(codi.ultimaAlteracao).toLocaleString('pt-BR')}</value>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    html += `
+                        <div class="card realizado" style="opacity: 0.6;">
+                            <h2>
+                                <span style="font-size:24px;">❌</span>
+                                REALIZADO
+                                <span class="badge codi">CODI</span>
+                            </h2>
+                            <p style="color: #f44336; padding: 20px; text-align: center;">
+                                OP 201055 não foi encontrada na CODI durante a busca em 25 páginas.
+                                <br><br>
+                                <small>A OP pode estar:<br>
+                                • Em página posterior<br>
+                                • Ainda não sincronizada<br>
+                                • Com número diferente na CODI</small>
+                            </p>
+                        </div>
+                    `;
+                }
+                
+                // COMPARISON Section
+                if (data.planejado.encontrado && data.realizado.encontrado) {
+                    const codi = data.realizado.dados;
+                    const desvio = Number(codi.quantidade) - data.planejado.total_quantidade;
+                    const desvio_pct = ((desvio / data.planejado.total_quantidade) * 100).toFixed(1);
+                    
+                    html += `
+                        <div class="comparison">
+                            <h2>📈 Comparativo Detalhado</h2>
+                            <div class="comparison-grid">
+                                <div class="comparison-item">
+                                    <label>Planejado</label>
+                                    <value>${data.planejado.total_quantidade.toLocaleString('pt-BR')}</value>
+                                </div>
+                                <div class="comparison-item">
+                                    <label>Realizado</label>
+                                    <value>${Number(codi.quantidade).toLocaleString('pt-BR')}</value>
+                                </div>
+                                <div class="comparison-item">
+                                    <label>Desvio</label>
+                                    <value style="color: ${desvio < 0 ? '#f44336' : '#4CAF50'};">
+                                        ${desvio >= 0 ? '+' : ''}${desvio.toLocaleString('pt-BR')}
+                                    </value>
+                                </div>
+                                <div class="comparison-item">
+                                    <label>Desvio %</label>
+                                    <value style="color: ${desvio < 0 ? '#f44336' : '#4CAF50'};">
+                                        ${desvio_pct}%
+                                    </value>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                // STATUS Section
+                html += `
+                    <div class="status-section">
+                        <h3>📌 Informações da Sincronização</h3>
+                        <p><strong>Sistema Local:</strong> ${data.planejado.encontrado ? '✓ OP encontrada' : '✗ OP não encontrada'}</p>
+                        <p><strong>CODI API:</strong> ${data.realizado.encontrado ? '✓ OP encontrada' : '✗ OP não encontrada'}</p>
+                        <p><strong>Data de Consulta:</strong> ${new Date().toLocaleString('pt-BR')}</p>
+                        ${data.status.aviso ? `<p style="color: #f57c00;"><strong>⚠️ Aviso:</strong> ${data.status.aviso}</p>` : ''}
+                    </div>
+                `;
+                
+                content.innerHTML = html;
+                
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('content').innerHTML = `
+                    <div class="error" style="grid-column: 1/-1;">
+                        ❌ Erro ao carregar dados: ${error.message}
+                    </div>
+                `;
+            }
+        }
+        
+        // Load data on page load
+        window.addEventListener('load', loadData);
+    </script>
+</body>
+</html>

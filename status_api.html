@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Status da API</title>
+    <style>
+        body { font-family: Arial; padding: 20px; background: #f5f5f5; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; }
+        h1 { color: #333; }
+        .status { margin: 20px 0; padding: 15px; border-radius: 4px; }
+        .success { background: #e8f5e9; color: #2e7d32; border-left: 4px solid #4caf50; }
+        .error { background: #ffebee; color: #c62828; border-left: 4px solid #f44336; }
+        .loading { background: #e3f2fd; color: #1976d2; border-left: 4px solid #2196f3; }
+        pre { background: #f9f9f9; padding: 15px; border-radius: 4px; overflow-x: auto; }
+        code { color: #d63384; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>📡 Status da API Cruzamento</h1>
+    
+    <div id="status" class="status loading">
+        ⏳ Testando API...
+    </div>
+    
+    <h2>Resposta da API:</h2>
+    <pre id="response">Aguardando...</pre>
+    
+    <h2>Links Úteis:</h2>
+    <ul>
+        <li><a href="cruzamento_final.html" target="_blank">📊 Dashboard Final (cruzamento_final.html)</a></li>
+        <li><a href="cruzamento_novo.php" target="_blank">📊 Dashboard PHP (cruzamento_novo.php)</a></li>
+        <li><a href="comparativo_detalhado.php" target="_blank">⚖️ Comparativo Detalhado</a></li>
+        <li><a href="api_cruzamento_completo.php?action=lista_completa" target="_blank">🔗 API Raw JSON</a></li>
+    </ul>
+</div>
+
+<script>
+async function testAPI() {
+    const statusDiv = document.getElementById('status');
+    const responseDiv = document.getElementById('response');
+    
+    try {
+        const start = Date.now();
+        const response = await fetch('/api_cruzamento_completo.php?action=lista_completa');
+        const elapsed = Date.now() - start;
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        
+        responseDiv.textContent = JSON.stringify(data, null, 2);
+        
+        if (data.status === 'ok') {
+            statusDiv.className = 'status success';
+            statusDiv.innerHTML = `
+                <strong>✅ API Funcionando!</strong><br>
+                Status: ${data.status}<br>
+                Total: ${data.total} registros (${data.planejados} planejados + ${data.realizados} realizados)<br>
+                Tempo: ${elapsed}ms
+            `;
+        } else {
+            throw new Error('Status retornou: ' + data.status);
+        }
+    } catch (error) {
+        statusDiv.className = 'status error';
+        statusDiv.innerHTML = `<strong>❌ Erro na API:</strong><br>${error.message}`;
+        responseDiv.textContent = 'Erro: ' + error.message;
+    }
+}
+
+window.addEventListener('load', testAPI);
+</script>
+
+</body>
+</html>

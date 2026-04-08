@@ -1712,11 +1712,10 @@ function normalizeCatalogValue(value) {
             });
         }
 
-        // Desempenho (MVP): carrega lista do previsto ao entrar na tela.
-        if (targetId === 'section-performance' && typeof window.loadPerformance === 'function') {
-            window.loadPerformance().catch((error) => {
-                console.warn('Falha ao carregar desempenho.', error);
-            });
+        // Desempenho (MVP): REDIRECIONADO PARA GANTT.PHP
+        if (targetId === 'section-performance') {
+            window.location.href = 'gantt.php';
+            return;
         }
 
         // Central de Publicação (sandbox): carrega e renderiza ao entrar na tela.

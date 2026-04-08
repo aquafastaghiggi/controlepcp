@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cruzamento Completo - Dashboard Final</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background: #f5f5f5;
+            padding: 20px;
+        }
+        
+        .container { max-width: 1600px; margin: 0 auto; }
+        
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+        }
+        
+        h1 { font-size: 28px; margin-bottom: 5px; }
+        .subtitle { font-size: 13px; opacity: 0.9; }
+        
+        .tabs {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 20px;
+            background: white;
+            padding: 5px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .tab-btn {
+            padding: 12px 20px;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            border-radius: 4px;
+            transition: all 0.3s;
+            color: #666;
+        }
+        
+        .tab-btn:hover { background: #f5f5f5; }
+        .tab-btn.active { background: #667eea; color: white; }
+        
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        
+        .tab-panel {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 6px;
+            text-align: center;
+        }
+        
+        .stat-value { font-size: 32px; font-weight: bold; }
+        .stat-label { font-size: 12px; opacity: 0.9; margin-top: 5px; }
+        
+        .search-box {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+        }
+        
+        .search-box input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+        
+        .table-wrapper {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            overflow: auto;
+            max-height: 600px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+        
+        th {
+            background: #667eea;
+            color: white;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        
+        td { padding: 10px 12px; border-bottom: 1px solid #eee; }
+        tr:hover { background: #f9f9f9; }
+        
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        
+        .badge-planejado { background: #e3f2fd; color: #1976d2; }
+        .badge-realizado { background: #e8f5e9; color: #388e3c; }
+        
+        .loading { text-align: center; padding: 40px; color: #999; }
+        .spinner { 
+            display: inline-block;
+            width: 24px;
+            height: 24px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        .empty { text-align: center; padding: 40px; color: #999; }
+        .error { background: #ffebee; color: #c62828; padding: 15px; border-radius: 4px; border-left: 4px solid #c62828; }
+        .success { background: #e8f5e9; color: #2e7d32; padding: 15px; border-radius: 4px; border-left: 4px solid #2e7d32; }
+        
+        @media (max-width: 768px) {
+            .stats { grid-template-columns: 1fr; }
+            .tabs { flex-wrap: wrap; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>📊 Cruzamento Completo</h1>
+        <div class="subtitle">Análise: OP × SKU × Planejado × Realizado × Máquinas</div>
+    </header>
+    
+    <div id="messages"></div>
+    
+    <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab(event, 'tab-lista')">📋 Lista Completa</button>
+        <button class="tab-btn" onclick="switchTab(event, 'tab-stats')">📊 Realizado</button>
+    </div>
+    
+    <!-- TAB 1: LISTA COMPLETA -->
+    <div id="tab-lista" class="tab-content active">
+        <div class="tab-panel">
+            <div class="stats" id="stats-lista"></div>
+            <div class="search-box">
+                <input type="text" id="search-input" placeholder="Buscar por SKU, OP ou descrição..." onkeyup="filterTable()">
+                <button onclick="filterTable()">🔍 Buscar</button>
+            </div>
+            <div class="table-wrapper">
+                <table id="data-table">
+                    <thead>
+                        <tr>
+                            <th>Tipo</th>
+                            <th style="width:80px">SKU</th>
+                            <th style="width:200px">Produto</th>
+                            <th style="width:70px">OP</th>
+                            <th style="width:80px">Quantidade</th>
+                            <th style="width:110px">Data Plan</th>
+                            <th style="width:110px">Data Exec</th>
+                            <th style="width:150px">Máquina</th>
+                        </tr>
+                    </thead>
+                    <tbody id="data-tbody">
+                        <tr><td colspan="8" class="loading"><span class="spinner"></span>Carregando dados...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <!-- TAB 2: REALIZADO -->
+    <div id="tab-stats" class="tab-content">
+        <div class="tab-panel">
+            <div id="stats-realizado"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+let allData = [];
+let filteredData = [];
+
+function switchTab(e, tabId) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    
+    e.currentTarget.classList.add('active');
+    document.getElementById(tabId).classList.add('active');
+}
+
+function showMessage(type, message) {
+    const container = document.getElementById('messages');
+    const div = document.createElement('div');
+    div.className = type === 'error' ? 'error' : type === 'success' ? 'success' : 'error';
+    div.textContent = (type === 'error' ? '❌ ' : '✅ ') + message;
+    container.innerHTML = '';
+    container.appendChild(div);
+    
+    if (type === 'success') {
+        setTimeout(() => div.remove(), 5000);
+    }
+}
+
+async function loadData() {
+    const tbody = document.getElementById('data-tbody');
+    
+    try {
+        console.log('Iniciando fetch...');
+        const response = await fetch('/api_cruzamento_completo.php?action=lista_completa');
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const result = await response.json();
+        console.log('Resultado:', result);
+        
+        if (result.error) {
+            throw new Error(result.error);
+        }
+        
+        if (result.status === 'ok' && result.items) {
+            allData = result.items;
+            filteredData = [...allData];
+            renderTable();
+            renderStats();
+            showMessage('success', `Carregados ${result.total} registros (${result.planejados} planejados, ${result.realizados} realizados)`);
+        } else {
+            throw new Error('Resposta inválida: ' + JSON.stringify(result));
+        }
+    } catch (error) {
+        console.error('Erro:', error);
+        tbody.innerHTML = '<tr><td colspan="8"><div class="error">❌ Erro: ';
+        tbody.innerHTML += error.message + '</div></td></tr>';
+        showMessage('error', 'Erro ao carregar: ' + error.message);
+    }
+}
+
+function renderTable() {
+    const tbody = document.getElementById('data-tbody');
+    let html = '';
+    
+    if (filteredData.length === 0) {
+        html = '<tr><td colspan="8"><div class="empty">Nenhum resultado encontrado</div></td></tr>';
+    } else {
+        filteredData.forEach(row => {
+            const badge = row.tipo === 'Planejado' ? 'badge-planejado' : 'badge-realizado';
+            const dataPlan = row.data_inicio ? new Date(row.data_inicio).toLocaleDateString('pt-BR') : '-';
+            const dataExec = row.data_execucao ? new Date(row.data_execucao).toLocaleDateString('pt-BR') : '-';
+            const qty = row.quantidade_planejada ? parseFloat(row.quantidade_planejada).toLocaleString('pt-BR') : '-';
+            
+            html += `
+                <tr>
+                    <td><span class="badge ${badge}">${row.tipo}</span></td>
+                    <td><strong>${row.sku || '-'}</strong></td>
+                    <td>${row.descricao || '-'}</td>
+                    <td><strong style="color: #667eea">${row.op_planejada || '-'}</strong></td>
+                    <td>${qty}</td>
+                    <td>${dataPlan}</td>
+                    <td>${dataExec}</td>
+                    <td>${row.recurso_executado || '-'}</td>
+                </tr>
+            `;
+        });
+    }
+    
+    tbody.innerHTML = html;
+}
+
+function renderStats() {
+    const container = document.getElementById('stats-lista');
+    const planejados = allData.filter(d => d.tipo === 'Planejado').length;
+    const realizados = allData.filter(d => d.tipo === 'Realizado').length;
+    const skus = new Set(allData.filter(d => d.sku).map(d => d.sku)).size;
+    const ops = new Set(allData.filter(d => d.op_planejada && d.op_planejada !== 'SEM OP').map(d => d.op_planejada)).size;
+    
+    container.innerHTML = `
+        <div class="stat-card">
+            <div class="stat-value">${planejados}</div>
+            <div class="stat-label">Planejados</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">${realizados}</div>
+            <div class="stat-label">Realizados</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">${skus}</div>
+            <div class="stat-label">SKUs</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">${ops}</div>
+            <div class="stat-label">Ordens</div>
+        </div>
+    `;
+}
+
+function filterTable() {
+    const search = document.getElementById('search-input').value.toLowerCase();
+    
+    filteredData = allData.filter(row => {
+        const sku = (row.sku || '').toLowerCase();
+        const op = (row.op_planejada || '').toLowerCase();
+        const desc = (row.descricao || '').toLowerCase();
+        return sku.includes(search) || op.includes(search) || desc.includes(search);
+    });
+    
+    renderTable();
+}
+
+// Carregar dados ao iniciar
+window.addEventListener('load', loadData);
+</script>
+
+</body>
+</html>

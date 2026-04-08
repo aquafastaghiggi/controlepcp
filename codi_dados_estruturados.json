@@ -1,0 +1,933 @@
+{
+    "recursos": [
+        {
+            "id": 1,
+            "codigo_codi": 6,
+            "nome": "LINHA 6"
+        },
+        {
+            "id": 2,
+            "codigo_codi": 11,
+            "nome": "LINHA 5"
+        },
+        {
+            "id": 3,
+            "codigo_codi": 10,
+            "nome": "LINHA 4"
+        },
+        {
+            "id": 4,
+            "codigo_codi": 9,
+            "nome": "LINHA 3"
+        },
+        {
+            "id": 5,
+            "codigo_codi": 8,
+            "nome": "LINHA 2"
+        },
+        {
+            "id": 6,
+            "codigo_codi": 7,
+            "nome": "LINHA 1"
+        },
+        {
+            "id": 7,
+            "codigo_codi": 22,
+            "nome": "LINHA 7"
+        },
+        {
+            "id": 8,
+            "codigo_codi": 17,
+            "nome": "MÁQ. 03"
+        },
+        {
+            "id": 9,
+            "codigo_codi": 1,
+            "nome": "MÁQ. 04"
+        },
+        {
+            "id": 10,
+            "codigo_codi": 2,
+            "nome": "MÁQ. 05"
+        },
+        {
+            "id": 11,
+            "codigo_codi": 5,
+            "nome": "MÁQ. 06"
+        },
+        {
+            "id": 12,
+            "codigo_codi": 4,
+            "nome": "MÁQ. 07"
+        },
+        {
+            "id": 13,
+            "codigo_codi": 18,
+            "nome": "MÁQ. 08"
+        },
+        {
+            "id": 14,
+            "codigo_codi": 3,
+            "nome": "MÁQ. 10"
+        },
+        {
+            "id": 15,
+            "codigo_codi": 16,
+            "nome": "MÁQ. 09"
+        }
+    ],
+    "calendario": [
+        {
+            "codigo": 49517,
+            "data": "2020-06-25",
+            "hora_inicio": "07:05:00",
+            "hora_fim": "09:00:00",
+            "recurso_id": 10,
+            "turno": "Turno Administrativo",
+            "grandeza": "ENVASADORA004_quantidade"
+        },
+        {
+            "codigo": 49520,
+            "data": "2020-06-26",
+            "hora_inicio": "13:27:00",
+            "hora_fim": "17:50:00",
+            "recurso_id": 4,
+            "turno": "Turno Administrativo",
+            "grandeza": "SOPRADORA007_quantidade"
+        },
+        {
+            "codigo": 16,
+            "data": "2019-10-07",
+            "hora_inicio": "07:05:00",
+            "hora_fim": "11:30:00",
+            "recurso_id": 5,
+            "turno": "Turno 1",
+            "grandeza": "SOPRADORA006_quantidade"
+        },
+        {
+            "codigo": 17,
+            "data": "2019-10-07",
+            "hora_inicio": "12:27:00",
+            "hora_fim": "17:50:00",
+            "recurso_id": 5,
+            "turno": "Turno 1",
+            "grandeza": "SOPRADORA006_quantidade"
+        },
+        {
+            "codigo": 18,
+            "data": "2019-10-07",
+            "hora_inicio": "00:00:00",
+            "hora_fim": "23:59:00",
+            "recurso_id": 5,
+            "turno": "Turno 2",
+            "grandeza": "SOPRADORA006_quantidade"
+        },
+        {
+            "codigo": 19,
+            "data": "2019-10-07",
+            "hora_inicio": "07:05:00",
+            "hora_fim": "11:30:00",
+            "recurso_id": 4,
+            "turno": "Turno 1",
+            "grandeza": "SOPRADORA007_quantidade"
+        },
+        {
+            "codigo": 20,
+            "data": "2019-10-07",
+            "hora_inicio": "12:27:00",
+            "hora_fim": "17:50:00",
+            "recurso_id": 4,
+            "turno": "Turno 1",
+            "grandeza": "SOPRADORA007_quantidade"
+        },
+        {
+            "codigo": 21,
+            "data": "2019-10-07",
+            "hora_inicio": "00:00:00",
+            "hora_fim": "23:59:00",
+            "recurso_id": 4,
+            "turno": "Turno 2",
+            "grandeza": "SOPRADORA007_quantidade"
+        },
+        {
+            "codigo": 22,
+            "data": "2019-10-07",
+            "hora_inicio": "07:05:00",
+            "hora_fim": "11:30:00",
+            "recurso_id": 3,
+            "turno": "Turno 1",
+            "grandeza": "SOPRADORA008_quantidade"
+        },
+        {
+            "codigo": 23,
+            "data": "2019-10-07",
+            "hora_inicio": "12:27:00",
+            "hora_fim": "17:50:00",
+            "recurso_id": 3,
+            "turno": "Turno 1",
+            "grandeza": "SOPRADORA008_quantidade"
+        },
+        {
+            "codigo": 24,
+            "data": "2019-10-07",
+            "hora_inicio": "00:00:00",
+            "hora_fim": "23:59:00",
+            "recurso_id": 3,
+            "turno": "Turno 2",
+            "grandeza": "SOPRADORA008_quantidade"
+        },
+        {
+            "codigo": 25,
+            "data": "2019-10-07",
+            "hora_inicio": "07:05:00",
+            "hora_fim": "11:30:00",
+            "recurso_id": 1,
+            "turno": "Turno 1",
+            "grandeza": "SOPRADORA004_quantidade"
+        },
+        {
+            "codigo": 26,
+            "data": "2019-10-07",
+            "hora_inicio": "12:27:00",
+            "hora_fim": "17:50:00",
+            "recurso_id": 1,
+            "turno": "Turno 1",
+            "grandeza": "SOPRADORA004_quantidade"
+        },
+        {
+            "codigo": 27,
+            "data": "2019-10-07",
+            "hora_inicio": "00:00:00",
+            "hora_fim": "23:59:00",
+            "recurso_id": 1,
+            "turno": "Turno 2",
+            "grandeza": "SOPRADORA004_quantidade"
+        },
+        {
+            "codigo": 28,
+            "data": "2019-10-07",
+            "hora_inicio": "07:05:00",
+            "hora_fim": "11:30:00",
+            "recurso_id": 2,
+            "turno": "Turno 1",
+            "grandeza": "SOPRADORA005_quantidade"
+        },
+        {
+            "codigo": 29,
+            "data": "2019-10-07",
+            "hora_inicio": "12:27:00",
+            "hora_fim": "17:50:00",
+            "recurso_id": 2,
+            "turno": "Turno 1",
+            "grandeza": "SOPRADORA005_quantidade"
+        },
+        {
+            "codigo": 30,
+            "data": "2019-10-07",
+            "hora_inicio": "00:00:00",
+            "hora_fim": "23:59:00",
+            "recurso_id": 2,
+            "turno": "Turno 2",
+            "grandeza": "SOPRADORA005_quantidade"
+        },
+        {
+            "codigo": 33,
+            "data": "2019-10-07",
+            "hora_inicio": "00:00:00",
+            "hora_fim": "23:59:00",
+            "recurso_id": 6,
+            "turno": "Turno 2",
+            "grandeza": "ENVASADORA006_quantidade"
+        },
+        {
+            "codigo": 34,
+            "data": "2019-10-08",
+            "hora_inicio": "07:05:00",
+            "hora_fim": "11:30:00",
+            "recurso_id": 5,
+            "turno": "Turno 1",
+            "grandeza": "SOPRADORA006_quantidade"
+        },
+        {
+            "codigo": 35,
+            "data": "2019-10-08",
+            "hora_inicio": "12:27:00",
+            "hora_fim": "17:50:00",
+            "recurso_id": 5,
+            "turno": "Turno 1",
+            "grandeza": "SOPRADORA006_quantidade"
+        },
+        {
+            "codigo": 36,
+            "data": "2019-10-08",
+            "hora_inicio": "00:00:00",
+            "hora_fim": "23:59:00",
+            "recurso_id": 5,
+            "turno": "Turno 2",
+            "grandeza": "SOPRADORA006_quantidade"
+        },
+        {
+            "codigo": 37,
+            "data": "2019-10-08",
+            "hora_inicio": "07:05:00",
+            "hora_fim": "11:30:00",
+            "recurso_id": 4,
+            "turno": "Turno 1",
+            "grandeza": "SOPRADORA007_quantidade"
+        },
+        {
+            "codigo": 38,
+            "data": "2019-10-08",
+            "hora_inicio": "12:27:00",
+            "hora_fim": "17:50:00",
+            "recurso_id": 4,
+            "turno": "Turno 1",
+            "grandeza": "SOPRADORA007_quantidade"
+        },
+        {
+            "codigo": 39,
+            "data": "2019-10-08",
+            "hora_inicio": "00:00:00",
+            "hora_fim": "23:59:00",
+            "recurso_id": 4,
+            "turno": "Turno 2",
+            "grandeza": "SOPRADORA007_quantidade"
+        },
+        {
+            "codigo": 40,
+            "data": "2019-10-08",
+            "hora_inicio": "07:05:00",
+            "hora_fim": "11:30:00",
+            "recurso_id": 3,
+            "turno": "Turno 1",
+            "grandeza": "SOPRADORA008_quantidade"
+        },
+        {
+            "codigo": 41,
+            "data": "2019-10-08",
+            "hora_inicio": "12:27:00",
+            "hora_fim": "17:50:00",
+            "recurso_id": 3,
+            "turno": "Turno 1",
+            "grandeza": "SOPRADORA008_quantidade"
+        },
+        {
+            "codigo": 42,
+            "data": "2019-10-08",
+            "hora_inicio": "00:00:00",
+            "hora_fim": "23:59:00",
+            "recurso_id": 3,
+            "turno": "Turno 2",
+            "grandeza": "SOPRADORA008_quantidade"
+        },
+        {
+            "codigo": 43,
+            "data": "2019-10-08",
+            "hora_inicio": "07:05:00",
+            "hora_fim": "11:30:00",
+            "recurso_id": 1,
+            "turno": "Turno 1",
+            "grandeza": "SOPRADORA004_quantidade"
+        },
+        {
+            "codigo": 44,
+            "data": "2019-10-08",
+            "hora_inicio": "12:27:00",
+            "hora_fim": "17:50:00",
+            "recurso_id": 1,
+            "turno": "Turno 1",
+            "grandeza": "SOPRADORA004_quantidade"
+        },
+        {
+            "codigo": 45,
+            "data": "2019-10-08",
+            "hora_inicio": "00:00:00",
+            "hora_fim": "23:59:00",
+            "recurso_id": 1,
+            "turno": "Turno 2",
+            "grandeza": "SOPRADORA004_quantidade"
+        },
+        {
+            "codigo": 46,
+            "data": "2019-10-08",
+            "hora_inicio": "07:05:00",
+            "hora_fim": "11:30:00",
+            "recurso_id": 2,
+            "turno": "Turno 1",
+            "grandeza": "SOPRADORA005_quantidade"
+        },
+        {
+            "codigo": 47,
+            "data": "2019-10-08",
+            "hora_inicio": "12:27:00",
+            "hora_fim": "17:50:00",
+            "recurso_id": 2,
+            "turno": "Turno 1",
+            "grandeza": "SOPRADORA005_quantidade"
+        },
+        {
+            "codigo": 48,
+            "data": "2019-10-08",
+            "hora_inicio": "00:00:00",
+            "hora_fim": "23:59:00",
+            "recurso_id": 2,
+            "turno": "Turno 2",
+            "grandeza": "SOPRADORA005_quantidade"
+        },
+        {
+            "codigo": 51,
+            "data": "2019-10-08",
+            "hora_inicio": "00:00:00",
+            "hora_fim": "23:59:00",
+            "recurso_id": 6,
+            "turno": "Turno 2",
+            "grandeza": "ENVASADORA006_quantidade"
+        },
+        {
+            "codigo": 52,
+            "data": "2019-10-09",
+            "hora_inicio": "07:05:00",
+            "hora_fim": "11:30:00",
+            "recurso_id": 5,
+            "turno": "Turno 1",
+            "grandeza": "SOPRADORA006_quantidade"
+        },
+        {
+            "codigo": 53,
+            "data": "2019-10-09",
+            "hora_inicio": "12:27:00",
+            "hora_fim": "17:50:00",
+            "recurso_id": 5,
+            "turno": "Turno 1",
+            "grandeza": "SOPRADORA006_quantidade"
+        },
+        {
+            "codigo": 54,
+            "data": "2019-10-09",
+            "hora_inicio": "00:00:00",
+            "hora_fim": "23:59:00",
+            "recurso_id": 5,
+            "turno": "Turno 2",
+            "grandeza": "SOPRADORA006_quantidade"
+        },
+        {
+            "codigo": 55,
+            "data": "2019-10-09",
+            "hora_inicio": "07:05:00",
+            "hora_fim": "11:30:00",
+            "recurso_id": 4,
+            "turno": "Turno 1",
+            "grandeza": "SOPRADORA007_quantidade"
+        },
+        {
+            "codigo": 56,
+            "data": "2019-10-09",
+            "hora_inicio": "12:27:00",
+            "hora_fim": "17:50:00",
+            "recurso_id": 4,
+            "turno": "Turno 1",
+            "grandeza": "SOPRADORA007_quantidade"
+        },
+        {
+            "codigo": 57,
+            "data": "2019-10-09",
+            "hora_inicio": "00:00:00",
+            "hora_fim": "23:59:00",
+            "recurso_id": 4,
+            "turno": "Turno 2",
+            "grandeza": "SOPRADORA007_quantidade"
+        },
+        {
+            "codigo": 58,
+            "data": "2019-10-09",
+            "hora_inicio": "07:05:00",
+            "hora_fim": "11:30:00",
+            "recurso_id": 3,
+            "turno": "Turno 1",
+            "grandeza": "SOPRADORA008_quantidade"
+        },
+        {
+            "codigo": 59,
+            "data": "2019-10-09",
+            "hora_inicio": "12:27:00",
+            "hora_fim": "17:50:00",
+            "recurso_id": 3,
+            "turno": "Turno 1",
+            "grandeza": "SOPRADORA008_quantidade"
+        },
+        {
+            "codigo": 60,
+            "data": "2019-10-09",
+            "hora_inicio": "00:00:00",
+            "hora_fim": "23:59:00",
+            "recurso_id": 3,
+            "turno": "Turno 2",
+            "grandeza": "SOPRADORA008_quantidade"
+        },
+        {
+            "codigo": 61,
+            "data": "2019-10-09",
+            "hora_inicio": "07:05:00",
+            "hora_fim": "11:30:00",
+            "recurso_id": 1,
+            "turno": "Turno 1",
+            "grandeza": "SOPRADORA004_quantidade"
+        },
+        {
+            "codigo": 62,
+            "data": "2019-10-09",
+            "hora_inicio": "12:27:00",
+            "hora_fim": "17:50:00",
+            "recurso_id": 1,
+            "turno": "Turno 1",
+            "grandeza": "SOPRADORA004_quantidade"
+        },
+        {
+            "codigo": 63,
+            "data": "2019-10-09",
+            "hora_inicio": "00:00:00",
+            "hora_fim": "23:59:00",
+            "recurso_id": 1,
+            "turno": "Turno 2",
+            "grandeza": "SOPRADORA004_quantidade"
+        },
+        {
+            "codigo": 64,
+            "data": "2019-10-09",
+            "hora_inicio": "07:05:00",
+            "hora_fim": "11:30:00",
+            "recurso_id": 2,
+            "turno": "Turno 1",
+            "grandeza": "SOPRADORA005_quantidade"
+        },
+        {
+            "codigo": 65,
+            "data": "2019-10-09",
+            "hora_inicio": "12:27:00",
+            "hora_fim": "17:50:00",
+            "recurso_id": 2,
+            "turno": "Turno 1",
+            "grandeza": "SOPRADORA005_quantidade"
+        },
+        {
+            "codigo": 66,
+            "data": "2019-10-09",
+            "hora_inicio": "00:00:00",
+            "hora_fim": "23:59:00",
+            "recurso_id": 2,
+            "turno": "Turno 2",
+            "grandeza": "SOPRADORA005_quantidade"
+        },
+        {
+            "codigo": 69,
+            "data": "2019-10-09",
+            "hora_inicio": "00:00:00",
+            "hora_fim": "23:59:00",
+            "recurso_id": 6,
+            "turno": "Turno 2",
+            "grandeza": "ENVASADORA006_quantidade"
+        }
+    ],
+    "performance": [
+        {
+            "codigo": 41,
+            "recurso_id": 10,
+            "item_codigo": "20050002",
+            "item_nome": "DESINFETANTE AQUAFAST JARDIM FLORIDO CX\/12 X 500ML",
+            "ordem_producao": null,
+            "grandeza": "ENVASADORA004_quantidade"
+        },
+        {
+            "codigo": 48,
+            "recurso_id": 9,
+            "item_codigo": "20050014",
+            "item_nome": "DESINFETANTE AQUAFAST PINHO SILVESTRE CX\/06 X 2L",
+            "ordem_producao": null,
+            "grandeza": "ENVASADORA003_quantidade"
+        },
+        {
+            "codigo": 493,
+            "recurso_id": 9,
+            "item_codigo": "20200043",
+            "item_nome": "LAVA ROUPAS AQUAFAST ESPANHOL GLICERINA CX\/6 X 2L",
+            "ordem_producao": null,
+            "grandeza": "ENVASADORA003_quantidade"
+        },
+        {
+            "codigo": 218,
+            "recurso_id": 9,
+            "item_codigo": "20050012",
+            "item_nome": "DESINFETANTE AQUAFAST CITRUS CX\/06 X 2L (LIMAO)",
+            "ordem_producao": null,
+            "grandeza": "ENVASADORA003_quantidade"
+        },
+        {
+            "codigo": 59,
+            "recurso_id": 10,
+            "item_codigo": "20030013",
+            "item_nome": "DETERGENTE AQUAFAST NEUTRO CX\/12 X 1L",
+            "ordem_producao": null,
+            "grandeza": "ENVASADORA004_quantidade"
+        },
+        {
+            "codigo": 88,
+            "recurso_id": 2,
+            "item_codigo": "07030044",
+            "item_nome": "FRASCO LAVA ROUPAS E LIMPADOR PERFUMADO 2L",
+            "ordem_producao": null,
+            "grandeza": "SOPRADORA005_quantidade"
+        },
+        {
+            "codigo": 66,
+            "recurso_id": 10,
+            "item_codigo": "20030003",
+            "item_nome": "DETERGENTE AQUAFAST NEUTRO CX\/24 X 500ML",
+            "ordem_producao": null,
+            "grandeza": "ENVASADORA004_quantidade"
+        },
+        {
+            "codigo": 82,
+            "recurso_id": 1,
+            "item_codigo": "07030062",
+            "item_nome": "FRASCO LAVA ROUPAS 5L BRANCO PET",
+            "ordem_producao": null,
+            "grandeza": "SOPRADORA004_quantidade"
+        },
+        {
+            "codigo": 486,
+            "recurso_id": 8,
+            "item_codigo": "20030007",
+            "item_nome": "DETERGENTE AQUAFAST MACA CX\/04 X 5L",
+            "ordem_producao": null,
+            "grandeza": "ENVASADORA002_quantidade"
+        },
+        {
+            "codigo": 336,
+            "recurso_id": 11,
+            "item_codigo": "20030010",
+            "item_nome": "DETERGENTE AQUAFAST CLEAR CX\/04 X 5L (EMB ECON)",
+            "ordem_producao": null,
+            "grandeza": "ENVASADORA005_quantidade"
+        },
+        {
+            "codigo": 389,
+            "recurso_id": 6,
+            "item_codigo": "20060005",
+            "item_nome": "LIMP PERF AQUAFAST PRIMAVERA FLORIDA CX\/12 X 1L",
+            "ordem_producao": null,
+            "grandeza": "ENVASADORA006_quantidade"
+        },
+        {
+            "codigo": 390,
+            "recurso_id": 6,
+            "item_codigo": "20060006",
+            "item_nome": "LIMP PERF AQUAFAST FLORES CAMPESTRES CX\/12 X 1L",
+            "ordem_producao": null,
+            "grandeza": "ENVASADORA006_quantidade"
+        },
+        {
+            "codigo": 404,
+            "recurso_id": 6,
+            "item_codigo": "20090001",
+            "item_nome": "DESENGORDURANTE AQUAFAST PULVERIZADOR CX\/12 X 500ML",
+            "ordem_producao": null,
+            "grandeza": "ENVASADORA006_quantidade"
+        },
+        {
+            "codigo": 572,
+            "recurso_id": 6,
+            "item_codigo": "20090010",
+            "item_nome": "INTERMED PACK DESENGORD SQUEEZE Cx C\/18 X 500ML",
+            "ordem_producao": null,
+            "grandeza": "ENVASADORA006_quantidade"
+        },
+        {
+            "codigo": 380,
+            "recurso_id": 6,
+            "item_codigo": "20150007",
+            "item_nome": "AMAC. CONC. AQUAFAST AZUL HARMONIA CX\/ 12 X 1L",
+            "ordem_producao": null,
+            "grandeza": "ENVASADORA006_quantidade"
+        },
+        {
+            "codigo": 108,
+            "recurso_id": 9,
+            "item_codigo": "20200006",
+            "item_nome": "LAVA ROUPAS AQUAFAST GLICERINA CX\/06 X 2L",
+            "ordem_producao": null,
+            "grandeza": "ENVASADORA003_quantidade"
+        },
+        {
+            "codigo": 107,
+            "recurso_id": 9,
+            "item_codigo": "20200007",
+            "item_nome": "LAVA ROUPAS AQUAFAST BABY CX\/06 X 2L",
+            "ordem_producao": null,
+            "grandeza": "ENVASADORA003_quantidade"
+        },
+        {
+            "codigo": 106,
+            "recurso_id": 9,
+            "item_codigo": "20200008",
+            "item_nome": "LAVA ROUPAS AQUAFAST COCO CX\/06 X 2L",
+            "ordem_producao": null,
+            "grandeza": "ENVASADORA003_quantidade"
+        },
+        {
+            "codigo": 335,
+            "recurso_id": 10,
+            "item_codigo": "20030067",
+            "item_nome": "DETERGENTE AQUAFAST COCO CX\/24 X 500ML",
+            "ordem_producao": null,
+            "grandeza": "ENVASADORA004_quantidade"
+        },
+        {
+            "codigo": 244,
+            "recurso_id": 11,
+            "item_codigo": "20040025",
+            "item_nome": "AMACIANTE SOFTUS ROSA ACONCHEGO CX\/04 X 5L",
+            "ordem_producao": null,
+            "grandeza": "ENVASADORA005_quantidade"
+        },
+        {
+            "codigo": 70,
+            "recurso_id": 11,
+            "item_codigo": "20040098",
+            "item_nome": "AMACIANTE AQUAFAST BRANCO CX C\/04 X 5L (PURA CARICIA) ECONOM",
+            "ordem_producao": null,
+            "grandeza": "ENVASADORA005_quantidade"
+        },
+        {
+            "codigo": 329,
+            "recurso_id": 8,
+            "item_codigo": "20050018",
+            "item_nome": "DESINFETANTE AQUAFAST JARDIM FLORIDO CX\/04 X 5L EMB. ECONOMI",
+            "ordem_producao": null,
+            "grandeza": "ENVASADORA002_quantidade"
+        },
+        {
+            "codigo": 381,
+            "recurso_id": 6,
+            "item_codigo": "20150008",
+            "item_nome": "AMAC. CONC. AQUAFAST ROSA ROMANCE CX\/ 12 X 1L",
+            "ordem_producao": null,
+            "grandeza": "ENVASADORA006_quantidade"
+        },
+        {
+            "codigo": 382,
+            "recurso_id": 6,
+            "item_codigo": "20150009",
+            "item_nome": "AMAC. CONC. AQUAFAST DOURADO INSPIRACAO CX\/ 12 X 1L",
+            "ordem_producao": null,
+            "grandeza": "ENVASADORA006_quantidade"
+        },
+        {
+            "codigo": 384,
+            "recurso_id": 6,
+            "item_codigo": "20150011",
+            "item_nome": "AMAC. CONC. AQUAFAST VERMELHO SEDUCAO CX\/ 12 X 1L",
+            "ordem_producao": null,
+            "grandeza": "ENVASADORA006_quantidade"
+        },
+        {
+            "codigo": 109,
+            "recurso_id": 9,
+            "item_codigo": "20200005",
+            "item_nome": "LAVA ROUPAS AQUAFAST MULTI ACAO CX\/06 X 2L",
+            "ordem_producao": null,
+            "grandeza": "ENVASADORA003_quantidade"
+        },
+        {
+            "codigo": 433,
+            "recurso_id": 8,
+            "item_codigo": "20200009",
+            "item_nome": "LAVA ROUPAS AQUAFAST MULTI ACAO CX\/04 X 5L (EMB ECON)",
+            "ordem_producao": null,
+            "grandeza": "ENVASADORA002_quantidade"
+        },
+        {
+            "codigo": 58,
+            "recurso_id": 11,
+            "item_codigo": "20200009",
+            "item_nome": "LAVA ROUPAS AQUAFAST MULTI ACAO CX\/04 X 5L (EMB ECON)",
+            "ordem_producao": null,
+            "grandeza": "ENVASADORA005_quantidade"
+        },
+        {
+            "codigo": 55,
+            "recurso_id": 11,
+            "item_codigo": "20200023",
+            "item_nome": "LAVA ROUPAS AQUAFAST COCO CX\/04  X 3L",
+            "ordem_producao": null,
+            "grandeza": "ENVASADORA005_quantidade"
+        },
+        {
+            "codigo": 93,
+            "recurso_id": 4,
+            "item_codigo": "07030021",
+            "item_nome": "FRASCO LIMPA VIDROS PULV. REC. 500ML",
+            "ordem_producao": null,
+            "grandeza": "SOPRADORA007_quantidade"
+        },
+        {
+            "codigo": 91,
+            "recurso_id": 4,
+            "item_codigo": "07030038",
+            "item_nome": "FRASCO AMACIANTE E LIMPADOR PERFUMADO 500ML PET",
+            "ordem_producao": null,
+            "grandeza": "SOPRADORA007_quantidade"
+        },
+        {
+            "codigo": 89,
+            "recurso_id": 4,
+            "item_codigo": "07030041",
+            "item_nome": "FRASCO LIMPA VIDROS 500ML SQUEEZE",
+            "ordem_producao": null,
+            "grandeza": "SOPRADORA007_quantidade"
+        },
+        {
+            "codigo": 79,
+            "recurso_id": 1,
+            "item_codigo": "07030072",
+            "item_nome": "FRASCO MULTIUSO FLORAL 500ML PEAD ",
+            "ordem_producao": null,
+            "grandeza": "SOPRADORA004_quantidade"
+        },
+        {
+            "codigo": 494,
+            "recurso_id": 9,
+            "item_codigo": "20200044",
+            "item_nome": "LAVA ROUPAS AQUAFAST ESPANHOL BABY CX\/6 X 2L",
+            "ordem_producao": null,
+            "grandeza": "ENVASADORA003_quantidade"
+        },
+        {
+            "codigo": 268,
+            "recurso_id": 10,
+            "item_codigo": "20030023",
+            "item_nome": "DETERGENTE ITO CLEAR CX\/24 X 500ML (NATURAL)",
+            "ordem_producao": null,
+            "grandeza": "ENVASADORA004_quantidade"
+        },
+        {
+            "codigo": 264,
+            "recurso_id": 10,
+            "item_codigo": "20030040",
+            "item_nome": "DETERGENTE MYATA NEUTRO CX\/24 X 500ML",
+            "ordem_producao": null,
+            "grandeza": "ENVASADORA004_quantidade"
+        },
+        {
+            "codigo": 476,
+            "recurso_id": 8,
+            "item_codigo": "20050017",
+            "item_nome": "DESINFETANTE AQUAFAST CAMPOS DE LAVANDA CX\/04 X 5L (LAVANDA)",
+            "ordem_producao": null,
+            "grandeza": "ENVASADORA002_quantidade"
+        },
+        {
+            "codigo": 483,
+            "recurso_id": 8,
+            "item_codigo": "20050111",
+            "item_nome": "DESINFETANTE LIMPS FLORAL CX\/04 X 5L",
+            "ordem_producao": null,
+            "grandeza": "ENVASADORA002_quantidade"
+        },
+        {
+            "codigo": 193,
+            "recurso_id": 9,
+            "item_codigo": "20050044",
+            "item_nome": "DESINFETANTE SUPER LIMPO LIMAO CX\/06 X 2L",
+            "ordem_producao": null,
+            "grandeza": "ENVASADORA003_quantidade"
+        },
+        {
+            "codigo": 284,
+            "recurso_id": 10,
+            "item_codigo": "20030001",
+            "item_nome": "DETERGENTE AQUAFAST MACA CX\/24 X 500ML",
+            "ordem_producao": null,
+            "grandeza": "ENVASADORA004_quantidade"
+        },
+        {
+            "codigo": 283,
+            "recurso_id": 10,
+            "item_codigo": "20030002",
+            "item_nome": "DETERGENTE AQUAFAST LIMAO CX\/24 X 500ML",
+            "ordem_producao": null,
+            "grandeza": "ENVASADORA004_quantidade"
+        },
+        {
+            "codigo": 282,
+            "recurso_id": 10,
+            "item_codigo": "20030004",
+            "item_nome": "DETERGENTE AQUAFAST CLEAR CX\/24 X 500ML (NATURAL)",
+            "ordem_producao": null,
+            "grandeza": "ENVASADORA004_quantidade"
+        },
+        {
+            "codigo": 281,
+            "recurso_id": 11,
+            "item_codigo": "20030007",
+            "item_nome": "DETERGENTE AQUAFAST MACA CX\/04 X 5L",
+            "ordem_producao": null,
+            "grandeza": "ENVASADORA005_quantidade"
+        },
+        {
+            "codigo": 280,
+            "recurso_id": 11,
+            "item_codigo": "20030008",
+            "item_nome": "DETERGENTE AQUAFAST LIMAO CX\/04 X 5L (EMB ECON)",
+            "ordem_producao": null,
+            "grandeza": "ENVASADORA005_quantidade"
+        },
+        {
+            "codigo": 222,
+            "recurso_id": 10,
+            "item_codigo": "20050003",
+            "item_nome": "DESINFETANTE AQUAFAST CITRUS CX\/12 X 500ML (LIMAO)",
+            "ordem_producao": null,
+            "grandeza": "ENVASADORA004_quantidade"
+        },
+        {
+            "codigo": 279,
+            "recurso_id": 11,
+            "item_codigo": "20030009",
+            "item_nome": "DETERGENTE AQUAFAST NEUTRO CX\/04 X 5L (EMB ECON)",
+            "ordem_producao": null,
+            "grandeza": "ENVASADORA005_quantidade"
+        },
+        {
+            "codigo": 278,
+            "recurso_id": 10,
+            "item_codigo": "20030011",
+            "item_nome": "DETERGENTE AQUAFAST MACA CX\/12 X 1L",
+            "ordem_producao": null,
+            "grandeza": "ENVASADORA004_quantidade"
+        },
+        {
+            "codigo": 277,
+            "recurso_id": 10,
+            "item_codigo": "20030012",
+            "item_nome": "DETERGENTE AQUAFAST LIMAO CX\/12 X 1L",
+            "ordem_producao": null,
+            "grandeza": "ENVASADORA004_quantidade"
+        },
+        {
+            "codigo": 276,
+            "recurso_id": 10,
+            "item_codigo": "20030014",
+            "item_nome": "DETERGENTE AQUAFAST CLEAR CX\/12 X 1L (NATURAL)",
+            "ordem_producao": null,
+            "grandeza": "ENVASADORA004_quantidade"
+        },
+        {
+            "codigo": 275,
+            "recurso_id": 10,
+            "item_codigo": "20030015",
+            "item_nome": "DETERGENTE SUPER LIMPO MACA CX\/24 X 500ML",
+            "ordem_producao": null,
+            "grandeza": "ENVASADORA004_quantidade"
+        }
+    ]
+}

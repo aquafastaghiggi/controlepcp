@@ -1,0 +1,95 @@
+╔═══════════════════════════════════════════════════════════════════════════════════╗
+║                  POSTMAN - BUSCAR SE OP 201055 ESTÁ FINALIZADA                    ║
+╚═══════════════════════════════════════════════════════════════════════════════════╝
+
+DADOS DA OP:
+   Número: 0201055
+   Código Interno CODI: 23599
+   Produto: AGUA SANITARIA AQUAFAST CX/04 X 5L
+   Código Item: 20010003
+   Quantidade: 5000 CX
+   Status Atual: INICIADO (data: 2026-03-20)
+
+═════════════════════════════════════════════════════════════════════════════════════
+
+🔍 MÉTODO 1: VERIFICAR STATUS GERAL (Mais rápido)
+───────────────────────────────────────────────────
+
+1. Abrir Postman
+2. Nova requisição GET:
+   
+   GET http://192.168.8.246:8080/action/ger/webservice/rest/ordemProducao/23599
+
+3. Abas:
+   
+   Authorization:
+   - Type: Basic Auth
+   - Username: Aghiggi
+   - Password: @Ag0351@
+   
+   (Postman vai codificar automaticamente em Base64)
+
+4. Clicar "Send"
+
+5. Procurar na resposta JSON o campo:
+   - "status": Se for "FINALIZADO", "CONCLUIDO", "PARADO" = ✓ Finalizada
+   - "status": Se for "INICIADO", "ANDAMENTO" = ✗ Ainda em produção
+
+═════════════════════════════════════════════════════════════════════════════════════
+
+🔍 MÉTODO 2: VER HISTÓRICO DE PRODUÇÃO (Mais detalhado)
+─────────────────────────────────────────────────────── 
+
+1. Nova requisição GET:
+   
+   GET http://192.168.8.246:8080/action/ger/webservice/rest/relatorioEvento?codOrdemProducao=23599&pageSize=100&page=1
+
+2. Headers:
+   - Authorization: Basic Auth (Aghiggi / @Ag0351@)
+
+3. Clicar "Send"
+
+4. No Response, procurar:
+   
+   Procure pelo último evento (desça até o final do array "data"):
+   - Campo "estado": Se "PARADA" = máquina parou (pode indicar fim)
+   - Campo "fim": Data/hora do último movimento
+   - Campo "ordens[0].quantidadeProduzidaItem": Total produzido até agora
+
+   O último objeto com "estado": "PARADA" indica quando a produção foi interrompida.
+
+═════════════════════════════════════════════════════════════════════════════════════
+
+📋 MÉTODO 3: VERIFICAÇÃO RÁPIDA (Sem Postman - Via cURL no terminal)
+──────────────────────────────────────────────────────────────────
+
+Copie e cole no terminal/PowerShell:
+
+curl -u Aghiggi:@Ag0351@ ^
+  "http://192.168.8.246:8080/action/ger/webservice/rest/ordemProducao/23599" ^
+  -H "Content-Type: application/json"
+
+Procure no resultado pelo campo "status".
+
+═════════════════════════════════════════════════════════════════════════════════════
+
+💡 SE A RESPOSTA STATUS FOR "INICIADO":
+   
+   Significa que no CODI o status está como "iniciado" desde 2026-03-20.
+   
+   Para verificar se há eventos mais recentes:
+   - Use MÉTODO 2 acima
+   - Procure pelo "fim" (data do último evento)
+   - Se houver eventos recentes com "estado": "PARADA", então teve produção depois
+
+═════════════════════════════════════════════════════════════════════════════════════
+
+❓ DÚVIDAS SOBRE OS CAMPOS:
+
+   - "status": Status geral da ordem (INICIADO, FINALIZADO, PARADO, CANCELADO, etc)
+   - "ultimaAlteracao": Última vez que este status foi registrado
+   - "estado" (nos eventos): PRODUCAO (máquina rodando), PARADA (máquina parada)
+   - "fim" (nos eventos): Data/hora de término do evento
+   - "quantidadeProduzidaItem": Total de unidades produzidas naquele evento
+
+═════════════════════════════════════════════════════════════════════════════════════

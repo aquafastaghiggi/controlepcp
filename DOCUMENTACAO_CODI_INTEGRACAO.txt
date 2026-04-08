@@ -1,0 +1,242 @@
+📊 DOCUMENTAÇÃO - INTEGRAÇÃO CODI COM BANCO CONTROLEPCP_SANDBOX
+
+═══════════════════════════════════════════════════════════════════════════════
+
+✅ FASE 6 COMPLETA: Extração e Sincronização de Dados CODI
+
+═══════════════════════════════════════════════════════════════════════════════
+
+📋 RESUMO EXECUTIVO
+
+O sistema CODI (Gestão de Produção Avançada) foi integrado ao controlepcp via:
+
+1. ✅ API REST conectada ao servidor CODI (http://192.168.8.246:8080)
+2. ✅ Dados sincronizados para banco local controlepcp_sandbox
+3. ✅ 5 endpoints de dados criados em PHP
+4. ✅ Operações avançadas de análise implementadas
+
+Dados Sincronizados:
+├─ 15 Recursos (Máquinas/Linhas)
+├─ 100 Calendário Fabril (1.574 páginas total disponível)
+└─ 100 Performance (410 total disponível)
+
+═══════════════════════════════════════════════════════════════════════════════
+
+🔐 CREDENCIAIS UTILIZADAS
+
+CODI Server:
+  URL: http://192.168.8.246:8080
+  Usuário: Aghiggi
+  Senha: @Ag0351@
+  Autenticação: HTTP Basic Auth
+
+Database (MySQL):
+  Host: 127.0.0.1
+  Banco: controlepcp_sandbox
+  Usuário: root
+  Senha: k7m2y9u4
+
+═══════════════════════════════════════════════════════════════════════════════
+
+📂 ARQUIVOS CRIADOS/MODIFICADOS
+
+┌─ Configuração
+├─ src/Database/Connection.php ................ Credenciais do banco
+└─ src/Codi/CodiClient.php ................... Fix encoding ISO-8859-1→UTF-8
+
+┌─ Database
+├─ db/migration_codi_sync.sql ................ Schema com 5 tabelas
+└─ db/run_codi_migration2.php ................ Executor de migrations
+
+┌─ Sincronização
+├─ sync_codi_to_db.php ....................... Sincroniza dados CODI→MySQL
+├─ operacoes_codi_avancadas.php .............. Análises e agregações
+└─ trabalha_codi_dados.php ................... Exemplos de queries
+
+┌─ API / Endpoints
+├─ api/codi_data.php ......................... RESTful API (5 endpoints)
+├─ api/codi_status.php ....................... Status e informações
+└─ test_codi_api.php ......................... Tests dos endpoints
+
+┌─ Cache/Dados
+├─ codi_dados_estruturados.json .............. Dados estruturados para frontend
+├─ codi_dados_exportados.json ................ Backup completo
+└─ dados_codi_estruturados.json .............. JSON processado
+
+═══════════════════════════════════════════════════════════════════════════════
+
+🗄️ SCHEMA DO BANCO DE DADOS
+
+5 Tabelas criadas em controlepcp_sandbox:
+
+1. codi_recursos
+   └─ Recursos CODI (máquinas/linhas)
+   └─ 15 registros
+
+2. codi_calendario  
+   └─ Calendário fabril (turnos, períodos)
+   └─ 100 registros (1.574 disponível)
+
+3. codi_performance
+   └─ Métricas de performance
+   └─ 100 registros (410 disponível)
+
+4. codi_sincronizacao
+   └─ Log de sincronizações
+   
+5. codi_mapeamento
+   └─ Mapeamento CODI→IDs locais
+
+═══════════════════════════════════════════════════════════════════════════════
+
+🔌 ENDPOINTS DA API
+
+┌─ Status Geral
+GET /api/codi_data.php
+└─ Retorna totais e endpoints disponíveis
+
+┌─ Recursos
+GET /api/codi_data.php?endpoint=recursos
+└─ Lista 15 recursos com ID, código e nome
+
+┌─ Calendário
+GET /api/codi_data.php?endpoint=calendario&limit=50&offset=0
+GET /api/codi_data.php?endpoint=calendario&recurso=1&limit=100
+└─ Calendário com filtros por recurso, limites e paginação
+
+┌─ Performance
+GET /api/codi_data.php?endpoint=performance&limit=100&offset=0
+GET /api/codi_data.php?endpoint=performance&recurso=1
+└─ Performance data com agregações
+
+┌─ Timeline
+GET /api/codi_data.php?endpoint=timeline&data_inicio=2020-01-01&data_fim=2020-12-31
+└─ Timeline agregado por data e recurso
+
+═══════════════════════════════════════════════════════════════════════════════
+
+💡 EXEMPLOS DE USO EM PHP
+
+1. Carregar Todos os Recursos:
+───────────────────────────────
+require_once 'src/Database/Connection.php';
+use App\Database\Connection;
+
+$pdo = Connection::get();
+$result = $pdo->query('SELECT * FROM codi_recursos');
+$recursos = $result->fetchAll(PDO::FETCH_ASSOC);
+
+2. Calendário de um Recurso:
+────────────────────────────
+$stmt = $pdo->prepare(
+    'SELECT * FROM codi_calendario WHERE cal_recurso_codi_id = ?'
+);
+$stmt->execute([10]); // ID do recurso
+$calendario = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+3. Timeline com JOINs:
+──────────────────────
+$query = 'SELECT c.*, r.cod_nome_recurso 
+          FROM codi_calendario c
+          LEFT JOIN codi_recursos r ON c.cal_recurso_codi_id = r.cod_codigo_codi
+          WHERE c.cal_data BETWEEN ? AND ?';
+$stmt = $pdo->prepare($query);
+$stmt->execute(['2020-01-01', '2020-12-31']);
+
+4. Chamar API RESTful:
+──────────────────────
+$url = 'http://localhost/api/codi_data.php?endpoint=recursos';
+$response = file_get_contents($url);
+$dados = json_decode($response, true);
+
+═══════════════════════════════════════════════════════════════════════════════
+
+📊 ANÁLISES DISPONÍVEIS
+
+1. Distribuição de Calendário por Recurso
+   └─ Mostra períodos, dias, datas primeiro/último
+   
+2. Correlação Calendário × Performance
+   └─ Compara eventos planejados vs executados
+   
+3. Análise Temporal (por mês)
+   └─ Distribuição de períodos ao longo do tempo
+   
+4. Items Mais Executados
+   └─ Ranking de produtos/items por execução
+
+═══════════════════════════════════════════════════════════════════════════════
+
+🔄 FLUXO DE SINCRONIZAÇÃO
+
+1. PHP chama CodiClient.php
+   └─ Conecta via HTTP Basic Auth ao CODI
+   
+2. CodiClient retorna JSON com encoding ISO-8859-1
+   └─ Convertido para UTF-8 no CodiClient
+   
+3. Dados salvos em tabelas codi_*
+   └─ Com campo cod_dados_json para dados completos
+   
+4. APIs servem dados em JSON limpo
+   └─ Pronto para frontend/mobile
+   
+5. Análises/Relatórios processam dados
+   └─ Agregações, correlações, filtros
+
+═══════════════════════════════════════════════════════════════════════════════
+
+⚡ SCRIPTS PRINCIPAIS
+
+1. Sincronizar Dados (executar primeira vez):
+   php sync_codi_to_db.php
+   └─ Carrega 1000 calendário + 500 performance
+   
+2. Explorar Dados:
+   php explore_codi_data.php
+   └─ Mostra estrutura e primeiros registros
+   
+3. Testar API:
+   php test_codi_api.php
+   └─ Valida todos os 5 endpoints
+   
+4. Operações Avançadas:
+   php operacoes_codi_avancadas.php
+   └─ Análises, correlações, agregações
+
+═══════════════════════════════════════════════════════════════════════════════
+
+🎯 PRÓXIMOS PASSOS
+
+1. ✅ COMPLETO - Sincronização CODI→MySQL
+2. ✅ COMPLETO - API de dados criada
+3. ⏳ TODO - Integração no SEQUENCIAMENTO timeline
+4. ⏳ TODO - Scheduler para sync automático
+5. ⏳ TODO - Dashboard de visualização
+
+═══════════════════════════════════════════════════════════════════════════════
+
+📝 NOTAS TÉCNICAS
+
+• Encoding: Resposta CODI é ISO-8859-1, convertida para UTF-8
+• Paginação: CODI suporta pageNumber=0 e pageSize até 100
+• Dados Brutos: Campo cod_dados_json preserva estrutura original CODI
+• Performance: Queries otimizadas com índices em datas e resource_id
+• Compatibilidade: Usa apenas PHP PDO (MySQL nativo, sem ORM)
+
+═══════════════════════════════════════════════════════════════════════════════
+
+🐛 TROUBLESHOOTING
+
+Problema: "Access denied" ao conectar MySQL
+Solução: Verificar senha em src/Database/Connection.php (k7m2y9u4)
+
+Problema: Dados JSON inválidos do CODI
+Solução: CodiClient.php já trata encoding automaticamente
+
+Problema: Muitos dados para sincronizar
+Solução: Aumentar LIMIT em sync_codi_to_db.php ou fazer loop de sincronização
+
+═══════════════════════════════════════════════════════════════════════════════
+
+✅ Integração CODI Completada em 7 de Abril de 2026

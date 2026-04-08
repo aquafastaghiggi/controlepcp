@@ -1,0 +1,1403 @@
+{
+    "meta": {
+        "data_geracao": "2026-04-07 13:59:00",
+        "banco_dados": "controlepcp_sandbox",
+        "versao": "1.0"
+    },
+    "recursos": [
+        {
+            "id": 6,
+            "codigo_codi": 7,
+            "nome": "LINHA 1",
+            "ativo": true
+        },
+        {
+            "id": 5,
+            "codigo_codi": 8,
+            "nome": "LINHA 2",
+            "ativo": true
+        },
+        {
+            "id": 4,
+            "codigo_codi": 9,
+            "nome": "LINHA 3",
+            "ativo": true
+        },
+        {
+            "id": 3,
+            "codigo_codi": 10,
+            "nome": "LINHA 4",
+            "ativo": true
+        },
+        {
+            "id": 2,
+            "codigo_codi": 11,
+            "nome": "LINHA 5",
+            "ativo": true
+        },
+        {
+            "id": 1,
+            "codigo_codi": 6,
+            "nome": "LINHA 6",
+            "ativo": true
+        },
+        {
+            "id": 7,
+            "codigo_codi": 22,
+            "nome": "LINHA 7",
+            "ativo": true
+        },
+        {
+            "id": 8,
+            "codigo_codi": 17,
+            "nome": "MÁQ. 03",
+            "ativo": true
+        },
+        {
+            "id": 9,
+            "codigo_codi": 1,
+            "nome": "MÁQ. 04",
+            "ativo": true
+        },
+        {
+            "id": 10,
+            "codigo_codi": 2,
+            "nome": "MÁQ. 05",
+            "ativo": true
+        },
+        {
+            "id": 11,
+            "codigo_codi": 5,
+            "nome": "MÁQ. 06",
+            "ativo": true
+        },
+        {
+            "id": 12,
+            "codigo_codi": 4,
+            "nome": "MÁQ. 07",
+            "ativo": true
+        },
+        {
+            "id": 13,
+            "codigo_codi": 18,
+            "nome": "MÁQ. 08",
+            "ativo": true
+        },
+        {
+            "id": 15,
+            "codigo_codi": 16,
+            "nome": "MÁQ. 09",
+            "ativo": true
+        },
+        {
+            "id": 14,
+            "codigo_codi": 3,
+            "nome": "MÁQ. 10",
+            "ativo": true
+        }
+    ],
+    "timeline": [
+        {
+            "codigo": 49520,
+            "data": "2020-06-26",
+            "inicio": "13:27:00",
+            "fim": "17:50:00",
+            "recurso_id": 4,
+            "recurso_nome": "MÁQ. 07"
+        },
+        {
+            "codigo": 49517,
+            "data": "2020-06-25",
+            "inicio": "07:05:00",
+            "fim": "09:00:00",
+            "recurso_id": 10,
+            "recurso_nome": "LINHA 4"
+        },
+        {
+            "codigo": 123,
+            "data": "2019-10-15",
+            "inicio": "00:00:00",
+            "fim": "23:59:00",
+            "recurso_id": 5,
+            "recurso_nome": "MÁQ. 06"
+        },
+        {
+            "codigo": 122,
+            "data": "2019-10-15",
+            "inicio": "12:27:00",
+            "fim": "17:50:00",
+            "recurso_id": 5,
+            "recurso_nome": "MÁQ. 06"
+        },
+        {
+            "codigo": 120,
+            "data": "2019-10-15",
+            "inicio": "00:00:00",
+            "fim": "23:59:00",
+            "recurso_id": 7,
+            "recurso_nome": "LINHA 1"
+        },
+        {
+            "codigo": 117,
+            "data": "2019-10-15",
+            "inicio": "00:00:00",
+            "fim": "23:59:00",
+            "recurso_id": 11,
+            "recurso_nome": "LINHA 5"
+        },
+        {
+            "codigo": 114,
+            "data": "2019-10-15",
+            "inicio": "00:00:00",
+            "fim": "23:59:00",
+            "recurso_id": 10,
+            "recurso_nome": "LINHA 4"
+        },
+        {
+            "codigo": 111,
+            "data": "2019-10-15",
+            "inicio": "00:00:00",
+            "fim": "23:59:00",
+            "recurso_id": 9,
+            "recurso_nome": "LINHA 3"
+        },
+        {
+            "codigo": 108,
+            "data": "2019-10-15",
+            "inicio": "00:00:00",
+            "fim": "23:59:00",
+            "recurso_id": 8,
+            "recurso_nome": "LINHA 2"
+        },
+        {
+            "codigo": 135,
+            "data": "2019-10-15",
+            "inicio": "00:00:00",
+            "fim": "23:59:00",
+            "recurso_id": 4,
+            "recurso_nome": "MÁQ. 07"
+        },
+        {
+            "codigo": 121,
+            "data": "2019-10-15",
+            "inicio": "07:05:00",
+            "fim": "11:30:00",
+            "recurso_id": 5,
+            "recurso_nome": "MÁQ. 06"
+        },
+        {
+            "codigo": 124,
+            "data": "2019-10-15",
+            "inicio": "07:05:00",
+            "fim": "11:30:00",
+            "recurso_id": 2,
+            "recurso_nome": "MÁQ. 05"
+        },
+        {
+            "codigo": 125,
+            "data": "2019-10-15",
+            "inicio": "12:27:00",
+            "fim": "17:50:00",
+            "recurso_id": 2,
+            "recurso_nome": "MÁQ. 05"
+        },
+        {
+            "codigo": 134,
+            "data": "2019-10-15",
+            "inicio": "12:27:00",
+            "fim": "17:50:00",
+            "recurso_id": 4,
+            "recurso_nome": "MÁQ. 07"
+        },
+        {
+            "codigo": 133,
+            "data": "2019-10-15",
+            "inicio": "07:05:00",
+            "fim": "11:30:00",
+            "recurso_id": 4,
+            "recurso_nome": "MÁQ. 07"
+        },
+        {
+            "codigo": 132,
+            "data": "2019-10-15",
+            "inicio": "00:00:00",
+            "fim": "23:59:00",
+            "recurso_id": 1,
+            "recurso_nome": "MÁQ. 04"
+        },
+        {
+            "codigo": 131,
+            "data": "2019-10-15",
+            "inicio": "12:27:00",
+            "fim": "17:50:00",
+            "recurso_id": 1,
+            "recurso_nome": "MÁQ. 04"
+        },
+        {
+            "codigo": 130,
+            "data": "2019-10-15",
+            "inicio": "07:05:00",
+            "fim": "11:30:00",
+            "recurso_id": 1,
+            "recurso_nome": "MÁQ. 04"
+        },
+        {
+            "codigo": 129,
+            "data": "2019-10-15",
+            "inicio": "00:00:00",
+            "fim": "23:59:00",
+            "recurso_id": 6,
+            "recurso_nome": "LINHA 6"
+        },
+        {
+            "codigo": 126,
+            "data": "2019-10-15",
+            "inicio": "00:00:00",
+            "fim": "23:59:00",
+            "recurso_id": 2,
+            "recurso_nome": "MÁQ. 05"
+        },
+        {
+            "codigo": 88,
+            "data": "2019-10-11",
+            "inicio": "07:05:00",
+            "fim": "11:30:00",
+            "recurso_id": 5,
+            "recurso_nome": "MÁQ. 06"
+        },
+        {
+            "codigo": 94,
+            "data": "2019-10-11",
+            "inicio": "07:05:00",
+            "fim": "11:30:00",
+            "recurso_id": 3,
+            "recurso_nome": "MÁQ. 10"
+        },
+        {
+            "codigo": 93,
+            "data": "2019-10-11",
+            "inicio": "00:00:00",
+            "fim": "23:59:00",
+            "recurso_id": 4,
+            "recurso_nome": "MÁQ. 07"
+        },
+        {
+            "codigo": 92,
+            "data": "2019-10-11",
+            "inicio": "12:27:00",
+            "fim": "17:50:00",
+            "recurso_id": 4,
+            "recurso_nome": "MÁQ. 07"
+        },
+        {
+            "codigo": 91,
+            "data": "2019-10-11",
+            "inicio": "07:05:00",
+            "fim": "11:30:00",
+            "recurso_id": 4,
+            "recurso_nome": "MÁQ. 07"
+        },
+        {
+            "codigo": 90,
+            "data": "2019-10-11",
+            "inicio": "00:00:00",
+            "fim": "23:59:00",
+            "recurso_id": 5,
+            "recurso_nome": "MÁQ. 06"
+        },
+        {
+            "codigo": 89,
+            "data": "2019-10-11",
+            "inicio": "12:27:00",
+            "fim": "17:50:00",
+            "recurso_id": 5,
+            "recurso_nome": "MÁQ. 06"
+        },
+        {
+            "codigo": 95,
+            "data": "2019-10-11",
+            "inicio": "12:27:00",
+            "fim": "17:50:00",
+            "recurso_id": 3,
+            "recurso_nome": "MÁQ. 10"
+        },
+        {
+            "codigo": 96,
+            "data": "2019-10-11",
+            "inicio": "00:00:00",
+            "fim": "23:59:00",
+            "recurso_id": 3,
+            "recurso_nome": "MÁQ. 10"
+        },
+        {
+            "codigo": 97,
+            "data": "2019-10-11",
+            "inicio": "07:05:00",
+            "fim": "11:30:00",
+            "recurso_id": 1,
+            "recurso_nome": "MÁQ. 04"
+        },
+        {
+            "codigo": 105,
+            "data": "2019-10-11",
+            "inicio": "00:00:00",
+            "fim": "23:59:00",
+            "recurso_id": 6,
+            "recurso_nome": "LINHA 6"
+        },
+        {
+            "codigo": 102,
+            "data": "2019-10-11",
+            "inicio": "00:00:00",
+            "fim": "23:59:00",
+            "recurso_id": 2,
+            "recurso_nome": "MÁQ. 05"
+        },
+        {
+            "codigo": 101,
+            "data": "2019-10-11",
+            "inicio": "12:27:00",
+            "fim": "17:50:00",
+            "recurso_id": 2,
+            "recurso_nome": "MÁQ. 05"
+        },
+        {
+            "codigo": 100,
+            "data": "2019-10-11",
+            "inicio": "07:05:00",
+            "fim": "11:30:00",
+            "recurso_id": 2,
+            "recurso_nome": "MÁQ. 05"
+        },
+        {
+            "codigo": 99,
+            "data": "2019-10-11",
+            "inicio": "00:00:00",
+            "fim": "23:59:00",
+            "recurso_id": 1,
+            "recurso_nome": "MÁQ. 04"
+        },
+        {
+            "codigo": 98,
+            "data": "2019-10-11",
+            "inicio": "12:27:00",
+            "fim": "17:50:00",
+            "recurso_id": 1,
+            "recurso_nome": "MÁQ. 04"
+        },
+        {
+            "codigo": 72,
+            "data": "2019-10-10",
+            "inicio": "00:00:00",
+            "fim": "23:59:00",
+            "recurso_id": 5,
+            "recurso_nome": "MÁQ. 06"
+        },
+        {
+            "codigo": 73,
+            "data": "2019-10-10",
+            "inicio": "07:05:00",
+            "fim": "11:30:00",
+            "recurso_id": 4,
+            "recurso_nome": "MÁQ. 07"
+        },
+        {
+            "codigo": 74,
+            "data": "2019-10-10",
+            "inicio": "12:27:00",
+            "fim": "17:50:00",
+            "recurso_id": 4,
+            "recurso_nome": "MÁQ. 07"
+        },
+        {
+            "codigo": 75,
+            "data": "2019-10-10",
+            "inicio": "00:00:00",
+            "fim": "23:59:00",
+            "recurso_id": 4,
+            "recurso_nome": "MÁQ. 07"
+        },
+        {
+            "codigo": 76,
+            "data": "2019-10-10",
+            "inicio": "07:05:00",
+            "fim": "11:30:00",
+            "recurso_id": 3,
+            "recurso_nome": "MÁQ. 10"
+        },
+        {
+            "codigo": 77,
+            "data": "2019-10-10",
+            "inicio": "12:27:00",
+            "fim": "17:50:00",
+            "recurso_id": 3,
+            "recurso_nome": "MÁQ. 10"
+        },
+        {
+            "codigo": 78,
+            "data": "2019-10-10",
+            "inicio": "00:00:00",
+            "fim": "23:59:00",
+            "recurso_id": 3,
+            "recurso_nome": "MÁQ. 10"
+        },
+        {
+            "codigo": 79,
+            "data": "2019-10-10",
+            "inicio": "07:05:00",
+            "fim": "11:30:00",
+            "recurso_id": 1,
+            "recurso_nome": "MÁQ. 04"
+        },
+        {
+            "codigo": 80,
+            "data": "2019-10-10",
+            "inicio": "12:27:00",
+            "fim": "17:50:00",
+            "recurso_id": 1,
+            "recurso_nome": "MÁQ. 04"
+        },
+        {
+            "codigo": 81,
+            "data": "2019-10-10",
+            "inicio": "00:00:00",
+            "fim": "23:59:00",
+            "recurso_id": 1,
+            "recurso_nome": "MÁQ. 04"
+        },
+        {
+            "codigo": 83,
+            "data": "2019-10-10",
+            "inicio": "12:27:00",
+            "fim": "17:50:00",
+            "recurso_id": 2,
+            "recurso_nome": "MÁQ. 05"
+        },
+        {
+            "codigo": 84,
+            "data": "2019-10-10",
+            "inicio": "00:00:00",
+            "fim": "23:59:00",
+            "recurso_id": 2,
+            "recurso_nome": "MÁQ. 05"
+        },
+        {
+            "codigo": 87,
+            "data": "2019-10-10",
+            "inicio": "00:00:00",
+            "fim": "23:59:00",
+            "recurso_id": 6,
+            "recurso_nome": "LINHA 6"
+        },
+        {
+            "codigo": 71,
+            "data": "2019-10-10",
+            "inicio": "12:27:00",
+            "fim": "17:50:00",
+            "recurso_id": 5,
+            "recurso_nome": "MÁQ. 06"
+        },
+        {
+            "codigo": 70,
+            "data": "2019-10-10",
+            "inicio": "07:05:00",
+            "fim": "11:30:00",
+            "recurso_id": 5,
+            "recurso_nome": "MÁQ. 06"
+        },
+        {
+            "codigo": 82,
+            "data": "2019-10-10",
+            "inicio": "07:05:00",
+            "fim": "11:30:00",
+            "recurso_id": 2,
+            "recurso_nome": "MÁQ. 05"
+        },
+        {
+            "codigo": 52,
+            "data": "2019-10-09",
+            "inicio": "07:05:00",
+            "fim": "11:30:00",
+            "recurso_id": 5,
+            "recurso_nome": "MÁQ. 06"
+        },
+        {
+            "codigo": 53,
+            "data": "2019-10-09",
+            "inicio": "12:27:00",
+            "fim": "17:50:00",
+            "recurso_id": 5,
+            "recurso_nome": "MÁQ. 06"
+        },
+        {
+            "codigo": 54,
+            "data": "2019-10-09",
+            "inicio": "00:00:00",
+            "fim": "23:59:00",
+            "recurso_id": 5,
+            "recurso_nome": "MÁQ. 06"
+        },
+        {
+            "codigo": 55,
+            "data": "2019-10-09",
+            "inicio": "07:05:00",
+            "fim": "11:30:00",
+            "recurso_id": 4,
+            "recurso_nome": "MÁQ. 07"
+        },
+        {
+            "codigo": 69,
+            "data": "2019-10-09",
+            "inicio": "00:00:00",
+            "fim": "23:59:00",
+            "recurso_id": 6,
+            "recurso_nome": "LINHA 6"
+        },
+        {
+            "codigo": 56,
+            "data": "2019-10-09",
+            "inicio": "12:27:00",
+            "fim": "17:50:00",
+            "recurso_id": 4,
+            "recurso_nome": "MÁQ. 07"
+        },
+        {
+            "codigo": 57,
+            "data": "2019-10-09",
+            "inicio": "00:00:00",
+            "fim": "23:59:00",
+            "recurso_id": 4,
+            "recurso_nome": "MÁQ. 07"
+        },
+        {
+            "codigo": 58,
+            "data": "2019-10-09",
+            "inicio": "07:05:00",
+            "fim": "11:30:00",
+            "recurso_id": 3,
+            "recurso_nome": "MÁQ. 10"
+        },
+        {
+            "codigo": 59,
+            "data": "2019-10-09",
+            "inicio": "12:27:00",
+            "fim": "17:50:00",
+            "recurso_id": 3,
+            "recurso_nome": "MÁQ. 10"
+        },
+        {
+            "codigo": 66,
+            "data": "2019-10-09",
+            "inicio": "00:00:00",
+            "fim": "23:59:00",
+            "recurso_id": 2,
+            "recurso_nome": "MÁQ. 05"
+        },
+        {
+            "codigo": 65,
+            "data": "2019-10-09",
+            "inicio": "12:27:00",
+            "fim": "17:50:00",
+            "recurso_id": 2,
+            "recurso_nome": "MÁQ. 05"
+        },
+        {
+            "codigo": 64,
+            "data": "2019-10-09",
+            "inicio": "07:05:00",
+            "fim": "11:30:00",
+            "recurso_id": 2,
+            "recurso_nome": "MÁQ. 05"
+        },
+        {
+            "codigo": 63,
+            "data": "2019-10-09",
+            "inicio": "00:00:00",
+            "fim": "23:59:00",
+            "recurso_id": 1,
+            "recurso_nome": "MÁQ. 04"
+        },
+        {
+            "codigo": 62,
+            "data": "2019-10-09",
+            "inicio": "12:27:00",
+            "fim": "17:50:00",
+            "recurso_id": 1,
+            "recurso_nome": "MÁQ. 04"
+        },
+        {
+            "codigo": 61,
+            "data": "2019-10-09",
+            "inicio": "07:05:00",
+            "fim": "11:30:00",
+            "recurso_id": 1,
+            "recurso_nome": "MÁQ. 04"
+        },
+        {
+            "codigo": 60,
+            "data": "2019-10-09",
+            "inicio": "00:00:00",
+            "fim": "23:59:00",
+            "recurso_id": 3,
+            "recurso_nome": "MÁQ. 10"
+        },
+        {
+            "codigo": 39,
+            "data": "2019-10-08",
+            "inicio": "00:00:00",
+            "fim": "23:59:00",
+            "recurso_id": 4,
+            "recurso_nome": "MÁQ. 07"
+        },
+        {
+            "codigo": 38,
+            "data": "2019-10-08",
+            "inicio": "12:27:00",
+            "fim": "17:50:00",
+            "recurso_id": 4,
+            "recurso_nome": "MÁQ. 07"
+        },
+        {
+            "codigo": 37,
+            "data": "2019-10-08",
+            "inicio": "07:05:00",
+            "fim": "11:30:00",
+            "recurso_id": 4,
+            "recurso_nome": "MÁQ. 07"
+        },
+        {
+            "codigo": 36,
+            "data": "2019-10-08",
+            "inicio": "00:00:00",
+            "fim": "23:59:00",
+            "recurso_id": 5,
+            "recurso_nome": "MÁQ. 06"
+        },
+        {
+            "codigo": 35,
+            "data": "2019-10-08",
+            "inicio": "12:27:00",
+            "fim": "17:50:00",
+            "recurso_id": 5,
+            "recurso_nome": "MÁQ. 06"
+        },
+        {
+            "codigo": 34,
+            "data": "2019-10-08",
+            "inicio": "07:05:00",
+            "fim": "11:30:00",
+            "recurso_id": 5,
+            "recurso_nome": "MÁQ. 06"
+        },
+        {
+            "codigo": 40,
+            "data": "2019-10-08",
+            "inicio": "07:05:00",
+            "fim": "11:30:00",
+            "recurso_id": 3,
+            "recurso_nome": "MÁQ. 10"
+        },
+        {
+            "codigo": 41,
+            "data": "2019-10-08",
+            "inicio": "12:27:00",
+            "fim": "17:50:00",
+            "recurso_id": 3,
+            "recurso_nome": "MÁQ. 10"
+        },
+        {
+            "codigo": 42,
+            "data": "2019-10-08",
+            "inicio": "00:00:00",
+            "fim": "23:59:00",
+            "recurso_id": 3,
+            "recurso_nome": "MÁQ. 10"
+        },
+        {
+            "codigo": 51,
+            "data": "2019-10-08",
+            "inicio": "00:00:00",
+            "fim": "23:59:00",
+            "recurso_id": 6,
+            "recurso_nome": "LINHA 6"
+        },
+        {
+            "codigo": 48,
+            "data": "2019-10-08",
+            "inicio": "00:00:00",
+            "fim": "23:59:00",
+            "recurso_id": 2,
+            "recurso_nome": "MÁQ. 05"
+        },
+        {
+            "codigo": 47,
+            "data": "2019-10-08",
+            "inicio": "12:27:00",
+            "fim": "17:50:00",
+            "recurso_id": 2,
+            "recurso_nome": "MÁQ. 05"
+        },
+        {
+            "codigo": 46,
+            "data": "2019-10-08",
+            "inicio": "07:05:00",
+            "fim": "11:30:00",
+            "recurso_id": 2,
+            "recurso_nome": "MÁQ. 05"
+        },
+        {
+            "codigo": 45,
+            "data": "2019-10-08",
+            "inicio": "00:00:00",
+            "fim": "23:59:00",
+            "recurso_id": 1,
+            "recurso_nome": "MÁQ. 04"
+        },
+        {
+            "codigo": 44,
+            "data": "2019-10-08",
+            "inicio": "12:27:00",
+            "fim": "17:50:00",
+            "recurso_id": 1,
+            "recurso_nome": "MÁQ. 04"
+        },
+        {
+            "codigo": 43,
+            "data": "2019-10-08",
+            "inicio": "07:05:00",
+            "fim": "11:30:00",
+            "recurso_id": 1,
+            "recurso_nome": "MÁQ. 04"
+        },
+        {
+            "codigo": 22,
+            "data": "2019-10-07",
+            "inicio": "07:05:00",
+            "fim": "11:30:00",
+            "recurso_id": 3,
+            "recurso_nome": "MÁQ. 10"
+        },
+        {
+            "codigo": 21,
+            "data": "2019-10-07",
+            "inicio": "00:00:00",
+            "fim": "23:59:00",
+            "recurso_id": 4,
+            "recurso_nome": "MÁQ. 07"
+        },
+        {
+            "codigo": 17,
+            "data": "2019-10-07",
+            "inicio": "12:27:00",
+            "fim": "17:50:00",
+            "recurso_id": 5,
+            "recurso_nome": "MÁQ. 06"
+        },
+        {
+            "codigo": 20,
+            "data": "2019-10-07",
+            "inicio": "12:27:00",
+            "fim": "17:50:00",
+            "recurso_id": 4,
+            "recurso_nome": "MÁQ. 07"
+        },
+        {
+            "codigo": 19,
+            "data": "2019-10-07",
+            "inicio": "07:05:00",
+            "fim": "11:30:00",
+            "recurso_id": 4,
+            "recurso_nome": "MÁQ. 07"
+        },
+        {
+            "codigo": 18,
+            "data": "2019-10-07",
+            "inicio": "00:00:00",
+            "fim": "23:59:00",
+            "recurso_id": 5,
+            "recurso_nome": "MÁQ. 06"
+        },
+        {
+            "codigo": 23,
+            "data": "2019-10-07",
+            "inicio": "12:27:00",
+            "fim": "17:50:00",
+            "recurso_id": 3,
+            "recurso_nome": "MÁQ. 10"
+        },
+        {
+            "codigo": 24,
+            "data": "2019-10-07",
+            "inicio": "00:00:00",
+            "fim": "23:59:00",
+            "recurso_id": 3,
+            "recurso_nome": "MÁQ. 10"
+        },
+        {
+            "codigo": 25,
+            "data": "2019-10-07",
+            "inicio": "07:05:00",
+            "fim": "11:30:00",
+            "recurso_id": 1,
+            "recurso_nome": "MÁQ. 04"
+        },
+        {
+            "codigo": 27,
+            "data": "2019-10-07",
+            "inicio": "00:00:00",
+            "fim": "23:59:00",
+            "recurso_id": 1,
+            "recurso_nome": "MÁQ. 04"
+        },
+        {
+            "codigo": 28,
+            "data": "2019-10-07",
+            "inicio": "07:05:00",
+            "fim": "11:30:00",
+            "recurso_id": 2,
+            "recurso_nome": "MÁQ. 05"
+        },
+        {
+            "codigo": 29,
+            "data": "2019-10-07",
+            "inicio": "12:27:00",
+            "fim": "17:50:00",
+            "recurso_id": 2,
+            "recurso_nome": "MÁQ. 05"
+        },
+        {
+            "codigo": 30,
+            "data": "2019-10-07",
+            "inicio": "00:00:00",
+            "fim": "23:59:00",
+            "recurso_id": 2,
+            "recurso_nome": "MÁQ. 05"
+        },
+        {
+            "codigo": 33,
+            "data": "2019-10-07",
+            "inicio": "00:00:00",
+            "fim": "23:59:00",
+            "recurso_id": 6,
+            "recurso_nome": "LINHA 6"
+        },
+        {
+            "codigo": 26,
+            "data": "2019-10-07",
+            "inicio": "12:27:00",
+            "fim": "17:50:00",
+            "recurso_id": 1,
+            "recurso_nome": "MÁQ. 04"
+        },
+        {
+            "codigo": 16,
+            "data": "2019-10-07",
+            "inicio": "07:05:00",
+            "fim": "11:30:00",
+            "recurso_id": 5,
+            "recurso_nome": "MÁQ. 06"
+        }
+    ],
+    "performance": [
+        {
+            "codigo": 41,
+            "recurso_id": 10,
+            "item_id": 114
+        },
+        {
+            "codigo": 48,
+            "recurso_id": 9,
+            "item_id": 122
+        },
+        {
+            "codigo": 493,
+            "recurso_id": 9,
+            "item_id": 314
+        },
+        {
+            "codigo": 218,
+            "recurso_id": 9,
+            "item_id": 120
+        },
+        {
+            "codigo": 59,
+            "recurso_id": 10,
+            "item_id": 56
+        },
+        {
+            "codigo": 88,
+            "recurso_id": 2,
+            "item_id": 26
+        },
+        {
+            "codigo": 66,
+            "recurso_id": 10,
+            "item_id": 49
+        },
+        {
+            "codigo": 82,
+            "recurso_id": 1,
+            "item_id": 13
+        },
+        {
+            "codigo": 486,
+            "recurso_id": 8,
+            "item_id": 51
+        },
+        {
+            "codigo": 336,
+            "recurso_id": 11,
+            "item_id": 261
+        },
+        {
+            "codigo": 389,
+            "recurso_id": 6,
+            "item_id": 174
+        },
+        {
+            "codigo": 390,
+            "recurso_id": 6,
+            "item_id": 175
+        },
+        {
+            "codigo": 404,
+            "recurso_id": 6,
+            "item_id": 199
+        },
+        {
+            "codigo": 572,
+            "recurso_id": 6,
+            "item_id": 354
+        },
+        {
+            "codigo": 380,
+            "recurso_id": 6,
+            "item_id": 213
+        },
+        {
+            "codigo": 108,
+            "recurso_id": 9,
+            "item_id": 234
+        },
+        {
+            "codigo": 107,
+            "recurso_id": 9,
+            "item_id": 235
+        },
+        {
+            "codigo": 106,
+            "recurso_id": 9,
+            "item_id": 236
+        },
+        {
+            "codigo": 335,
+            "recurso_id": 10,
+            "item_id": 260
+        },
+        {
+            "codigo": 244,
+            "recurso_id": 11,
+            "item_id": 90
+        },
+        {
+            "codigo": 70,
+            "recurso_id": 11,
+            "item_id": 247
+        },
+        {
+            "codigo": 329,
+            "recurso_id": 8,
+            "item_id": 125
+        },
+        {
+            "codigo": 381,
+            "recurso_id": 6,
+            "item_id": 214
+        },
+        {
+            "codigo": 382,
+            "recurso_id": 6,
+            "item_id": 215
+        },
+        {
+            "codigo": 384,
+            "recurso_id": 6,
+            "item_id": 217
+        },
+        {
+            "codigo": 109,
+            "recurso_id": 9,
+            "item_id": 233
+        },
+        {
+            "codigo": 433,
+            "recurso_id": 8,
+            "item_id": 237
+        },
+        {
+            "codigo": 58,
+            "recurso_id": 11,
+            "item_id": 237
+        },
+        {
+            "codigo": 55,
+            "recurso_id": 11,
+            "item_id": 240
+        },
+        {
+            "codigo": 93,
+            "recurso_id": 4,
+            "item_id": 2
+        },
+        {
+            "codigo": 91,
+            "recurso_id": 4,
+            "item_id": 4
+        },
+        {
+            "codigo": 89,
+            "recurso_id": 4,
+            "item_id": 5
+        },
+        {
+            "codigo": 79,
+            "recurso_id": 1,
+            "item_id": 14
+        },
+        {
+            "codigo": 494,
+            "recurso_id": 9,
+            "item_id": 315
+        },
+        {
+            "codigo": 268,
+            "recurso_id": 10,
+            "item_id": 65
+        },
+        {
+            "codigo": 264,
+            "recurso_id": 10,
+            "item_id": 69
+        },
+        {
+            "codigo": 476,
+            "recurso_id": 8,
+            "item_id": 124
+        },
+        {
+            "codigo": 483,
+            "recurso_id": 8,
+            "item_id": 166
+        },
+        {
+            "codigo": 193,
+            "recurso_id": 9,
+            "item_id": 147
+        },
+        {
+            "codigo": 284,
+            "recurso_id": 10,
+            "item_id": 47
+        },
+        {
+            "codigo": 283,
+            "recurso_id": 10,
+            "item_id": 48
+        },
+        {
+            "codigo": 282,
+            "recurso_id": 10,
+            "item_id": 50
+        },
+        {
+            "codigo": 281,
+            "recurso_id": 11,
+            "item_id": 51
+        },
+        {
+            "codigo": 280,
+            "recurso_id": 11,
+            "item_id": 52
+        },
+        {
+            "codigo": 222,
+            "recurso_id": 10,
+            "item_id": 115
+        },
+        {
+            "codigo": 279,
+            "recurso_id": 11,
+            "item_id": 53
+        },
+        {
+            "codigo": 278,
+            "recurso_id": 10,
+            "item_id": 54
+        },
+        {
+            "codigo": 277,
+            "recurso_id": 10,
+            "item_id": 55
+        },
+        {
+            "codigo": 276,
+            "recurso_id": 10,
+            "item_id": 57
+        },
+        {
+            "codigo": 275,
+            "recurso_id": 10,
+            "item_id": 58
+        },
+        {
+            "codigo": 263,
+            "recurso_id": 10,
+            "item_id": 70
+        },
+        {
+            "codigo": 248,
+            "recurso_id": 9,
+            "item_id": 86
+        },
+        {
+            "codigo": 246,
+            "recurso_id": 9,
+            "item_id": 88
+        },
+        {
+            "codigo": 240,
+            "recurso_id": 11,
+            "item_id": 94
+        },
+        {
+            "codigo": 361,
+            "recurso_id": 4,
+            "item_id": 272
+        },
+        {
+            "codigo": 363,
+            "recurso_id": 4,
+            "item_id": 273
+        },
+        {
+            "codigo": 232,
+            "recurso_id": 9,
+            "item_id": 102
+        },
+        {
+            "codigo": 156,
+            "recurso_id": 9,
+            "item_id": 185
+        },
+        {
+            "codigo": 403,
+            "recurso_id": 6,
+            "item_id": 192
+        },
+        {
+            "codigo": 391,
+            "recurso_id": 6,
+            "item_id": 179
+        },
+        {
+            "codigo": 392,
+            "recurso_id": 6,
+            "item_id": 180
+        },
+        {
+            "codigo": 398,
+            "recurso_id": 6,
+            "item_id": 187
+        },
+        {
+            "codigo": 400,
+            "recurso_id": 6,
+            "item_id": 189
+        },
+        {
+            "codigo": 402,
+            "recurso_id": 6,
+            "item_id": 191
+        },
+        {
+            "codigo": 115,
+            "recurso_id": 11,
+            "item_id": 227
+        },
+        {
+            "codigo": 71,
+            "recurso_id": 11,
+            "item_id": 124
+        },
+        {
+            "codigo": 407,
+            "recurso_id": 6,
+            "item_id": 202
+        },
+        {
+            "codigo": 383,
+            "recurso_id": 6,
+            "item_id": 216
+        },
+        {
+            "codigo": 378,
+            "recurso_id": 6,
+            "item_id": 218
+        },
+        {
+            "codigo": 231,
+            "recurso_id": 9,
+            "item_id": 103
+        },
+        {
+            "codigo": 236,
+            "recurso_id": 9,
+            "item_id": 98
+        },
+        {
+            "codigo": 224,
+            "recurso_id": 9,
+            "item_id": 112
+        },
+        {
+            "codigo": 442,
+            "recurso_id": 11,
+            "item_id": 286
+        },
+        {
+            "codigo": 223,
+            "recurso_id": 10,
+            "item_id": 113
+        },
+        {
+            "codigo": 221,
+            "recurso_id": 10,
+            "item_id": 116
+        },
+        {
+            "codigo": 242,
+            "recurso_id": 9,
+            "item_id": 92
+        },
+        {
+            "codigo": 62,
+            "recurso_id": 9,
+            "item_id": 105
+        },
+        {
+            "codigo": 227,
+            "recurso_id": 9,
+            "item_id": 109
+        },
+        {
+            "codigo": 68,
+            "recurso_id": 9,
+            "item_id": 118
+        },
+        {
+            "codigo": 324,
+            "recurso_id": 9,
+            "item_id": 257
+        },
+        {
+            "codigo": 77,
+            "recurso_id": 1,
+            "item_id": 16
+        },
+        {
+            "codigo": 75,
+            "recurso_id": 1,
+            "item_id": 18
+        },
+        {
+            "codigo": 74,
+            "recurso_id": 1,
+            "item_id": 19
+        },
+        {
+            "codigo": 78,
+            "recurso_id": 1,
+            "item_id": 15
+        },
+        {
+            "codigo": 220,
+            "recurso_id": 10,
+            "item_id": 117
+        },
+        {
+            "codigo": 330,
+            "recurso_id": 8,
+            "item_id": 126
+        },
+        {
+            "codigo": 250,
+            "recurso_id": 11,
+            "item_id": 84
+        },
+        {
+            "codigo": 198,
+            "recurso_id": 10,
+            "item_id": 142
+        },
+        {
+            "codigo": 197,
+            "recurso_id": 10,
+            "item_id": 143
+        },
+        {
+            "codigo": 194,
+            "recurso_id": 9,
+            "item_id": 146
+        },
+        {
+            "codigo": 192,
+            "recurso_id": 9,
+            "item_id": 148
+        },
+        {
+            "codigo": 191,
+            "recurso_id": 9,
+            "item_id": 149
+        },
+        {
+            "codigo": 394,
+            "recurso_id": 6,
+            "item_id": 182
+        },
+        {
+            "codigo": 396,
+            "recurso_id": 6,
+            "item_id": 184
+        },
+        {
+            "codigo": 397,
+            "recurso_id": 6,
+            "item_id": 186
+        },
+        {
+            "codigo": 399,
+            "recurso_id": 6,
+            "item_id": 188
+        },
+        {
+            "codigo": 401,
+            "recurso_id": 6,
+            "item_id": 190
+        },
+        {
+            "codigo": 434,
+            "recurso_id": 8,
+            "item_id": 243
+        },
+        {
+            "codigo": 342,
+            "recurso_id": 11,
+            "item_id": 267
+        },
+        {
+            "codigo": 347,
+            "recurso_id": 11,
+            "item_id": 269
+        }
+    ]
+}

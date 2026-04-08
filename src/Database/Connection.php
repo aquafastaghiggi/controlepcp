@@ -19,9 +19,9 @@ final class Connection
 
         $host = getenv('DB_HOST') ?: '127.0.0.1';
         $port = getenv('DB_PORT') ?: '3306';
-        $name = getenv('DB_NAME') ?: 'controlepcp';
+        $name = getenv('DB_NAME') ?: 'controlepcp_sandbox';
         $user = getenv('DB_USER') ?: 'root';
-        $pass = getenv('DB_PASS') ?: '';
+        $pass = getenv('DB_PASS') ?: 'k7m2y9u4';
 
         $dsn = sprintf('mysql:host=%s;port=%s;dbname=%s;charset=utf8mb4', $host, $port, $name);
 

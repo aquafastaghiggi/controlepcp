@@ -339,6 +339,10 @@ class CodiClient
                 throw new \Exception('Empty response body');
             }
             
+            // Converter encoding ISO-8859-1 para UTF-8 se necessário
+            // CODI server pode retornar dados em ISO-8859-1
+            $response = @iconv('ISO-8859-1', 'UTF-8//IGNORE', $response);
+            
             // Decodificar JSON
             $decoded = json_decode($response, true);
             

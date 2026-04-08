@@ -10,6 +10,7 @@ ini_set('log_errors', '1');
 require __DIR__ . '/../src/bootstrap.php';
 
 use App\Auth\Auth;
+use App\Database\Connection;
 use App\Repository\ProgramacaoRepository;
 
 header('Content-Type: application/json; charset=utf-8');
@@ -78,6 +79,14 @@ try {
 
         case 'listar':
             handleListar();
+            break;
+
+        case 'linhas':
+            handleLinhas($repo);
+            break;
+
+        case 'sequenciaLinha':
+            handleSequenciaLinha($repo);
             break;
 
         case 'detalhe':
@@ -205,6 +214,512 @@ function handleListar(): void
         error_log('🔍 Trace: ' . $e->getTraceAsString());
         throw new Exception('Erro ao buscar programações: ' . $e->getMessage());
     }
+}
+
+/**
+ * Lista as programações calculadas registradas
+ */
+function handleLinhas(ProgramacaoRepository $repo): void
+{
+    error_log('📌 handleLinhas() iniciado');
+    $limit = max(1, min(200, (int) ($_GET['limit'] ?? 100)));
+    $page = max(1, (int) ($_GET['page'] ?? 1));
+    $offset = ($page - 1) * $limit;
+
+    try {
+        $programacoes = $repo->getAllProgramacoes($limit, $offset);
+        $filtered = array_filter($programacoes, fn($item) => strcasecmp((string) ($item['prg_status'] ?? ''), 'calculado') === 0);
+        if (!count($filtered)) {
+            $filtered = $programacoes;
+        }
+
+        $formatted = array_map(fn($item) => [
+            'id' => (int) $item['prg_id'],
+            'label' => buildProgramacaoLabel($item),
+            'linha' => $item['lin_codigo'] ?? ($item['linha_excel_dominante'] ?? 'Linha'),
+            'numero_op' => $item['prg_numero_op'] ?? null,
+            'base_inicio' => $item['prg_base_inicio'] ?? null,
+            'eficiencia' => isset($item['prg_eficiencia']) ? (float) $item['prg_eficiencia'] : null,
+            'itens' => (int) ($item['total_itens'] ?? 0)
+        ], array_values($filtered));
+
+        echo json_encode([
+            'sucesso' => true,
+            'programacoes' => $formatted,
+            'page' => $page,
+            'limit' => $limit
+        ], JSON_UNESCAPED_UNICODE);
+    } catch (Exception $e) {
+        http_response_code(500);
+        echo json_encode([
+            'sucesso' => false,
+            'erro' => 'Não foi possível listar as programações: ' . $e->getMessage()
+        ], JSON_UNESCAPED_UNICODE);
+    }
+}
+
+/**
+ * Retorna os blocos planejados vs realizado para a programação selecionada
+ */
+function handleSequenciaLinha(ProgramacaoRepository $repo): void
+{
+    error_log('📊 handleSequenciaLinha() iniciado');
+
+    $programId = (int) ($_GET['programacao_id'] ?? $_GET['prg_id'] ?? 0);
+    if ($programId <= 0) {
+        http_response_code(400);
+        echo json_encode([
+            'sucesso' => false,
+            'erro' => 'programação_id é obrigatória'
+        ], JSON_UNESCAPED_UNICODE);
+        return;
+    }
+
+    $programacao = $repo->getProgramacaoById($programId);
+    if (!$programacao) {
+        http_response_code(404);
+        echo json_encode([
+            'sucesso' => false,
+            'erro' => 'Programação não encontrada'
+        ], JSON_UNESCAPED_UNICODE);
+        return;
+    }
+
+    $schedule = $repo->getProgramacaoSchedule($programId);
+    $itens = $repo->getProgramacaoItens($programId);
+
+    $tz = new DateTimeZone('America/Sao_Paulo');
+    $fallbackRange = determineScheduleRange($schedule, $tz);
+    [$startDate, $endDate] = resolveSequencingRange($_GET['start_date'] ?? null, $_GET['end_date'] ?? null, $fallbackRange);
+    $startKey = $startDate->format('Y-m-d');
+    $endKey = $endDate->format('Y-m-d');
+
+    try {
+        $pdo = \App\Database\Connection::get();
+
+        $operationCandidates = collectProgramacaoOps($programacao, $itens);
+        $realRows = fetchRealizadoRows($pdo, $operationCandidates, $startKey, $endKey);
+        $realMap = buildRealizedMap($realRows);
+        $totalRealizado = array_sum($realMap);
+
+        $blocks = [];
+        $tz = new DateTimeZone('America/Sao_Paulo');
+        $itemQuantities = collectItemQuantities($itens);
+        $itemOps = collectItemOperations($itens);
+        $usedRealMap = $realMap;
+
+        foreach ($schedule as $row) {
+            $startDateTime = buildBlockStart($row, $tz);
+            if (!$startDateTime) {
+                continue;
+            }
+
+            if (!isWithinRange($startDateTime, $startDate, $endDate)) {
+                continue;
+            }
+
+            $endDateTime = buildBlockEnd($row, $startDateTime, $tz);
+            $plannedQty = max(
+                0.0,
+                lookupSequencePlanned($row, $itemQuantities),
+                (float) ($row['sch_quantidade'] ?? 0)
+            );
+            $realQty = pullRealizadoValue($usedRealMap, buildBlockOperations($row, $programacao, $itemOps));
+
+            $blocks[] = [
+                'start' => formatIsoLocal($startDateTime),
+                'end' => formatIsoLocal($endDateTime),
+                'day' => translateWeekday($startDateTime),
+                'date_label' => $startDateTime->format('d/m'),
+                'weekday_abbrev' => translateWeekday($startDateTime),
+                'description' => buildBlockDescription($row, $startDateTime),
+                'previsto' => $plannedQty,
+                'realizado' => $realQty
+            ];
+        }
+
+        $totalPrevisto = array_sum($itemQuantities);
+
+        echo json_encode([
+            'sucesso' => true,
+            'programacao_id' => $programId,
+            'lin_codigo' => $programacao['lin_codigo'] ?? ($programacao['linha_excel_dominante'] ?? null),
+            'programacao_label' => buildProgramacaoLabel($programacao),
+            'week_label' => buildWeekLabel($startDate),
+            'week_range' => buildWeekRangeLabel($startDate, $endDate),
+            'start_range' => $startKey,
+            'end_range' => $endKey,
+            'start_date_filter' => $startKey,
+            'end_date_filter' => $endKey,
+            'resumo' => [
+                'total_previsto' => $totalPrevisto,
+                'total_realizado' => $totalRealizado,
+                'diferenca' => $totalRealizado - $totalPrevisto
+            ],
+            'blocos' => $blocks
+        ], JSON_UNESCAPED_UNICODE);
+    } catch (Exception $e) {
+        http_response_code(500);
+        echo json_encode([
+            'sucesso' => false,
+            'erro' => 'Não foi possível carregar a sequência: ' . $e->getMessage()
+        ], JSON_UNESCAPED_UNICODE);
+    }
+}
+
+function resolveSequencingRange(?string $startInput, ?string $endInput, ?array $fallback = null): array
+{
+    $tz = new DateTimeZone('America/Sao_Paulo');
+    $start = parseSequencingDate($startInput, $tz);
+    $end = parseSequencingDate($endInput, $tz);
+
+    if (!$start) {
+        if (!empty($fallback['start']) && $fallback['start'] instanceof DateTimeImmutable) {
+            $start = $fallback['start'];
+        } else {
+            $today = new DateTimeImmutable('now', $tz);
+            $weekday = (int) $today->format('N');
+            $start = $today->modify('-' . ($weekday - 1) . ' days')->setTime(0, 0, 0);
+        }
+    }
+
+    if (!$end) {
+        if (!empty($fallback['end']) && $fallback['end'] instanceof DateTimeImmutable) {
+            $end = $fallback['end'];
+        } else {
+            $end = $start->modify('+4 days')->setTime(0, 0, 0);
+        }
+    }
+
+    if ($end < $start) {
+        [$start, $end] = [$end, $start];
+    }
+
+    return [$start, $end];
+}
+
+function parseSequencingDate(?string $value, DateTimeZone $tz): ?DateTimeImmutable
+{
+    if (!$value) {
+        return null;
+    }
+
+    $clean = trim($value);
+    if ($clean === '') {
+        return null;
+    }
+
+    $formats = ['Y-m-d', 'Y-m-d H:i', 'Y-m-d H:i:s'];
+    foreach ($formats as $format) {
+        $date = DateTimeImmutable::createFromFormat($format, $clean, $tz);
+        if ($date) {
+            return $date->setTime(0, 0, 0);
+        }
+    }
+
+    try {
+        return (new DateTimeImmutable($clean, $tz))->setTime(0, 0, 0);
+    } catch (Exception $e) {
+        return null;
+    }
+}
+
+function buildWeekLabel(DateTimeImmutable $start): string
+{
+    return sprintf('Semana %s/%s', $start->format('W'), $start->format('o'));
+}
+
+function buildWeekRangeLabel(DateTimeImmutable $start, DateTimeImmutable $end): string
+{
+    $startLabel = sprintf('%s %s', translateWeekday($start), $start->format('d/m'));
+    $endLabel = sprintf('%s %s', translateWeekday($end), $end->format('d/m'));
+    return sprintf('%s a %s', $startLabel, $endLabel);
+}
+
+function translateWeekday(DateTimeImmutable $date): string
+{
+    static $map = [
+        1 => 'Seg',
+        2 => 'Ter',
+        3 => 'Qua',
+        4 => 'Qui',
+        5 => 'Sex',
+        6 => 'Sáb',
+        7 => 'Dom'
+    ];
+
+    $day = (int) $date->format('N');
+    return $map[$day] ?? $date->format('D');
+}
+
+function buildRealizedMap(array $rows): array
+{
+    $map = [];
+    foreach ($rows as $row) {
+        $ordem = trim((string) ($row['ordem_op'] ?? ''));
+        if ($ordem === '') {
+            continue;
+        }
+
+        $value = (float) ($row['total'] ?? 0);
+        $map[$ordem] = $value;
+
+        $normalized = ltrim($ordem, '0');
+        if ($normalized !== '' && $normalized !== $ordem) {
+            $map[$normalized] = $value;
+        }
+    }
+
+    return $map;
+}
+
+function buildBlockStart(array $row, DateTimeZone $tz): ?DateTimeImmutable
+{
+    $date = $row['sch_data_inicio'] ?? null;
+    if (!$date) {
+        return null;
+    }
+
+    $date = substr((string) $date, 0, 10);
+    $time = $row['sch_hora_inicio'] ?? null;
+
+    if (!$time && !empty($row['sch_inicio_planejado'])) {
+        $time = substr((string) $row['sch_inicio_planejado'], 11, 8);
+    }
+
+    $time = $time ? substr((string) $time, 0, 8) : '00:00:00';
+    $value = "{$date} {$time}";
+
+    try {
+        return new DateTimeImmutable($value, $tz);
+    } catch (Exception $e) {
+        return null;
+    }
+}
+
+function buildBlockEnd(array $row, DateTimeImmutable $start, DateTimeZone $tz): DateTimeImmutable
+{
+    if (!empty($row['sch_fim_producao'])) {
+        try {
+            return new DateTimeImmutable((string) $row['sch_fim_producao'], $tz);
+        } catch (Exception $e) {
+            // ignore
+        }
+    }
+
+    if (!empty($row['sch_duracao_minutos'])) {
+        return $start->modify('+' . max(1, (int) $row['sch_duracao_minutos']) . ' minutes');
+    }
+
+    if (!empty($row['sch_hora_fim']) && !empty($row['sch_data_inicio'])) {
+        $date = substr((string) $row['sch_data_inicio'], 0, 10);
+        $time = substr((string) $row['sch_hora_fim'], 0, 8);
+        try {
+            return new DateTimeImmutable("{$date} {$time}", $tz);
+        } catch (Exception $e) {
+            // fallback below
+        }
+    }
+
+    return $start->modify('+15 minutes');
+}
+
+function buildBlockDescription(array $row, DateTimeImmutable $start): string
+{
+    $parts = [];
+    if (!empty($row['prg_numero_op'])) {
+        $parts[] = trim((string) $row['prg_numero_op']);
+    }
+    if (!empty($row['sch_descricao'])) {
+        $parts[] = trim((string) $row['sch_descricao']);
+    } elseif (!empty($row['sch_sku'])) {
+        $parts[] = trim((string) $row['sch_sku']);
+    }
+
+    if (empty($parts) && !empty($row['prg_itens_op'])) {
+        $parts[] = trim((string) $row['prg_itens_op']);
+    }
+
+    return $parts ? implode(' - ', array_unique($parts)) : 'Bloco';
+}
+
+function formatIsoLocal(DateTimeImmutable $dateTime): string
+{
+    return $dateTime->format('Y-m-d\TH:i:s');
+}
+
+function buildProgramacaoLabel(array $programacao): string
+{
+    $segments = [];
+    $line = $programacao['lin_codigo'] ?? ($programacao['linha_excel_dominante'] ?? 'Linha');
+    $segments[] = $line;
+
+    if (!empty($programacao['prg_base_inicio'])) {
+        try {
+            $date = new DateTimeImmutable((string) $programacao['prg_base_inicio'], new DateTimeZone('America/Sao_Paulo'));
+            $segments[] = $date->format('d/m/Y H:i');
+        } catch (Exception $e) {
+            $segments[] = (string) $programacao['prg_base_inicio'];
+        }
+    }
+
+    if (!empty($programacao['prg_numero_op'])) {
+        $segments[] = sprintf('OP %s', $programacao['prg_numero_op']);
+    }
+
+    return implode(' · ', array_filter(array_unique($segments)));
+}
+
+function determineScheduleRange(array $schedule, DateTimeZone $tz): array
+{
+    $start = null;
+    $end = null;
+    foreach ($schedule as $row) {
+        $blockStart = buildBlockStart($row, $tz);
+        if ($blockStart && ($start === null || $blockStart < $start)) {
+            $start = $blockStart;
+        }
+
+        if ($blockStart) {
+            $blockEnd = buildBlockEnd($row, $blockStart, $tz);
+            if ($blockEnd && ($end === null || $blockEnd > $end)) {
+                $end = $blockEnd;
+            }
+        }
+    }
+
+    return ['start' => $start, 'end' => $end];
+}
+
+function collectProgramacaoOps(array $programacao, array $itens): array
+{
+    $ops = [];
+    $primary = trim((string) ($programacao['prg_numero_op'] ?? ''));
+    if ($primary !== '') {
+        $ops[] = $primary;
+    }
+
+    foreach ($itens as $item) {
+        $op = trim((string) ($item['prg_itens_op'] ?? ''));
+        if ($op !== '') {
+            $ops[] = $op;
+        }
+    }
+
+    $cleaned = array_filter(array_unique($ops), fn($value) => $value !== '');
+    return array_values($cleaned);
+}
+
+function fetchRealizadoRows(\PDO $pdo, array $operations, string $startDate, string $endDate): array
+{
+    if (!$operations) {
+        return [];
+    }
+
+    $placeholders = implode(',', array_fill(0, count($operations), '?'));
+    $sql = "
+        SELECT ordem_op, SUM(quantidade) as total
+        FROM realizado_2026_excel
+        WHERE ordem_op IN ($placeholders)
+          AND data_evento BETWEEN ? AND ?
+        GROUP BY ordem_op
+    ";
+    $params = array_merge($operations, [$startDate, $endDate]);
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+function collectItemQuantities(array $itens): array
+{
+    $map = [];
+    foreach ($itens as $item) {
+        $sequence = (int) ($item['prg_sequencia'] ?? 0);
+        if ($sequence <= 0) {
+            continue;
+        }
+        $qty = (float) ($item['prg_quantidade'] ?? 0);
+        if ($qty <= 0) {
+            continue;
+        }
+        $map[$sequence] = ($map[$sequence] ?? 0) + $qty;
+    }
+    return $map;
+}
+
+function collectItemOperations(array $itens): array
+{
+    $map = [];
+    foreach ($itens as $item) {
+        $sequence = (int) ($item['prg_sequencia'] ?? 0);
+        if ($sequence <= 0) {
+            continue;
+        }
+        $op = trim((string) ($item['prg_itens_op'] ?? ''));
+        if ($op === '') {
+            continue;
+        }
+        $map[$sequence][] = $op;
+    }
+    return $map;
+}
+
+function isWithinRange(DateTimeImmutable $candidate, DateTimeImmutable $start, DateTimeImmutable $end): bool
+{
+    $startDay = $start->setTime(0, 0, 0);
+    $endDay = $end->setTime(23, 59, 59);
+    return $candidate >= $startDay && $candidate <= $endDay;
+}
+
+function lookupSequencePlanned(array $row, array $itemQuantities): float
+{
+    $sequence = (int) ($row['sch_sequencia'] ?? $row['prg_sequencia'] ?? 0);
+    return $itemQuantities[$sequence] ?? 0.0;
+}
+
+function buildBlockOperations(array $row, array $programacao, array $itemOps): array
+{
+    $candidates = [];
+    if (!empty($programacao['prg_numero_op'])) {
+        $candidates[] = trim((string) $programacao['prg_numero_op']);
+    }
+
+    $sequence = (int) ($row['sch_sequencia'] ?? 0);
+    if ($sequence > 0 && !empty($itemOps[$sequence])) {
+        foreach ($itemOps[$sequence] as $entry) {
+            $candidates[] = $entry;
+        }
+    }
+
+    $customOp = trim((string) ($row['sch_operacao'] ?? ''));
+    if ($customOp !== '') {
+        $candidates[] = $customOp;
+    }
+
+    $candidates = array_filter(array_unique($candidates), fn($value) => $value !== '');
+    return array_values($candidates);
+}
+
+function pullRealizadoValue(array &$map, array $candidates): float
+{
+    foreach ($candidates as $candidate) {
+        $normalized = array_values(array_filter([
+            $candidate,
+            ltrim($candidate, '0')
+        ], fn($value) => $value !== ''));
+
+        foreach ($normalized as $key) {
+            if (isset($map[$key])) {
+                $value = (float) $map[$key];
+                foreach ($normalized as $k) {
+                    unset($map[$k]);
+                }
+                return $value;
+            }
+        }
+    }
+
+    return 0.0;
 }
 
 /**

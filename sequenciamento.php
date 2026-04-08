@@ -147,6 +147,29 @@ Auth::requireLogin();
             border-color: #14b8a6;
         }
 
+        /* ========== MODO SELECT (Planejado vs Históricos) ========== */
+        .modo-btn {
+            padding: 6px 12px;
+            border: 1px solid #cbd5e0;
+            background: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+            transition: all 0.2s;
+            color: #4a5568;
+        }
+
+        .modo-btn:hover {
+            background: #edf2f7;
+        }
+
+        .modo-btn.active {
+            background: #0ea5e9;
+            color: white;
+            border-color: #0ea5e9;
+        }
+
         /* ========== TIMELINE ========== */
         .timeline-wrapper {
             flex: 1;
@@ -245,41 +268,53 @@ Auth::requireLogin();
 
         .timeline-row {
             display: flex;
-            min-height: 44px;
-            border-bottom: 1px solid #edf2f7;
+            min-height: 48px;
+            border-bottom: 1px solid #e5e7eb;
             align-items: stretch;
+            transition: background-color 0.2s ease;
         }
 
         .timeline-row:hover {
-            background: #f7fafc;
+            background: #fafbfc;
+        }
+
+        .timeline-row.primeira-prog {
+            border-top: 2px solid #cbd5e0;
         }
 
         .timeline-row-label {
             width: 200px;
             flex-shrink: 0;
-            padding: 8px 16px;
+            padding: 10px 16px;
             display: flex;
             flex-direction: column;
             justify-content: center;
-            border-right: 1px solid #cbd5e0;
+            border-right: 1px solid #e5e7eb;
             background: white;
+            cursor: pointer;
+        }
+
+        .timeline-row-label:hover {
+            background: #f3f4f6;
         }
 
         .timeline-row-label-op {
-            font-size: 12px;
-            font-weight: 600;
-            color: #2d3748;
+            font-size: 13px;
+            font-weight: 700;
+            color: #1f2937;
+            line-height: 1.2;
         }
 
         .timeline-row-label-meta {
             font-size: 11px;
-            color: #718096;
+            color: #6b7280;
+            margin-top: 2px;
         }
 
         .timeline-row-content {
             flex: 1;
             position: relative;
-            background: linear-gradient(90deg, transparent 0%, transparent calc(100% - 1px), #e2e8f0 calc(100% - 1px));
+            background: linear-gradient(90deg, transparent 0%, transparent calc(100% - 1px), #f0f1f3 calc(100% - 1px));
             background-size: 60px 100%;
         }
 
@@ -288,12 +323,12 @@ Auth::requireLogin();
             position: absolute;
             top: 50%;
             transform: translateY(-50%);
-            height: 28px;
-            border-radius: 3px;
+            height: 32px;
+            border-radius: 4px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 10px;
+            font-size: 11px;
             font-weight: 600;
             color: white;
             cursor: pointer;
@@ -329,6 +364,50 @@ Auth::requireLogin();
 
         .timeline-bar.pausa {
             background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%);
+        }
+
+        /* ========== DESVIOS HISTÓRICOS ========== */
+        .timeline-bar.on-time {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+            border: 1px solid #047857;
+            box-shadow: 0 2px 4px rgba(16, 185, 129, 0.2);
+        }
+
+        .timeline-bar.on-time:hover {
+            box-shadow: 0 4px 8px rgba(16, 185, 129, 0.4);
+            transform: translateY(-2px);
+        }
+
+        .timeline-bar.delayed {
+            background: linear-gradient(135deg, #f97316 0%, #ea580c 100%) !important;
+            border: 2px solid #dc2626;
+            animation: pulse-delayed 2.5s infinite;
+            box-shadow: 0 2px 6px rgba(220, 38, 38, 0.3);
+        }
+
+        .timeline-bar.delayed:hover {
+            box-shadow: 0 4px 10px rgba(220, 38, 38, 0.5);
+            transform: translateY(-2px);
+        }
+
+        .timeline-bar.early {
+            background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%) !important;
+            border: 1px solid #0e7490;
+            box-shadow: 0 2px 4px rgba(6, 182, 212, 0.2);
+        }
+
+        .timeline-bar.early:hover {
+            box-shadow: 0 4px 8px rgba(6, 182, 212, 0.4);
+            transform: translateY(-2px);
+        }
+
+        @keyframes pulse-delayed {
+            0%, 100% { box-shadow: 0 2px 6px rgba(220, 38, 38, 0.3); }
+            50% { box-shadow: 0 4px 12px rgba(220, 38, 38, 0.5); }
+        }
+
+        .timeline-bar {
+            transition: all 0.2s ease;
         }
 
         .timeline-bar.selected {
@@ -540,6 +619,12 @@ Auth::requireLogin();
             <div class="toolbar">
                 <span class="toolbar-title">Gráfico de Sequenciamento</span>
                 
+                <!-- SELECTOR DE MODO (Planejado vs Históricos) -->
+                <div class="modo-select" style="display: flex; gap: 4px; background: #f7fafc; padding: 6px; border-radius: 6px; margin-left: 16px;">
+                    <button class="modo-btn active" data-modo="planejado" title="Visualizar programação planejada">📅 Planejado</button>
+                    <button class="modo-btn" data-modo="historicos" title="Visualizar históricos executados">📊 Históricos</button>
+                </div>
+                
                 <!-- FILTROS (FASE 4) -->
                 <div class="toolbar-filters">
                     <div class="filter-group">
@@ -612,6 +697,7 @@ Auth::requireLogin();
     <script>
         // ====== STATE (FASES 2-4) ======
         let currentPeriodo = '4h';
+        let currentModo = 'planejado'; // 'planejado' ou 'historicos'
         let syncScroll = true;
         let allLinhasData = []; // Armazena todos os dados para filtro
         let currentFilters = {
@@ -633,6 +719,17 @@ Auth::requireLogin();
         document.addEventListener('DOMContentLoaded', () => {
             console.log('🚀 Inicializando Sequenciamento...');
             console.log('📡 API Base:', apiBase);
+
+            // Setup modo buttons
+            document.querySelectorAll('.modo-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    document.querySelectorAll('.modo-btn').forEach(b => b.classList.remove('active'));
+                    e.target.classList.add('active');
+                    currentModo = e.target.dataset.modo;
+                    console.log('🔄 Modo alterado para:', currentModo);
+                    renderTimeline();
+                });
+            });
 
             // Setup periodo buttons
             document.querySelectorAll('.periodo-btn').forEach(btn => {
@@ -744,42 +841,65 @@ Auth::requireLogin();
             return date;
         }
 
-        // ====== RENDERIZAR TIMELINE ======
+        // ====== RENDERIZAR TIMELINE (COM SUPORTE A MODO) ======
         async function renderTimeline() {
             try {
-                console.log('📊 Renderizando timeline para período:', currentPeriodo);
+                console.log('📊 Renderizando timeline - Modo:', currentModo, 'Período:', currentPeriodo);
 
-                const response = await fetch(apiBase + '?action=timeline&periodo=' + currentPeriodo);
+                // Determinar URL baseado no modo
+                let url;
+                if (currentModo === 'historicos') {
+                    // Modo históricos: usar action=historicos com período em dias
+                    const periodos = {
+                        '4h': undefined,  // Não faz sentido em históricos
+                        '8h': undefined,
+                        '12h': undefined,
+                        '24h': '1d',
+                        'tudo': '7d'
+                    };
+                    const periodo = periodos[currentPeriodo] || '7d';
+                    url = apiBase + '?action=historicos&periodo=' + periodo;
+                    console.log('🔍 URL (primeira tentativa):', url);
+                } else {
+                    // Modo planejado: usar action=timeline como antes
+                    url = apiBase + '?action=timeline&periodo=' + currentPeriodo;
+                    console.log('🔍 URL:', url);
+                }
+
+                const response = await fetch(url);
                 
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}`);
                 }
 
-                const json = await response.json();
+                let json = await response.json();
                 
                 if (!json.sucesso) {
                     throw new Error(json.erro || 'Erro desconhecido');
                 }
 
-                console.log('✅ Timeline data:', json);
-                console.log('📊 Programações:', json.programacoes);
-                console.log('📅 Período raw:', json.data_ini, 'a', json.data_fim);
-
-                // Parsear datas
-                const dataIni = parseDataPHP(json.data_ini);
-                const dataFim = parseDataPHP(json.data_fim);
+                console.log('✅ Dados recebidos:', json);
                 
-                if (!dataIni || !dataFim) {
-                    throw new Error('Datas inválidas na resposta da API');
+                // Se modo históricos e sem dados, tentar COM fallback (todos=1)
+                if (currentModo === 'historicos' && (!json.historicos || json.historicos.length === 0)) {
+                    console.log('⚠️ Sem dados no período, tentando fallback (todos=1)...');
+                    const urlFallback = apiBase + '?action=historicos&todos=1';
+                    const responseFallback = await fetch(urlFallback);
+                    if (responseFallback.ok) {
+                        const jsonFallback = await responseFallback.json();
+                        if (jsonFallback.sucesso && jsonFallback.historicos && jsonFallback.historicos.length > 0) {
+                            console.log('✅ Fallback retornou dados:', jsonFallback.historicos.length, 'itens');
+                            json = jsonFallback;
+                        }
+                    }
                 }
-                
-                console.log('✅ Datas parseadas:', dataIni, dataFim);
 
-                // Renderizar cabeçalho de horas
-                renderTimelineHeader(dataIni, dataFim);
-
-                // Renderizar linhas
-                renderTimelineRows(json.programacoes, dataIni, dataFim);
+                // Renderizar baseado no modo
+                if (currentModo === 'historicos') {
+                    renderTimelineHistoricos(json);
+                } else {
+                    renderTimelinePlanejado(json);
+                }
 
             } catch (err) {
                 console.error('❌ Erro ao renderizar timeline:', err);
@@ -789,6 +909,86 @@ Auth::requireLogin();
                     </div>
                 `;
             }
+        }
+
+        // ====== RENDERIZAR TIMELINE PLANEJADA (modo atual) ======
+        function renderTimelinePlanejado(json) {
+            console.log('📊 Renderizando timeline PLANEJADA');
+
+            // Parsear datas
+            const dataIni = parseDataPHP(json.data_ini);
+            const dataFim = parseDataPHP(json.data_fim);
+            
+            if (!dataIni || !dataFim) {
+                throw new Error('Datas inválidas na resposta da API');
+            }
+            
+            console.log('✅ Datas parseadas:', dataIni, dataFim);
+
+            // Renderizar cabeçalho de horas
+            renderTimelineHeader(dataIni, dataFim);
+
+            // Renderizar linhas
+            renderTimelineRows(json.programacoes, dataIni, dataFim);
+        }
+
+        // ====== RENDERIZAR TIMELINE HISTÓRICOS ======
+        function renderTimelineHistoricos(json) {
+            console.log('📊 Renderizando timeline HISTÓRICOS');
+            console.log('🔍 Dados recebidos:', json);
+            
+            if (!json.historicos || json.historicos.length === 0) {
+                document.getElementById('timelineBody').innerHTML = '<div class="loading">Sem dados históricos para este período</div>';
+                return;
+            }
+
+            // Mostrar resumo
+            if (json.resumo) {
+                console.log('📈 Resumo:', json.resumo);
+            }
+
+            // Converter históricos para formato compatível com timeline
+            const dataIni = new Date();
+            const dataFim = new Date();
+            
+            // Usar período baseado nos dados
+            const datesInData = json.historicos.map(h => {
+                const dataStr = h.data_execucao ? h.data_execucao.substring(0, 10) : '2026-04-01';
+                const horaStr = h.hora_inicio_realizado || h.hora_inicio_planejada || '00:00';
+                return new Date(`${dataStr}T${horaStr}:00`);
+            });
+            const minDate = new Date(Math.min(...datesInData.map(d => d.getTime())));
+            const maxDate = new Date(Math.max(...datesInData.map(d => d.getTime())));
+            
+            dataIni.setTime(minDate.getTime());
+            dataFim.setTime(maxDate.getTime());
+            dataFim.setHours(dataFim.getHours() + 1);
+            
+            console.log('📅 Período dos históricos:', dataIni.toLocaleString(), 'até', dataFim.toLocaleString());
+            
+            // Renderizar cabeçalho
+            renderTimelineHeader(dataIni, dataFim);
+            
+            // Agrupar históricos por programa
+            const porPrograma = {};
+            json.historicos.forEach(h => {
+                if (!porPrograma[h.prg_id]) {
+                    porPrograma[h.prg_id] = {
+                        id: h.prg_id,
+                        numero_op: h.numero_op,
+                        linha: h.linha,
+                        eficiencia: h.eficiencia_prg,
+                        linhas: []
+                    };
+                }
+                porPrograma[h.prg_id].linhas.push(h);
+            });
+            
+            const programacoes = Object.values(porPrograma);
+            console.log('✅ Programas agrupadas:', programacoes.length, '| Total itens:', json.historicos.length);
+            
+            // Renderizar linhas (históricos)
+            renderTimelineRowsHistoricos(programacoes, dataIni, dataFim);
         }
 
         // ====== RENDERIZAR CABEÇALHO ======
@@ -1200,6 +1400,227 @@ Auth::requireLogin();
                     e.currentTarget.style.zIndex = 'auto';
                 });
             });
+        }
+
+        // ====== RENDERIZAR BARRAS HISTÓRICAS (COM DESVIOS) ======
+        function renderTimelineRowsHistoricos(programacoes, dataIni, dataFim) {
+            const duracaoMs = dataFim - dataIni;
+            const container = document.getElementById('timelineBody');
+            const containerParent = container.parentElement;
+            
+            // Verificar se "hoje" está no período
+            const hoje = new Date();
+            let hojeContido = false;
+            let posHojePerc = 0;
+            if (dataIni <= hoje && hoje <= dataFim) {
+                hojeContido = true;
+                posHojePerc = ((hoje - dataIni) / duracaoMs) * 100;
+            }
+            
+            let html = '';
+
+            programacoes.forEach((prog, progIdx) => {
+                const progId = prog.id || prog.prg_id;
+                const statusClass = prog.linhas?.length > 0 ? 'expandible' : '';
+                const classePrimeira = progIdx === 0 ? ' primeira-prog' : '';
+                
+                html += `
+                    <div class="timeline-row${classePrimeira} ${statusClass}" data-prg-id="${progId}" onclick="selecionarProgramacao(${progId})">
+                        <div class="timeline-row-label" style="cursor: pointer; background: #f7fafc; border-right: 2px solid #cbd5e0;">
+                            <div class="timeline-row-label-op">${prog.numero_op || 'OP-?'}</div>
+                            <div class="timeline-row-label-meta">${prog.linha || ''} • ${prog.linhas?.length || 0} itens</div>
+                        </div>
+                        <div class="timeline-row-content" style="position: relative; background: linear-gradient(90deg, transparent 0%, transparent calc(100% - 1px), #e2e8f0 calc(100% - 1px)); background-size: 60px 100%;">
+                            ${renderHistoricoBars(prog.linhas || [], dataIni, dataFim, duracaoMs)}
+                        </div>
+                    </div>
+                    <div class="timeline-row-expanded" id="expanded-${progId}"></div>
+                `;
+            });
+
+            container.innerHTML = html || '<div class="loading" style="padding: 20px; text-align: center; color: #718096;">Sem dados históricos para este período</div>';
+            
+            // Adicionar linha de referência "hoje" com Z-index alto
+            if (hojeContido) {
+                const linhaHoje = document.createElement('div');
+                linhaHoje.className = 'linha-hoje-referencia';
+                linhaHoje.style.cssText = `
+                    position: absolute;
+                    left: calc(200px + ${posHojePerc}%);
+                    top: 0;
+                    width: 2px;
+                    height: 100%;
+                    background: #dc2626;
+                    z-index: 100;
+                    opacity: 0.9;
+                    box-shadow: 1px 0 3px rgba(220, 38, 38, 0.4);
+                `;
+                containerParent.style.position = 'relative';
+                containerParent.appendChild(linhaHoje);
+            }
+            
+            // Attach listeners após renderizar
+            attachTimelineEventListeners();
+            applyFilters();
+        }
+
+        // ====== RENDERIZAR BARRAS DE HISTÓRICO (COM DESVIOS) ======
+        function renderHistoricoBars(linhas, dataIni, dataFim, duracao) {
+            let html = '';
+
+            linhas.forEach((linha, idx) => {
+                try {
+                    // Usar sch_inicio_planejado se disponível, senão construir a partir de data + hora
+                    let dataInicio;
+                    if (linha.sch_inicio_planejado) {
+                        dataInicio = new Date(linha.sch_inicio_planejado.replace(' ', 'T'));
+                    } else {
+                        const dataStr = linha.data_execucao ? linha.data_execucao.substring(0, 10) : null;
+                        const horaIniStr = linha.hora_inicio_planejada || '00:00';
+                        if (!dataStr) {
+                            console.warn('⚠️ Sem data de execução:', linha);
+                            return;
+                        }
+                        dataInicio = new Date(`${dataStr}T${horaIniStr}:00`);
+                    }
+                    
+                    // Usar duração real se disponível
+                    const duracaoMinutos = linha.duracao_real_minutos || 0;
+                    const dataFimLinha = new Date(dataInicio.getTime() + duracaoMinutos * 60 * 1000);
+
+                    // Validar
+                    if (isNaN(dataInicio.getTime()) || isNaN(dataFimLinha.getTime())) {
+                        console.warn('⚠️ Data inválida:', linha);
+                        return;
+                    }
+
+                    // Fora do período?
+                    if (dataFimLinha < dataIni || dataInicio > dataFim) {
+                        return;
+                    }
+
+                    const distInicio = Math.max(0, dataInicio - dataIni);
+                    const distFim = Math.min(duracao, dataFimLinha - dataIni);
+                    const duracaoVis = distFim - distInicio;
+
+                    if (duracaoVis <= 0) return;
+
+                    const posLeft = (distInicio / duracao) * 100;
+                    const width = (duracaoVis / duracao) * 100;
+
+                    // Determinar classe de desvio
+                    let desvioClass = 'on-time';
+                    let desvioLabel = 'No prazo';
+                    let corFundo = '#10b981';
+                    let icone = '✓';
+                    
+                    const desvio = linha.desvio_minutos || 0;
+                    const desvioPerc = linha.desvio_percentual || 0;
+                    
+                    if (desvio > 5) {
+                        desvioClass = 'delayed';
+                        desvioLabel = `+${desvio}m`;
+                        corFundo = '#f97316';
+                        icone = '⚠ ';
+                    } else if (desvio < -5) {
+                        desvioClass = 'early';
+                        desvioLabel = `${desvio}m`;
+                        corFundo = '#06b6d4';
+                        icone = '↑ ';
+                    }
+
+                    const skuLabel = linha.sku || 'SKU';
+                    const tempoLabel = `${duracaoMinutos}m`;
+                    const displayLabel = width > 12 ? `${icone}${skuLabel}` : '';
+                    const barId = `bar-hist-${linha.sch_id}-${idx}`;
+
+                    html += `
+                        <div class="timeline-bar ${desvioClass}" 
+                             id="${barId}"
+                             data-sch-id="${linha.sch_id}"
+                             data-sku="${skuLabel.toUpperCase()}"
+                             data-tipo="${linha.tipo || 'producao'}"
+                             data-status="executado"
+                             style="left: ${posLeft}%; width: ${Math.max(2, width)}%; background: ${corFundo};" 
+                             title="${skuLabel} | ${tempoLabel} | ${desvioLabel}"
+                             onmouseover="mostrarTooltipHistorico(event, ${JSON.stringify(linha).replace(/"/g, '&quot;')})"
+                             onmouseout="esconderTooltip()"
+                             onclick="event.stopPropagation(); expandirLinhaHistorica(event, ${linha.sch_id})">
+                            <span style="font-size: 11px; font-weight: 600;">${displayLabel}</span>
+                        </div>
+                    `;
+                } catch (err) {
+                    console.error('❌ Erro ao renderizar barra histórica:', err, linha);
+                }
+            });
+
+            return html;
+        }
+
+        // ====== TOOLTIP PARA HISTÓRICOS ======
+        function mostrarTooltipHistorico(event, linha) {
+            const x = event.clientX;
+            const y = event.clientY;
+
+            const desvio = linha.desvio_minutos || 0;
+            const desvioPerc = linha.desvio_percentual || 0;
+            const duraçãoReal = linha.duracao_real_minutos || 0;
+            const duraçãoPlanejada = linha.duracao_planejada_minutos || 0;
+            
+            // Detectar se há dados incompletos
+            let alertaData = '';
+            if (duraçãoReal === 0 && duraçãoPlanejada > 0) {
+                alertaData = '<div style="color: #fca5a5; margin-bottom: 6px; font-size: 11px;">⚠️ Duração real não calculada (dados incompletos)</div>';
+            }
+            
+            const statusColor = desvio > 5 ? '#ef4444' : (desvio < -5 ? '#06b6d4' : '#10b981');
+            const statusText = desvio > 5 ? '⚠ Atrasado' : (desvio < -5 ? '↑ Adiantado' : '✓ No prazo');
+
+            let html = `
+                <div style="padding: 12px 14px; background: #1f2937; color: #f3f4f6; border-radius: 6px; max-width: 320px; font-size: 12px; z-index: 9999; box-shadow: 0 4px 12px rgba(0,0,0,0.3); border: 1px solid #374151;">
+                    <div style="font-weight: bold; font-size: 13px; margin-bottom: 8px; color: #fff;">${linha.sku} | ${linha.numero_op}</div>
+                    
+                    ${alertaData}
+                    
+                    <div style="background: #111827; padding: 8px; border-radius: 4px; margin-bottom: 8px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                            <span style="color: #9ca3af;">Planejado:</span>
+                            <strong style="color: #fff;">${duraçãoPlanejada}m</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; color: ${duraçãoReal === 0 ? '#fca5a5' : '#f3f4f6'};">
+                            <span style="color: #9ca3af;">Realizado:</span>
+                            <strong>${duraçãoReal}m ${duraçãoReal === 0 ? '(sem dados)' : ''}</strong>
+                        </div>
+                    </div>
+                    
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px; background: ${statusColor}33; border-radius: 4px; border-left: 3px solid ${statusColor};">
+                        <div>
+                            <div style="color: #9ca3af; font-size: 11px;">Desvio</div>
+                            <strong style="color: ${statusColor}; font-size: 13px;">${duraçãoReal === 0 ? '—' : (desvio > 0 ? '+' : '') + desvio + 'm (' + desvioPerc.toFixed(1) + '%)'}</strong>
+                        </div>
+                        <div style="color: ${statusColor}; font-weight: bold; font-size: 11px; text-align: right;">${statusText}</div>
+                    </div>
+                </div>
+            `;
+
+            const tooltip = document.getElementById('tooltip') || document.createElement('div');
+            tooltip.id = 'tooltip';
+            tooltip.style.cssText = `
+                position: fixed;
+                left: ${Math.min(x, window.innerWidth - 340)}px;
+                top: ${y - 10}px;
+                pointer-events: none;
+                z-index: 9999;
+            `;
+            tooltip.innerHTML = html;
+            document.body.appendChild(tooltip);
+        }
+
+        // ====== EXPANDIR LINHA HISTÓRICA ======
+        function expandirLinhaHistorica(event, linhaId) {
+            console.log('📍 Expandir linha histórica:', linhaId);
+            event.stopPropagation();
+            // Implementar conforme necessário
         }
 
         // ====== RENDERIZAR REFERÊNCIA ======

@@ -260,6 +260,156 @@ if (count($chart_prev_real['labels']) > 15) {
             margin: 0 0 16px 0; font-size: 16px; color: var(--ink);
         }
         .chart-container > div { height: 300px; }
+        .line-filter {
+            background: white; padding: 16px; border-radius: var(--radius);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04); margin-bottom: 24px;
+            display: flex; flex-direction: column; gap: 8px;
+        }
+        .line-filter label {
+            font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;
+            color: var(--muted);
+        }
+        .line-filter select {
+            padding: 12px; border-radius: 6px; border: 1px solid #d1d5db;
+            font-family: var(--font); font-size: 14px;
+        }
+        .sequence-section {
+            background: white; border-radius: var(--radius); padding: 20px 20px 16px;
+            margin-top: 16px; box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        .sequence-meta {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 16px; margin-bottom: 16px;
+        }
+        .sequence-period {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        .sequence-period label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--muted);
+        }
+        .sequence-period input {
+            padding: 8px 10px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 13px;
+        }
+        .sequence-period button {
+            padding: 8px 14px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .sequence-meta-label {
+            font-size: 11px; text-transform: uppercase;
+            letter-spacing: 0.08em; color: var(--muted);
+        }
+        .sequence-meta-value {
+            font-size: 16px; font-weight: 600; color: var(--ink);
+        }
+        .sequence-calendar {
+            margin-bottom: 4px;
+            border-radius: 8px;
+            background: #f7f8fb;
+            padding: 10px 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .sequence-calendar-week {
+            font-size: 12px;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--muted);
+            display: flex;
+            justify-content: space-between;
+        }
+        .sequence-calendar-days {
+            display: flex;
+            gap: 12px;
+            overflow-x: auto;
+            padding-bottom: 4px;
+        }
+        .sequence-calendar-day {
+            flex: 0 0 auto;
+            min-width: 110px;
+            padding: 8px;
+            border-radius: 6px;
+            background: white;
+            box-shadow: inset 0 0 0 1px rgba(31,106,90,0.06);
+            text-align: left;
+            line-height: 1.3;
+        }
+        .sequence-calendar-restore {
+            align-self: flex-end;
+            padding: 4px 12px;
+            font-size: 12px;
+            border-radius: 999px;
+            border: 1px solid rgba(31,106,90,0.2);
+            background: white;
+            color: var(--primary);
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+        .sequence-calendar-restore:hover {
+            border-color: rgba(31,106,90,0.6);
+            background: #fff;
+        }
+        .sequence-calendar-day strong {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--ink);
+        }
+        .sequence-calendar-day small {
+            display: block;
+            font-size: 12px;
+            text-transform: lowercase;
+            color: var(--muted);
+        }
+        .sequence-calendar-day.weekend {
+            background: #fef4e6;
+        }
+        .sequence-calendar-day.active {
+            border-color: var(--primary);
+            box-shadow: inset 0 0 0 1px var(--primary);
+        }
+        .sequence-placeholder {
+            border: 1px dashed #cbd5f5; border-radius: var(--radius);
+            padding: 42px 24px; text-align: center; color: var(--muted);
+            display: flex; align-items: center; justify-content: center;
+            background: #fdfcff;
+        }
+        .sequence-wrapper {
+            display: none;
+            margin-top: 0;
+        }
+        .sequence-legend {
+            display: flex; gap: 20px; margin-bottom: 16px; flex-wrap: wrap;
+        }
+        .legend-chip {
+            display: flex; align-items: center; gap: 8px;
+            font-size: 14px; color: var(--ink);
+        }
+        .legend-dot {
+            width: 14px; height: 14px; border-radius: 999px;
+            display: inline-block;
+        }
+        .legend-dot.previsto { background: #f97316; }
+        .legend-dot.realizado { background: #16a34a; }
+        .legend-value {
+            font-weight: 600; font-size: 15px;
+        }
         .status-cards {
             display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
             gap: 12px; margin: 24px 0;
@@ -360,7 +510,7 @@ if (count($chart_prev_real['labels']) > 15) {
         </div>
 
         <!-- SELEÇÃO DE PROGRAMAÇÃO -->
-        <div style="background: white; padding: 16px; border-radius: 12px; margin-bottom: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+        <div style="background: white; padding: 16px; border-radius: 12px; margin-bottom: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); display: none;">
             <label style="display: block; color: #5f6e64; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px;">
                 📋 Filtrar por Programação de Linha
             </label>
@@ -373,29 +523,86 @@ if (count($chart_prev_real['labels']) > 15) {
         </div>
 
         <!-- RESUMO ESTATÍSTICO -->
+
+        <div class="line-filter">
+            <label for="lineSelect">Programação calculada para o gráfico de sequenciamento</label>
+            <select id="lineSelect">
+                <option value="">— Selecione uma programação —</option>
+            </select>
+            <small style="color: var(--muted); font-size: 12px; display: block;">
+                Escolha uma programação calculada para mostrar os blocos previstos vs realizado naquela semana.
+            </small>
+        </div>
+
         <div class="stats">
             <div class="stat-box">
                 <h3>Total Planejado</h3>
-                <div class="value"><?= number_format($total_planejado, 0, ',', '.') ?></div>
+                <div class="value" id="valuePlanejado"><?= number_format($total_planejado, 0, ',', '.') ?></div>
             </div>
             <div class="stat-box">
                 <h3>Total Realizado</h3>
-                <div class="value"><?= number_format($total_realizado, 0, ',', '.') ?></div>
+                <div class="value" id="valueRealizado"><?= number_format($total_realizado, 0, ',', '.') ?></div>
             </div>
             <div class="stat-box accent">
                 <h3>Diferença Total</h3>
-                <div class="value <?= $total_diff >= 0 ? 'positive' : 'negative' ?>">
+                <div class="value <?= $total_diff >= 0 ? 'positive' : 'negative' ?>" id="valueDiferenca">
                     <?= ($total_diff >= 0 ? '+' : '') . number_format($total_diff, 0, ',', '.') ?>
                 </div>
             </div>
             <div class="stat-box">
                 <h3>Percentual Médio</h3>
-                <div class="value"><?= number_format($pct_medio, 1, ',', '.') ?>%</div>
+                <div class="value" id="valuePercentual"><?= number_format($pct_medio, 1, ',', '.') ?>%</div>
             </div>
         </div>
 
+        <div class="sequence-section">
+            <div class="sequence-meta">
+                <div>
+                    <div class="sequence-meta-label">Linha</div>
+                    <div class="sequence-meta-value" id="sequenceLineLabel">—</div>
+                </div>
+                <div>
+                    <div class="sequence-meta-label">Semana</div>
+                    <div class="sequence-meta-value" id="sequenceWeekLabel">—</div>
+                </div>
+                <div>
+                    <div class="sequence-meta-label">Período</div>
+                    <div class="sequence-meta-value" id="sequenceWeekRange">—</div>
+                </div>
+            </div>
+            <div class="sequence-calendar" id="sequenceCalendar">
+                <div class="sequence-calendar-week" id="sequenceCalendarWeek">Semana —</div>
+                <button type="button" class="sequence-calendar-restore" id="sequenceCalendarRestore">Restaurar semana</button>
+                <div class="sequence-calendar-days" id="sequenceCalendarDays"></div>
+            </div>
+            <div id="sequencePlaceholder" class="sequence-placeholder">
+                Selecione uma programação calculada para carregar o gráfico de sequência planejado vs realizado.
+            </div>
+        <div id="sequenceWrapper" class="sequence-wrapper">
+            <div class="sequence-period">
+                <label for="filterStart">Período:</label>
+                <input type="date" id="filterStart">
+                <input type="date" id="filterEnd">
+                <button id="applyPeriodBtn">Aplicar</button>
+            </div>
+            <div class="sequence-legend" id="sequenceLegend">
+                <div class="legend-chip">
+                    <span class="legend-dot previsto"></span>
+                    <span>Previsto: <span class="legend-value" id="legendPrevisto">0</span> un</span>
+                </div>
+                <div class="legend-chip">
+                    <span class="legend-dot realizado"></span>
+                    <span>Realizado: <span class="legend-value" id="legendRealizado">0</span> un</span>
+                </div>
+            </div>
+            <div class="chart-container" style="margin-bottom: 0;">
+                <div id="sequenceChart" style="height: 360px;"></div>
+            </div>
+        </div>
+        </div>
+
         <!-- GRÁFICOS -->
-        <div class="charts">
+        <div class="charts" style="display: none;">
             <div class="chart-container">
                 <h3>Distribuição de Status</h3>
                 <div id="chartStatus"></div>
@@ -406,14 +613,14 @@ if (count($chart_prev_real['labels']) > 15) {
             </div>
         </div>
 
-        <div class="chart-container" style="margin: 16px 0;">
+        <div class="chart-container" style="margin: 16px 0; display: none;">
             <h3>Top 15: Previsto vs Realizado</h3>
             <div id="chartComparison" style="height: 350px;"></div>
         </div>
 
         <!-- STATUS DAS OPS -->
-        <h2 style="margin-top: 32px; margin-bottom: 16px;">Status das Ordens de Produção</h2>
-        <div class="status-cards">
+        <h2 style="margin-top: 32px; margin-bottom: 16px; display: none;">Status das Ordens de Produção</h2>
+        <div class="status-cards" style="display: none;">
             <div class="status-card cumprida" onclick="filterByStatus('Cumprida')">
                 <h4>Cumprida (=100%)</h4>
                 <div class="value"><?= $stats['cumprida'] ?></div>
@@ -437,7 +644,7 @@ if (count($chart_prev_real['labels']) > 15) {
         </div>
 
         <!-- TABELA COM FILTROS -->
-        <div class="table-section">
+        <div class="table-section" style="display: none;">
             <h2 style="margin-bottom: 16px;">Detalhamento por OP</h2>
             <div class="table-controls">
                 <input type="text" id="searchInput" class="search-box" placeholder="Buscar OP..." />
@@ -465,11 +672,230 @@ if (count($chart_prev_real['labels']) > 15) {
             so_previsto: <?= $stats['so_previsto'] ?>,
             so_realizado: <?= $stats['so_realizado'] ?>
         };
-        
+        const globalSummary = {
+            total_previsto: <?= $total_planejado ?>,
+            total_realizado: <?= $total_realizado ?>,
+            diferenca: <?= $total_diff ?>,
+            percentual: <?= $pct_medio ?>
+        };
+        const numberFormatter = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
+        const lineSelect = document.getElementById('lineSelect');
+        const sequencePlaceholder = document.getElementById('sequencePlaceholder');
+        const sequenceWrapper = document.getElementById('sequenceWrapper');
+        const sequenceLineLabel = document.getElementById('sequenceLineLabel');
+        const sequenceWeekLabel = document.getElementById('sequenceWeekLabel');
+        const sequenceWeekRange = document.getElementById('sequenceWeekRange');
+        const sequenceCalendarWeek = document.getElementById('sequenceCalendarWeek');
+        const sequenceCalendarRestore = document.getElementById('sequenceCalendarRestore');
+        const sequenceCalendarDays = document.getElementById('sequenceCalendarDays');
+        const valuePlanejadoEl = document.getElementById('valuePlanejado');
+        const valueRealizadoEl = document.getElementById('valueRealizado');
+        const valueDiferencaEl = document.getElementById('valueDiferenca');
+          const valuePercentualEl = document.getElementById('valuePercentual');
+          const legendPrevistoEl = document.getElementById('legendPrevisto');
+          const legendRealizadoEl = document.getElementById('legendRealizado');
+          const filterStartInput = document.getElementById('filterStart');
+          const filterEndInput = document.getElementById('filterEnd');
+          const applyPeriodBtn = document.getElementById('applyPeriodBtn');
+        let sequenceChart = null;
         let currentFilter = '';
         let currentPage = 1;
         let selectedProgram = null;
         const itemsPerPage = 20;
+        const weekdayShortMap = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+        let selectedCalendarDate = '';
+        let currentCalendarRange = { start: '', end: '' };
+        let baseCalendarRange = { start: '', end: '' };
+
+        function formatNumber(value) {
+            return numberFormatter.format(Math.round(value || 0));
+        }
+
+        function updateSequenceLegend(prev, real) {
+            if (legendPrevistoEl) legendPrevistoEl.textContent = formatNumber(prev);
+            if (legendRealizadoEl) legendRealizadoEl.textContent = formatNumber(real);
+        }
+
+        function updateSummaryCards(summary) {
+            const prev = summary.total_previsto ?? 0;
+            const real = summary.total_realizado ?? 0;
+            const diff = typeof summary.diferenca === 'number' ? summary.diferenca : real - prev;
+            const pct = prev > 0 ? (real / prev) * 100 : 0;
+
+            valuePlanejadoEl.textContent = formatNumber(prev);
+            valueRealizadoEl.textContent = formatNumber(real);
+            valueDiferencaEl.textContent = `${diff >= 0 ? '+' : ''}${formatNumber(diff)}`;
+            valueDiferencaEl.classList.toggle('positive', diff >= 0);
+            valueDiferencaEl.classList.toggle('negative', diff < 0);
+            valuePercentualEl.textContent = `${pct.toFixed(1)}%`;
+        }
+
+        function resetSummaryToGlobal() {
+            updateSummaryCards(globalSummary);
+        }
+
+        function showSequencePlaceholder(text) {
+            sequenceWrapper.style.display = 'none';
+            sequencePlaceholder.style.display = 'flex';
+            sequencePlaceholder.textContent = text;
+        }
+
+          function showSequenceChartContainer() {
+              sequencePlaceholder.style.display = 'none';
+              sequenceWrapper.style.display = 'block';
+          }
+
+          function setPeriodInputs(start, end) {
+              if (filterStartInput) filterStartInput.value = start ?? '';
+              if (filterEndInput) filterEndInput.value = end ?? '';
+          }
+
+          function resetSequenceSection() {
+            sequenceLineLabel.textContent = '—';
+            sequenceWeekLabel.textContent = '—';
+            sequenceWeekRange.textContent = '—';
+            resetSummaryToGlobal();
+            if (sequenceChart) {
+                sequenceChart.destroy();
+                sequenceChart = null;
+            }
+            showSequencePlaceholder('Selecione uma programação calculada para carregar o gráfico de sequência planejado vs realizado.');
+              if (legendPrevistoEl) legendPrevistoEl.textContent = '0';
+              if (legendRealizadoEl) legendRealizadoEl.textContent = '0';
+            if (filterStartInput) filterStartInput.value = '';
+            if (filterEndInput) filterEndInput.value = '';
+            if (sequenceCalendarWeek) sequenceCalendarWeek.textContent = 'Semana —';
+            if (sequenceCalendarDays) sequenceCalendarDays.innerHTML = '';
+            selectedCalendarDate = '';
+            currentCalendarRange = { start: '', end: '' };
+            baseCalendarRange = { start: '', end: '' };
+        }
+
+        function parseDateIso(value) {
+            if (!value) {
+                return null;
+            }
+            const normalized = value.replace(' ', 'T');
+            const date = new Date(normalized);
+            return isNaN(date.getTime()) ? null : date;
+        }
+
+        function formatDateTime(ms) {
+            if (!ms) return '';
+            return new Date(ms).toLocaleString('pt-BR', {
+                day: '2-digit',
+                month: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        function formatChartDayLabel(value) {
+            const date = new Date(value);
+            if (isNaN(date.getTime())) return '';
+            const dayMonth = date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+            const weekday = weekdayShortMap[date.getDay()]?.toLowerCase() ?? '';
+            return weekday ? `${dayMonth} ${weekday}` : dayMonth;
+        }
+
+        function normalizeCalendarDate(value) {
+            if (!value) {
+                return null;
+            }
+            const normalized = value.length === 10 ? `${value}T00:00:00` : value;
+            return parseDateIso(normalized);
+        }
+
+        function renderSequenceCalendar(startIso, endIso, weekLabel) {
+            if (!sequenceCalendarWeek || !sequenceCalendarDays) {
+                return;
+            }
+            sequenceCalendarWeek.textContent = weekLabel || 'Semana —';
+            sequenceCalendarDays.innerHTML = '';
+            const startDate = normalizeCalendarDate(startIso);
+            const endDate = normalizeCalendarDate(endIso);
+            if (!startDate || !endDate || endDate < startDate) {
+                return;
+            }
+
+            currentCalendarRange.start = startDate.toISOString().slice(0, 10);
+            currentCalendarRange.end = endDate.toISOString().slice(0, 10);
+
+            const days = [];
+            const cursor = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+            while (cursor <= endDate) {
+                days.push(new Date(cursor));
+                cursor.setDate(cursor.getDate() + 1);
+            }
+
+            sequenceCalendarDays.innerHTML = days.map(date => {
+                const dayMonth = date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+                const weekday = weekdayShortMap[date.getDay()]?.toLowerCase() ?? '';
+                const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+                const isoDate = date.toISOString().slice(0, 10);
+                return `
+                    <div class="sequence-calendar-day${isWeekend ? ' weekend' : ''}" data-date="${isoDate}">
+                        <strong>${dayMonth}</strong>
+                        <small>${weekday}</small>
+                    </div>
+                `;
+            }).join('');
+
+            updateCalendarSelection(currentCalendarRange.start);
+        }
+
+        function updateCalendarSelection(dateIso) {
+            selectedCalendarDate = dateIso || '';
+            sequenceCalendarDays?.querySelectorAll('.sequence-calendar-day').forEach(day => {
+                day.classList.toggle('active', day.dataset.date === selectedCalendarDate);
+            });
+        }
+
+        function applyCalendarRange(startIso, endIso) {
+            if (!startIso || !endIso) {
+                return;
+            }
+            setPeriodInputs(startIso, endIso);
+            if (!lineSelect.value) {
+                return;
+            }
+            carregarSequenciaDeLinha(lineSelect.value, { startDate: startIso, endDate: endIso });
+        }
+
+        function handleCalendarDayClick(event) {
+            let target = event.target;
+            while (target && target.nodeType === 3) {
+                target = target.parentElement;
+            }
+            while (target && (!target.classList || !target.classList.contains('sequence-calendar-day'))) {
+                target = target.parentElement;
+            }
+            if (!target) {
+                return;
+            }
+            const dateIso = target.dataset.date;
+            if (!dateIso) {
+                return;
+            }
+            updateCalendarSelection(dateIso);
+            applyCalendarRange(dateIso, dateIso);
+        }
+
+        function handleCalendarWeekClick() {
+            if (!baseCalendarRange.start || !baseCalendarRange.end) {
+                return;
+            }
+            updateCalendarSelection('');
+            applyCalendarRange(baseCalendarRange.start, baseCalendarRange.end);
+        }
+
+        function handleCalendarRestore() {
+            if (!baseCalendarRange.start || !baseCalendarRange.end) {
+                return;
+            }
+            updateCalendarSelection('');
+            applyCalendarRange(baseCalendarRange.start, baseCalendarRange.end);
+        }
 
         // Carregar programações
         async function carregarProgramacoes() {
@@ -490,6 +916,276 @@ if (count($chart_prev_real['labels']) > 15) {
             } catch (e) {
                 console.error('Erro ao carregar programações:', e);
             }
+        }
+
+        // Carregar programações calculadas disponíveis
+        async function carregarLinhas() {
+            try {
+                const response = await fetch('api/sequenciamento.php?action=linhas');
+                const result = await response.json();
+
+                if (result.sucesso && result.programacoes?.length) {
+                    const select = document.getElementById('lineSelect');
+                    select.innerHTML = '<option value="">— Selecione uma programação —</option>';
+                    result.programacoes.forEach(programacao => {
+                        const option = document.createElement('option');
+                        option.value = programacao.id;
+                        option.textContent = programacao.label;
+                        option.dataset.linha = programacao.linha || '';
+                        option.dataset.op = programacao.numero_op || '';
+                        select.appendChild(option);
+                    });
+                }
+            } catch (e) {
+                console.error('Erro ao carregar programações:', e);
+            }
+        }
+
+        sequenceCalendarDays?.addEventListener('click', handleCalendarDayClick);
+        sequenceCalendarWeek?.addEventListener('click', handleCalendarWeekClick);
+        sequenceCalendarRestore?.addEventListener('click', handleCalendarRestore);
+
+        lineSelect.addEventListener('change', () => {
+              const programacaoId = lineSelect.value;
+              if (!programacaoId) {
+                  resetSequenceSection();
+                  return;
+              }
+              carregarSequenciaDeLinha(programacaoId);
+          });
+
+          applyPeriodBtn?.addEventListener('click', () => {
+              const programacaoId = lineSelect.value;
+              if (!programacaoId) {
+                  return;
+              }
+              const filters = {};
+              if (filterStartInput?.value) {
+                  filters.startDate = filterStartInput.value;
+              }
+              if (filterEndInput?.value) {
+                  filters.endDate = filterEndInput.value;
+              }
+              carregarSequenciaDeLinha(programacaoId, filters);
+          });
+
+          async function carregarSequenciaDeLinha(programacaoId, filters = {}) {
+              showSequencePlaceholder('Carregando dados da programação selecionada...');
+              try {
+                  const params = new URLSearchParams({ action: 'sequenciaLinha', programacao_id: programacaoId });
+                  if (filters.startDate) params.append('start_date', filters.startDate);
+                  if (filters.endDate) params.append('end_date', filters.endDate);
+                  const response = await fetch(`api/sequenciamento.php?${params.toString()}`);
+                  const result = await response.json();
+
+                  if (!result.sucesso) {
+                      throw new Error(result.erro || 'Resposta inválida');
+                  }
+
+                  const fallbackLabel = result.lin_codigo ? `Linha ${result.lin_codigo}` : `Programação ${programacaoId}`;
+                  sequenceLineLabel.textContent = result.programacao_label ?? fallbackLabel;
+                  sequenceWeekLabel.textContent = result.week_label ?? '—';
+                  sequenceWeekRange.textContent = result.week_range ?? '—';
+                  updateSummaryCards({
+                      total_previsto: result.resumo?.total_previsto ?? 0,
+                      total_realizado: result.resumo?.total_realizado ?? 0,
+                      diferenca: result.resumo?.diferenca ?? (result.resumo?.total_realizado ?? 0) - (result.resumo?.total_previsto ?? 0)
+                  });
+
+                  const rangeStart = result.start_range ?? result.start_date_filter ?? '';
+                  const rangeEnd = result.end_range ?? result.end_date_filter ?? '';
+                  const currentWeekLabel = result.week_label ?? 'Semana —';
+                  if (!filters.startDate && !filters.endDate) {
+                      baseCalendarRange = { start: rangeStart, end: rangeEnd };
+                  }
+                  renderSequenceCalendar(rangeStart, rangeEnd, currentWeekLabel);
+                  setPeriodInputs(rangeStart, rangeEnd);
+                  if (!result.blocos?.length) {
+                      showSequencePlaceholder('Nenhum bloco registrado para esta linha nesta semana.');
+                      return;
+                  }
+
+                  renderSequenceChart(result.blocos);
+              } catch (error) {
+                  console.error('Erro ao carregar sequência:', error);
+                  showSequencePlaceholder('Não foi possível carregar o gráfico desta linha.');
+              }
+          }
+
+function truncateText(text, limit = 70) {
+    if (!text) return '';
+    const normalizedLimit = Math.max(10, limit);
+    return text.length > normalizedLimit ? `${text.slice(0, normalizedLimit - 3)}...` : text;
+}
+
+        function mergeAdjacentBlocks(blocks, gapMs = 15 * 60 * 1000) {
+            const merged = [];
+            blocks.forEach(block => {
+                const existing = merged[merged.length - 1];
+                if (existing
+                    && existing.label === block.label
+                    && block.startMs <= existing.endMs + gapMs
+                    && block.startMs >= existing.startMs
+                ) {
+                    existing.endMs = Math.max(existing.endMs, block.endMs);
+                    existing.previsto += block.previsto;
+                    existing.realizado += block.realizado;
+                } else {
+                    merged.push({ ...block });
+                }
+            });
+            return merged;
+        }
+
+        function renderSequenceChart(blocks) {
+            const groupedBlocks = new Map();
+
+            blocks.forEach(block => {
+                const startDate = parseDateIso(block.start);
+                const endDate = parseDateIso(block.end);
+                if (!startDate || !endDate) {
+                    return;
+                }
+
+                const dateLabel = block.date_label ?? '';
+                const weekdayValue = (block.weekday_abbrev || block.day || '').toString().trim();
+                const weekdayLabel = weekdayValue ? weekdayValue.toLowerCase() : '';
+                const productLabel = block.description || block.op || 'Detalhe';
+                const prefixParts = [dateLabel, weekdayLabel].filter(Boolean);
+                const labelPrefix = prefixParts.join(' ');
+                const truncatedDescription = truncateText(productLabel, 80);
+                const labelKey = labelPrefix ? `${labelPrefix} · ${truncatedDescription}` : truncatedDescription;
+                const startMs = startDate.getTime();
+                const endMs = endDate.getTime();
+
+                if (!groupedBlocks.has(labelKey)) {
+                    groupedBlocks.set(labelKey, {
+                        label: labelKey,
+                        startMs,
+                        endMs,
+                        previsto: block.previsto ?? 0,
+                        realizado: block.realizado ?? 0
+                    });
+                } else {
+                    const existing = groupedBlocks.get(labelKey);
+                    existing.startMs = Math.min(existing.startMs, startMs);
+                    existing.endMs = Math.max(existing.endMs, endMs);
+                    existing.previsto += block.previsto ?? 0;
+                    existing.realizado += block.realizado ?? 0;
+                }
+            });
+
+            const aggregated = Array.from(groupedBlocks.values()).sort((a, b) => a.startMs - b.startMs);
+            const smoothed = mergeAdjacentBlocks(aggregated);
+
+            const plannedData = [];
+            const realizedData = [];
+
+            smoothed.forEach(block => {
+                const durationMs = Math.max(60000, block.endMs - block.startMs);
+                const ratio = block.previsto > 0 ? (block.realizado / block.previsto) : (block.realizado > 0 ? 1 : 0.1);
+                const clampedRatio = Math.min(Math.max(ratio, 0.1), 2);
+                const realizedDuration = Math.max(60000, durationMs * clampedRatio);
+                const realizedEndMs = block.startMs + realizedDuration;
+
+                plannedData.push({
+                    x: block.label,
+                    y: [block.startMs, block.endMs],
+                    meta: block
+                });
+                realizedData.push({
+                    x: block.label,
+                    y: [block.startMs, realizedEndMs],
+                    meta: block
+                });
+            });
+
+            if (!plannedData.length) {
+                showSequencePlaceholder('Não há dados válidos para renderizar este gráfico.');
+                return;
+            }
+
+            const totalPrevisto = smoothed.reduce((sum, item) => sum + (item.previsto || 0), 0);
+            const totalRealizado = smoothed.reduce((sum, item) => sum + (item.realizado || 0), 0);
+            updateSequenceLegend(totalPrevisto, totalRealizado);
+
+            const series = [
+                { name: 'Previsto', data: plannedData },
+                { name: 'Realizado', data: realizedData }
+            ];
+
+            const options = {
+                chart: {
+                    type: 'rangeBar',
+                    height: 360,
+                    toolbar: { show: false },
+                    animations: { enabled: true }
+                },
+                plotOptions: {
+                    bar: { horizontal: true, rangeBarGroupRows: true, barHeight: '60%' }
+                },
+                colors: ['#f97316', '#16a34a'],
+                stroke: { colors: ['#ffffff'], width: 1 },
+                dataLabels: { enabled: false },
+                legend: { position: 'top' },
+                tooltip: {
+                    shared: true,
+                    custom: ({ dataPointIndex }) => {
+                        const dataPoint = plannedData[dataPointIndex] || realizedData[dataPointIndex];
+                        const meta = dataPoint?.meta;
+                        const previsto = meta?.previsto ?? 0;
+                        const realizado = meta?.realizado ?? 0;
+                        const start = formatDateTime(meta?.startMs);
+                        const end = formatDateTime(meta?.endMs);
+                        return `
+                            <div class="tooltip-sequence">
+                                <strong>${dataPoint?.x || 'Detalhe'}</strong><br>
+                                Previsto: ${formatNumber(previsto)} un<br>
+                                Realizado: ${formatNumber(realizado)} un
+                                ${start && end ? `<br><em>${start} → ${end}</em>` : ''}
+                            </div>
+                        `;
+                    }
+                },
+                xaxis: {
+                    type: 'datetime',
+                    tickAmount: Math.max(4, Math.min(8, smoothed.length)),
+                    min: smoothed[0]?.startMs ?? undefined,
+                    max: smoothed[smoothed.length - 1]?.endMs ?? undefined,
+                    tickPlacement: 'between',
+                    labels: {
+                        formatter: formatChartDayLabel,
+                        datetimeUTC: false,
+                        style: {
+                            fontSize: '13px',
+                            fontWeight: 600
+                        }
+                    }
+                },
+                yaxis: {
+                labels: {
+                    align: 'left',
+                    offsetX: 0,
+                    trim: false,
+                    maxWidth: 460,
+                    style: {
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        fontFamily: 'Inter, "Trebuchet MS", sans-serif'
+                    },
+                    formatter: (value) => value
+                }
+            }
+        };
+
+            if (sequenceChart) {
+                sequenceChart.updateOptions({ series }, true, true);
+            } else {
+                sequenceChart = new ApexCharts(document.getElementById('sequenceChart'), { ...options, series });
+                sequenceChart.render();
+            }
+
+            showSequenceChartContainer();
         }
 
         // Filtrar por programação
@@ -675,15 +1371,17 @@ if (count($chart_prev_real['labels']) > 15) {
             filtrarPorProgramacao(e.target.value);
         });
 
-        // Carregar programações ao inicializar
+        // Carregar programações e linhas ao inicializar
         carregarProgramacoes();
+        carregarLinhas();
+        resetSequenceSection();
 
         // Renderizar inicial
         renderTable();
     </script>
 
     <!-- DEBUG PANEL -->
-    <div style="position: fixed; bottom: 20px; right: 20px; width: 350px; max-height: 400px; background: #1e1e1e; color: #d4d4d4; border-radius: 8px; border: 1px solid #404040; box-shadow: 0 10px 40px rgba(0,0,0,0.3); font-size: 11px; font-family: 'Courier New', monospace; z-index: 9999; display: flex; flex-direction: column;">
+    <div style="position: fixed; bottom: 20px; right: 20px; width: 350px; max-height: 400px; background: #1e1e1e; color: #d4d4d4; border-radius: 8px; border: 1px solid #404040; box-shadow: 0 10px 40px rgba(0,0,0,0.3); font-size: 11px; font-family: 'Courier New', monospace; z-index: 9999; display: none; flex-direction: column;">
         <div style="background: #2d2d2d; padding: 10px; border-bottom: 1px solid #404040; font-weight: bold; cursor: pointer;" onclick="this.parentElement.style.display='none';">🔧 DEBUG PANEL (clique para fechar)</div>
         <div style="overflow-y: auto; padding: 10px; flex: 1;">
             <div><strong style="color: #4ec9b0;">[INFO]</strong> Excel Path: <code style="color: #ce9178; background: #2d2d2d; padding: 2px 4px; border-radius: 3px;">c:\dadosCodi\relatorio_api_2026.xlsx</code></div>

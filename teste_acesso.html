@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Teste Acesso Cruzamento</title>
+</head>
+<body>
+    <h1>Teste de Acesso ao Dashboard</h1>
+    <p>Acessando: <a href="http://192.168.8.123:8081/cruzamento_novo.php" target="_blank">cruzamento_novo.php</a></p>
+    <p>Teste API: <a href="http://192.168.8.123:8081/api_cruzamento_completo.php?action=lista_completa" target="_blank">API JSON</a></p>
+    
+    <hr>
+    
+    <h2>Estrutura esperada:</h2>
+    <pre>{
+  "status": "ok",
+  "total": 438,
+  "planejados": 192,
+  "realizados": 246,
+  "items": [...]
+}</pre>
+
+    <h2>Tabelas de teste:</h2>
+    <ul>
+        <li>sch_linhas: 192 registros planejados</li>
+        <li>codi_calendario: 246 registros realizados</li>
+        <li>prg_itens: Contém OPs (op_planejada)</li>
+    </ul>
+</body>
+</html>

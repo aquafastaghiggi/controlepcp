@@ -1,0 +1,91 @@
+{
+	"info": {
+		"_postman_id": "32f4c780-908c-426b-8198-06a59f2f4f35",
+		"name": "Codi API Integração",
+		"description": "Documentação dos endpoints de integração disponíveis no sistema Codi, para consulta e inserção de informações.\n\nSite: [www.codi.com.br](http://www.codi.com.br)\n\n# Para testar os endpoints\n\nConfigure as variaveis em um novo Enviroment com os dados do sistema Codi:\n\n- **{{ serverURL }}** - Endereço do servidor Codi. Exemplo: [<i>http://192.168.0.1:8080</i>](http://192.168.0.1:8080)\n- **{{ companyCodeName }}** - \"Codename\" da empresa, pode ser visualizado no cadastro da empresa no app Account no sistema. Exemplo: _matriz_\n- **{{ user }}** - Usuário do sistema Codi.\n- **{{ password }}** - Senha do usuário do sistema Codi.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Endpoints de consulta - FOCO EM QUANTIDADE",
+			"item": [
+				{
+					"name": "Ordem de Produção (Quantidade) - PRINCIPAL",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{serverURL}}/action/ger/webservice/rest/ordemProducaoQuantidade",
+							"host": ["{{serverURL}}"],
+							"path": ["action", "ger", "webservice", "rest", "ordemProducaoQuantidade"],
+							"query": []
+						}
+					},
+					"description": "ENDPOINT CHAVE: Retorna dados de QUANTIDADES de produção para ordem"
+				},
+				{
+					"name": "Ordem de Produção (Cadastro)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{serverURL}}/action/ger/webservice/rest/ordemProducao",
+							"host": ["{{serverURL}}"],
+							"path": ["action", "ger", "webservice", "rest", "ordemProducao"],
+							"query": []
+						}
+					},
+					"description": "Dados básicos de cadastro da ordem (o que estávamos usando antes)"
+				},
+				{
+					"name": "Apontamento de produção",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						},
+						"url": {
+							"raw": "{{serverURL}}/action/ger/webservice/rest/apontamentosProducao",
+							"host": ["{{serverURL}}"],
+							"path": ["action", "ger", "webservice", "rest", "apontamentosProducao"]
+						}
+					},
+					"description": "POST para registrar quantidade de boas produzidas"
+				},
+				{
+					"name": "Apontamento de rejeito",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						},
+						"url": {
+							"raw": "{{serverURL}}/action/ger/webservice/rest/apontamentosRejeito",
+							"host": ["{{serverURL}}"],
+							"path": ["action", "ger", "webservice", "rest", "apontamentosRejeito"]
+						}
+					},
+					"description": "POST para registrar rejeitos"
+				}
+			],
+			"auth": {
+				"type": "basic",
+				"basic": [
+					{"key": "password", "value": "{{password}}", "type": "string"},
+					{"key": "username", "value": "{{user}}", "type": "string"}
+				]
+			}
+		}
+	],
+	"auth": {
+		"type": "basic",
+		"basic": [
+			{"key": "password", "value": "{{password}}", "type": "string"},
+			{"key": "username", "value": "{{user}}", "type": "string"}
+		]
+	}
+}

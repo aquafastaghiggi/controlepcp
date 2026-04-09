@@ -691,8 +691,9 @@ if (!empty($schedule)) {
         {
             name: "text", 
             label: "Produto / Recurso", 
-            width: 220, 
+            width: 170, 
             tree: true,
+            fixed: true,
             template: function(task) {
                 // Simplesmente retornar o text - ele já contém a quebra de linha e descrição
                 // OP na primeira linha e produto abaixo (mesma linha/raia no grid).
@@ -733,6 +734,7 @@ if (!empty($schedule)) {
             name: "realizado",
             label: "<span style='display: inline-block; width: 60px; text-align: center;'>Previsto</span><span style='display: inline-block; margin: 0 8px;'>|</span><span style='display: inline-block; width: 80px; text-align: center;'>Realizado</span>",
             width: 200,
+            fixed: true,
             template: function(task) {
                 // Se for SETUP, não mostrar
                 if(task.text && task.text.indexOf("SETUP") !== -1) {
@@ -816,7 +818,7 @@ if (!empty($schedule)) {
     ];
 
     // Ajustes de Dimensões para forçar o scroll horizontal
-    gantt.config.scale_height = 72;
+    gantt.config.scale_height = 50;
     // 2 linhas por raia; o realizado agora usa uma raia própria
     gantt.config.row_height = 38;
     gantt.config.min_column_width = 100;

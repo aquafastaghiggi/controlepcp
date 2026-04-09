@@ -50,15 +50,20 @@ try {
         
         // Executar script Python para sincronizar
         $pythonScript = __DIR__ . '/../sync_codi_yesterday.py';
+        $venvPython = __DIR__ . '/../.venv/Scripts/python.exe';
         
         if (!file_exists($pythonScript)) {
             throw new Exception("Script Python não encontrado: $pythonScript");
         }
         
+        if (!file_exists($venvPython)) {
+            $venvPython = 'python'; // Fallback para python global
+        }
+        
         // Executar com saída capturada
         $output = [];
         $returnCode = 0;
-        $command = escapeshellcmd("python \"$pythonScript\"");
+        $command = escapeshellcmd("\"$venvPython\" \"$pythonScript\"");
         exec($command . " 2>&1", $output, $returnCode);
         
         $outputText = implode("\n", $output);

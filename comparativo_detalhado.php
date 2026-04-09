@@ -291,7 +291,7 @@
 <body>
     <div class="container">
         <header>
-            <h1>� Comparativo Detalhado - Previsto vs Realizado</h1>
+            <h1> Comparativo Detalhado - Previsto vs Realizado</h1>
             <div class="header-sub">Análise granular do planejamento (sch_linhas) × execução (codi_calendario)</div>
             
             <div class="info-box">

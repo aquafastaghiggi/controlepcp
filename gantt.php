@@ -1,4 +1,5 @@
 <?php
+// encoding: UTF-8
 /**
  * Gráfico de Gantt PCP - Versão Final (DHTMLX Gantt com Scroll Persistente)
  * Foco em: Cabeçalho Hierárquico, Scroll Vertical/Horizontal Sempre Visíveis.
@@ -16,10 +17,10 @@ Auth::startSession();
 $repo = new ProgramacaoRepository();
 $pdo = Connection::get();
 
-// Buscar lista de programações para o seletor
+// Buscar lista de programa??es para o seletor
 $programacoes = $repo->getAllProgramacoes(100, 0);
 
-// Se um ID específico foi selecionado
+// Se um ID espec?fico foi selecionado
 $selectedId = isset($_GET['id']) ? (int)$_GET['id'] : null;
 $periodStartInput = isset($_GET['data_inicio']) ? trim((string)$_GET['data_inicio']) : '';
 $periodEndInput = isset($_GET['data_fim']) ? trim((string)$_GET['data_fim']) : '';
@@ -211,7 +212,7 @@ if (!empty($schedule)) {
             $percentualCumprimento = $quantidadePrevista > 0 ? ($quantidadeRealizada / $quantidadePrevista) * 100 : 0;
             
             // Cor baseada em cumprimento
-            $cor = '#3498db'; // Azul padrão para previsto
+            $cor = '#3498db'; // Azul padr?o para previsto
             if (!$isSetup) {
                 if ($quantidadeRealizada > 0) {
                     if ($percentualCumprimento >= 100) {
@@ -219,7 +220,7 @@ if (!empty($schedule)) {
                     } elseif ($percentualCumprimento >= 80) {
                         $cor = '#f59e0b'; // Laranja - cumprimento 80-99%
                     } else {
-                        $cor = '#ef4444'; // Vermelho - cumprimento < 80%
+                        $cor = '#3498db'; // Azul - cumprimento < 80%
                     }
                 }
             }
@@ -227,7 +228,7 @@ if (!empty($schedule)) {
             $taskId = (int)$row['sch_id'];
             $tasks[] = [
                 'id' => $taskId,
-                'text' => ($isSetup ? "⚙️ SETUP" : "📦 OP " . $op . "\n" . trim($row['sch_descricao'] ?? '-')),
+                'text' => ($isSetup ? "• SETUP" : "OP " . $op . "\n" . trim($row['sch_descricao'] ?? '-')),
                 'descricao_produto' => trim($row['sch_descricao'] ?? '-'),
                 'start_date' => date('d-m-Y H:i', strtotime($start)),
                 'end_date' => date('d-m-Y H:i', strtotime($end)),
@@ -246,29 +247,31 @@ if (!empty($schedule)) {
             ];
 
             if (!$isSetup) {
-                $realStart = $inicioRealizado ?: $start;
-                $realEnd = $fimRealizado ?: $realStart;
-                $hideRealBar = empty($inicioRealizado) || empty($fimRealizado);
-                $tasks[] = [
-                    'id' => 'real-' . $taskId,
-                    'text' => 'Realizado',
-                    'descricao_produto' => trim($row['sch_descricao'] ?? '-'),
-                    'start_date' => date('d-m-Y H:i', strtotime($realStart)),
-                    'end_date' => date('d-m-Y H:i', strtotime($realEnd)),
-                    'color' => '#64748b',
-                    'progress' => 1,
-                    'open' => true,
-                    'sku' => $row['sch_sku'] ?: '-',
-                    'tipo' => 'realizado',
-                    'op' => $op,
-                    'memoria_calculo' => (string)($row['sch_memoria_calculo'] ?? ''),
-                    'quantidade_prevista' => $quantidadePrevista,
-                    'quantidade_realizada' => $quantidadeRealizada,
-                    'realizado_inicio' => $inicioRealizado,
-                    'realizado_fim' => $fimRealizado,
-                    'percentual_cumprimento' => $percentualCumprimento,
-                    'hide_real_bar' => $hideRealBar
-                ];
+                // Criar a task de realizado somente quando existir início e fim reais válidos.
+                if (!empty($inicioRealizado) && !empty($fimRealizado)) {
+                    $realStart = $inicioRealizado;
+                    $realEnd = $fimRealizado;
+                    $tasks[] = [
+                        'id' => 'real-' . $taskId,
+                        'text' => 'Realizado',
+                        'descricao_produto' => trim($row['sch_descricao'] ?? '-'),
+                        'start_date' => date('d-m-Y H:i', strtotime($realStart)),
+                        'end_date' => date('d-m-Y H:i', strtotime($realEnd)),
+                        'color' => '#ef4444',
+                        'progress' => 1,
+                        'open' => true,
+                        'sku' => $row['sch_sku'] ?: '-',
+                        'tipo' => 'realizado',
+                        'op' => $op,
+                        'memoria_calculo' => (string)($row['sch_memoria_calculo'] ?? ''),
+                        'quantidade_prevista' => $quantidadePrevista,
+                        'quantidade_realizada' => $quantidadeRealizada,
+                        'realizado_inicio' => $inicioRealizado,
+                        'realizado_fim' => $fimRealizado,
+                        'percentual_cumprimento' => $percentualCumprimento,
+                        'hide_real_bar' => false
+                    ];
+                }
             }
         }
     }
@@ -325,17 +328,58 @@ if (!empty($schedule)) {
         .btn-home { background: var(--primary-dark); color: white; padding: 8px 16px; border-radius: 4px; text-decoration: none; font-weight: bold; }
         
         /* Estilização interna do DHTMLX Gantt */
-        .gantt_task_line { border-radius: 4px; border: none; }
+        .gantt_task_line { border-radius: 4px; border: none; padding: 0; }
+        /* Barra principal: altura mais fina, texto centralizado e elegante */
+        .gantt_task_bar {
+            height: 13px !important;
+            min-height: 13px !important;
+            border-radius: 7px !important;
+            padding: 0 8px !important;
+            margin: 0 !important;
+            box-shadow: none !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: flex-start !important;
+            overflow: visible !important;
+        }
+        .gantt_task_line.pcp-task-setup .gantt_task_bar {
+            border: 1px solid rgba(154, 52, 18, 0.35) !important;
+            box-shadow: 0 0 0 1px rgba(255,255,255,0.22) inset !important;
+        }
+        .gantt_task_line.pcp-task-setup-short {
+            z-index: 9;
+            overflow: visible !important;
+        }
+        .gantt_task_line.pcp-task-setup-short:hover {
+            min-width: 18px !important;
+            z-index: 16;
+        }
+        .gantt_task_line.pcp-task-setup-short:hover .gantt_task_bar {
+            width: 100% !important;
+            min-width: 18px !important;
+            padding: 0 4px !important;
+            justify-content: center !important;
+            box-shadow: 0 0 0 1px rgba(255,255,255,0.28) inset, 0 2px 6px rgba(154, 52, 18, 0.18) !important;
+        }
+        .gantt_task_line.pcp-task-setup-short .gantt_task_content {
+            font-size: 0 !important;
+            padding: 0 !important;
+        }
+        .gantt_task_line.pcp-task-setup-short .gantt_task_content::before {
+            content: "•";
+            font-size: 9px;
+            line-height: 1;
+        }
         .pcp-realized-subbar {
             position: absolute;
-            left: 4px;
-            right: 4px;
-            bottom: 3px;
-            height: 9px;
+            left: 6px;
+            right: 6px;
+            bottom: 6px;
+            height: 3px;
             border-radius: 999px;
             background: rgba(255,255,255,0.98);
-            border: 1px solid rgba(15, 23, 42, 0.28);
-            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.45);
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            box-shadow: none;
             overflow: hidden;
             pointer-events: none;
             z-index: 8;
@@ -344,28 +388,28 @@ if (!empty($schedule)) {
             height: 100%;
             border-radius: 999px;
             min-width: 0;
-            transition: width 0.2s ease;
+            transition: width 0.12s ease;
         }
         .pcp-realized-overlay {
             position: absolute;
             top: 50%;
-            left: 6px;
+            left: 8px;
             transform: translateY(-50%);
             font-size: 9px;
-            font-weight: bold;
+            font-weight: 700;
             color: #fff;
             display: flex;
             align-items: center;
-            gap: 4px;
-            padding: 1px 3px;
+            gap: 6px;
+            padding: 0 6px;
             border-radius: 2px;
             white-space: nowrap;
             pointer-events: none;
             z-index: 10;
         }
-        .gantt_task_content { font-size: 11px; font-weight: bold; }
+        .gantt_task_content { font-size: 9px; font-weight: 600; line-height: 1; display: inline-block; vertical-align: middle; padding: 0 4px; }
         .gantt_grid_head_cell { font-weight: bold; color: #555; }
-        .gantt_scale_cell { font-weight: bold; color: #2c3e50; border-right: 1px solid #ebebeb; }
+        .gantt_scale_cell { font-weight: bold; color: #2c3e50; border-right: 1px solid rgba(235,235,235,0.7); font-size: 11px; padding: 8px 6px; line-height: 1.05; display: flex; align-items: center; }
         .gantt_scale_cell.pcp-scale-6h {
             font-size: 10px;
             color: #64748b;
@@ -375,7 +419,8 @@ if (!empty($schedule)) {
             border-right-color: #94a3b8;
         }
         .gantt_task_cell.pcp-timeline-6h {
-            border-right: 1px solid #e2e8f0;
+            border-right: 1px solid rgba(226,232,240,0.45);
+            padding: 0 4px;
         }
 
         /* Permitir 2 linhas por raia no grid */
@@ -386,8 +431,11 @@ if (!empty($schedule)) {
         }
 
         .pcp-grid-op {
-            font-weight: 800;
+            font-weight: 700;
             color: #0f172a;
+            font-size: 11px;
+            line-height: 1.08;
+            margin-bottom: 4px;
         }
 
         .pcp-grid-setup {
@@ -396,15 +444,15 @@ if (!empty($schedule)) {
             padding-right: 10px;
             font-weight: 900;
             color: #0f172a;
-            line-height: 38px; /* alinha no meio da linha (row_height) */
+            line-height: 29px; /* alinha no meio da linha ajustada */
         }
 
         .pcp-grid-prod {
-            font-size: 10px;
-            font-weight: 600;
+            font-size: 9px;
+            font-weight: 500;
             color: #64748b;
-            margin-top: 1px;
-            line-height: 1.1;
+            margin-top: 0;
+            line-height: 1.0;
         }
         .pcp-grid-real-row-title,
         .pcp-grid-real-inline-label {
@@ -443,15 +491,44 @@ if (!empty($schedule)) {
             color: #334155;
         }
         .gantt_task_line.pcp-task-realizado {
-            background: #e2e8f0 !important;
-            border: 1px solid #94a3b8 !important;
+            /* manter apenas um wrapper leve; a apar?ncia principal vir? da .gantt_task_bar interna */
+            background: transparent !important;
+            border: none !important;
             box-shadow: none !important;
+            padding: 0 !important;
+            margin-top: 0 !important;
+            border-radius: 4px !important;
+            display: flex !important;
+            align-items: center !important;
+            height: 29px !important;
+            min-height: 29px !important; /* respeita a altura da raia */
+        }
+        .gantt_task_line.pcp-task-realizado .gantt_task_bar {
+            /* herdar visual da barra principal, apenas trocar a cor */
             height: 10px !important;
-            margin-top: 5px;
-            border-radius: 999px !important;
+            min-height: 10px !important;
+            border-radius: 4px !important;
+            padding: 0 8px !important;
+            box-shadow: none !important;
+            box-sizing: border-box !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: flex-start !important;
+            background: #ef4444 !important;
+            border: 1px solid rgba(185,28,28,0.7) !important;
+            color: inherit !important;
+            overflow: visible !important;
+            transform: translateY(-1px) !important;
         }
         .gantt_task_line.pcp-task-realizado .gantt_task_content {
             display: none !important;
+        }
+        .gantt_task_line.pcp-task-realizado .gantt_task_progress {
+            background: #ef4444 !important;
+            border: 1px solid rgba(185,28,28,0.7) !important;
+            border-radius: 4px !important;
+            box-sizing: border-box !important;
+            opacity: 1 !important;
         }
         .gantt_task_line.pcp-task-realizado-hidden,
         .gantt_task_line.pcp-task-realizado-hidden .gantt_task_content {
@@ -517,7 +594,7 @@ if (!empty($schedule)) {
             min-width: 86px;
         }
         
-        /* Forçar visibilidade das barras de scroll - APARECER SEMPRE QUE NECESSÁRIO */
+        /* For?ar visibilidade das barras de scroll - APARECER SEMPRE QUE NECESS?RIO */
         .gantt_hor_scroll { 
             background-color: #f8f9fa !important;
             display: block !important;
@@ -589,10 +666,10 @@ if (!empty($schedule)) {
 
 <div class="header-card">
     <div class="top-row">
-        <h1 style="margin:0; font-size: 20px; color: var(--primary-dark);">📊 Gráfico de Sequenciamento do PCP</h1>
+        <h1 style="margin:0; font-size: 20px; color: var(--primary-dark);">Gráfico de Sequenciamento do PCP</h1>
         <div style="display: flex; gap: 10px;">
-            <button type="button" id="syncCodiBtn" class="btn-home" style="background: #27ae60; cursor: pointer;">🔄 Sincronizar CODI</button>
-            <a href="index.php" class="btn-home">← Voltar ao Sistema</a>
+            <button type="button" id="syncCodiBtn" class="btn-home" style="background: #27ae60; cursor: pointer;">Sincronizar CODI</button>
+            <a href="index.php" class="btn-home">Voltar ao Sistema</a>
         </div>
     </div>
     <div class="controls">
@@ -626,14 +703,14 @@ if (!empty($schedule)) {
 <div id="gantt_here"></div>
 
 <div class="legend">
-    <div class="legend-item"><div class="box" style="background:var(--prod-color)"></div> Produção (SKU)</div>
+    <div class="legend-item"><div class="box" style="background:var(--prod-color)"></div> Produ??o (SKU)</div>
     <div class="legend-item"><div class="box" style="background:var(--setup-color)"></div> Setup (Troca)</div>
     <div style="margin-left: auto; color: #888; font-style: italic;">* Use as barras de rolagem para navegar no tempo e nos itens.</div>
 </div>
 
 <script src="https://cdn.dhtmlx.com/gantt/9.0/dhtmlxgantt.js"></script>
 <script>
-    // Localização para Português (Deve vir antes da config)
+    // Localiza??o para Portugu?s (Deve vir antes da config)
     gantt.i18n.setLocale("pt");
     gantt.plugins({ tooltip: true });
 
@@ -695,7 +772,7 @@ if (!empty($schedule)) {
             tree: true,
             fixed: true,
             template: function(task) {
-                // Simplesmente retornar o text - ele já contém a quebra de linha e descrição
+                // Simplesmente retornar o texto - ele já contém a quebra de linha e descrição
                 // OP na primeira linha e produto abaixo (mesma linha/raia no grid).
                 var tipoTask = String(task.tipo || "").toLowerCase();
                 var isSetup = (tipoTask === "setup")
@@ -718,9 +795,9 @@ if (!empty($schedule)) {
                     } else if (fimRealRow) {
                         periodoRealRow = formatRealDateTime(fimRealRow);
                     }
-                    var realRowClass = "pcp-grid-real" + (periodoRealRow ? "" : " pcp-grid-real--empty");
-                    return '<div class="pcp-grid-real-row-title">Realizado</div>' +
-                           '<div class="' + realRowClass + '">' + (periodoRealRow ? escapeHtml(periodoRealRow) : 'S/período') + '</div>';
+                          var realRowClass = "pcp-grid-real" + (periodoRealRow ? "" : " pcp-grid-real--empty");
+                          return '<div class="pcp-grid-real-row-title">Realizado</div>' +
+                              '<div class="' + realRowClass + '">' + (periodoRealRow ? escapeHtml(periodoRealRow) : 'S/período') + '</div>';
                 }
 
                 var op = escapeHtml(task.op || "");
@@ -736,7 +813,7 @@ if (!empty($schedule)) {
             width: 200,
             fixed: true,
             template: function(task) {
-                // Se for SETUP, não mostrar
+                // Se for SETUP, n?o mostrar
                 if(task.text && task.text.indexOf("SETUP") !== -1) {
                     return '<div class="pcp-realizado-cell pcp-realizado-cell--setup"><span class="pcp-realizado-setup">SETUP</span></div>';
                 }
@@ -751,7 +828,7 @@ if (!empty($schedule)) {
                 var pct = task.percentual_cumprimento || 0;
                 
                 // Cor para o REALIZADO (baseado em porcentagem)
-                var bgColorRealizado = '#d1d5db'; // Cinza padrão
+                var bgColorRealizado = '#d1d5db'; // Cinza padr?o
                 if (real > 0) {
                     bgColorRealizado = pct >= 100 ? '#10b981' : (pct >= 80 ? '#f59e0b' : '#ef4444');
                 }
@@ -772,13 +849,16 @@ if (!empty($schedule)) {
         var prev = Number(task.quantidade_prevista || 0);
         var real = Number(task.quantidade_realizada || 0);
         var pct = Number(task.percentual_cumprimento || 0);
-        var memoria = escapeHtml(task.memoria_calculo || "Memória de cálculo não disponível.")
+        var isSetupTooltip = String(task.tipo || "").toLowerCase() === "setup";
+        var durationMinutes = Math.max(0, Math.round((end - start) / 60000));
+        var durationLabel = Math.floor(durationMinutes / 60) + "h " + String(durationMinutes % 60).padStart(2, "0") + "m";
+        var memoria = escapeHtml(task.memoria_calculo || "Mem?ria de c?lculo n?o dispon?vel.")
             .replace(/\s\|\s/g, "<br>")
             .replace(/\n/g, "<br>");
         var op = escapeHtml(task.op || "S/OP");
         var produto = escapeHtml(task.descricao_produto || "-");
         var sku = escapeHtml(task.sku || "-");
-        var tipo = String(task.tipo || "").toLowerCase() === "setup" ? "SETUP" : "Produção";
+        var tipo = String(task.tipo || "").toLowerCase() === "setup" ? "SETUP" : "Produ??o";
 
         return "<div class='pcp-tooltip-title'>" + tipo + "</div>" +
             "<div class='pcp-tooltip-grid'>" +
@@ -787,22 +867,26 @@ if (!empty($schedule)) {
                 "<div class='pcp-tooltip-label'>SKU:</div><div>" + sku + "</div>" +
                 "<div class='pcp-tooltip-label'>Previsto:</div><div>" + prev.toFixed(0) + "</div>" +
                 "<div class='pcp-tooltip-label'>Realizado:</div><div>" + real.toFixed(0) + " (" + pct.toFixed(0) + "%)</div>" +
-                "<div class='pcp-tooltip-label'>Início:</div><div>" + dateToStr(start) + "</div>" +
+                "<div class='pcp-tooltip-label'>In?cio:</div><div>" + dateToStr(start) + "</div>" +
                 "<div class='pcp-tooltip-label'>Fim:</div><div>" + dateToStr(end) + "</div>" +
+                (isSetupTooltip ? "<div class='pcp-tooltip-label'>Dura??o:</div><div>" + durationLabel + "</div>" : "") +
             "</div>" +
             "<div class='pcp-tooltip-memory'>" +
-                "<div class='pcp-tooltip-memory-label'>Memória de cálculo</div>" +
+                "<div class='pcp-tooltip-memory-label'>Mem?ria de c?lculo</div>" +
                 "<div class='pcp-tooltip-memory-body'>" + memoria + "</div>" +
             "</div>";
     };
     gantt.templates.task_class = function(start, end, task) {
+        if (String(task.tipo || "").toLowerCase() === "setup") {
+            return "pcp-task-setup";
+        }
         if (String(task.tipo || "").toLowerCase() === "realizado") {
             return task.hide_real_bar ? "pcp-task-realizado-hidden" : "pcp-task-realizado";
         }
         return "";
     };
 
-    // CABEÇALHO HIERÁRQUICO (Semanas, Dias e marcações de 6h)
+    // CABE?ALHO HIER?RQUICO (Semanas, Dias e marca??es de 6h)
     gantt.config.scales = [
         {unit: "week", step: 1, format: function(date){
             var dateToStr = gantt.date.date_to_str("Semana %W");
@@ -817,17 +901,19 @@ if (!empty($schedule)) {
         }}
     ];
 
-    // Ajustes de Dimensões para forçar o scroll horizontal
-    gantt.config.scale_height = 50;
-    // 2 linhas por raia; o realizado agora usa uma raia própria
-    gantt.config.row_height = 38;
-    gantt.config.min_column_width = 100;
+    // Ajustes de Dimens?es para for?ar o scroll horizontal
+    // Visual mais compacto: cabe?alho e raia reduzidos para apar?ncia de timeline
+    // Pequeno aumento do cabeçalho para dar mais respiro vertical ao texto
+    gantt.config.scale_height = 44;
+    // raia reduzida (manter legibilidade) — ajustado para recuperar respiro
+    gantt.config.row_height = 29;
+    gantt.config.min_column_width = 50;
     gantt.config.show_task_cells = true;
     gantt.templates.timeline_cell_class = function(task, date){
         return date.getHours() === 0 ? "pcp-timeline-6h pcp-timeline-6h--day-start" : "pcp-timeline-6h";
     };
 
-    // Inicialização com os dados
+    // Inicializa??o com os dados
     var tasksData = {
         data: <?= json_encode($tasks) ?>
     };
@@ -837,11 +923,25 @@ if (!empty($schedule)) {
 
     // ===== ADICIONAR INFORMAÇÃO REALIZADO SOBRE AS BARRAS =====
     gantt.attachEvent("onAfterTaskRender", function(id, task, div){
-        // Pular se for SETUP ou se não houver espaço
-        if(task.text && task.text.indexOf("SETUP") !== -1) {
+        var tipoTask = String(task.tipo || "").toLowerCase();
+        var isSetup = tipoTask === "setup" || (task.text && task.text.indexOf("SETUP") !== -1);
+
+        if (isSetup) {
+            var setupBars = div.getElementsByClassName("gantt_task_bar");
+            if (setupBars.length > 0) {
+                var setupBar = setupBars[0];
+                div.classList.remove("pcp-task-setup-short");
+                div.style.width = "";
+                div.style.minWidth = "";
+                setupBar.style.width = "";
+                setupBar.style.minWidth = "";
+                if (div.offsetWidth > 0 && div.offsetWidth < 14) {
+                    div.classList.add("pcp-task-setup-short");
+                }
+            }
             return;
         }
-        if (String(task.tipo || "").toLowerCase() === "realizado") {
+        if (tipoTask === "realizado") {
             return;
         }
         
@@ -861,7 +961,7 @@ if (!empty($schedule)) {
         var existingOverlay = bar.querySelector('.pcp-realized-overlay');
         if (existingOverlay) existingOverlay.remove();
 
-        // Criar barra visual secundária de realizado abaixo da barra planejada
+        // Criar barra visual secund?ria de realizado abaixo da barra planejada
         var corRealizado = '#6b7280'; // Cinza: sem dados
         if (real > 0) {
             corRealizado = pct >= 100 ? '#10b981' : (pct >= 80 ? '#f59e0b' : '#ef4444');
@@ -874,7 +974,7 @@ if (!empty($schedule)) {
         realizedFill.style.width = Math.max(0, Math.min(pct, 100)).toFixed(2) + '%';
         realizedTrack.appendChild(realizedFill);
 
-        // Criar overlay com informação - REALIZADO | PREVISTO
+        // Criar overlay com informa??o - REALIZADO | PREVISTO
         var overlay = document.createElement('div');
         overlay.className = 'pcp-realized-overlay';
         var realSpan = document.createElement('span');
@@ -916,11 +1016,11 @@ if (!empty($schedule)) {
         
         // Se já sincronizou hoje, não faz nada
         if (lastSyncDate === today) {
-            console.log('[CODI] Ja sincronizado hoje:', today);
+            console.log('[CODI] Já sincronizado hoje:', today);
             return;
         }
         
-        console.log('[CODI] Iniciando sincronizacao automática...');
+        console.log('[CODI] Iniciando sincronização automática...');
         
         // Sincronizar silenciosamente
         fetch('api/sync_codi.php', {
@@ -943,14 +1043,14 @@ if (!empty($schedule)) {
         });
     }
     
-    // Executar auto-sync quando página carrega
+    // Executar auto-sync quando p?gina carrega
     autoSyncCODI();
 
-    // ========== SINCRONIZAÇÃO CODI (BOTÃO MANUAL) ==========
+    // ========== SINCRONIZA??O CODI (BOT?O MANUAL) ==========
     document.getElementById('syncCodiBtn').addEventListener('click', function() {
         const btn = this;
         btn.disabled = true;
-        btn.textContent = '⏳ Sincronizando...';
+        btn.textContent = 'Sincronizando...';
         
         fetch('api/sync_codi.php', {
             method: 'POST',
@@ -967,22 +1067,23 @@ if (!empty($schedule)) {
             if (data.success) {
                 const today = new Date().toISOString().split('T')[0];
                 localStorage.setItem('codi_last_sync_date', today);
-                alert('✅ Sincronização concluída!\n\n' + data.message);
-                btn.textContent = '🔄 Sincronizar CODI';
+                alert('Sincronização concluída!\n\n' + data.message);
+                btn.textContent = 'Sincronizar CODI';
                 btn.disabled = false;
             } else {
-                alert('⚠️ ' + data.message);
-                btn.textContent = '🔄 Sincronizar CODI';
+                alert(data.message);
+                btn.textContent = 'Sincronizar CODI';
                 btn.disabled = false;
             }
         })
         .catch(error => {
             console.error('Erro:', error);
-            alert('❌ Erro ao sincronizar: ' + error.message);
-            btn.textContent = '🔄 Sincronizar CODI';
+            alert('Erro ao sincronizar: ' + error.message);
+            btn.textContent = 'Sincronizar CODI';
             btn.disabled = false;
         });
     });
 </script>
 </body>
 </html>
+

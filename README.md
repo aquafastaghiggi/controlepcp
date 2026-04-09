@@ -231,7 +231,7 @@ Responsabilidades:
 
 ### Reset de dados
 
-A interface possui um bot�o�o "Resetar dados" que restaura o banco para o estado inicial (seed do schema), apagando as altera��es em produtos, calend��rio e matriz.
+A interface possui um botoo "Resetar dados" que restaura o banco para o estado inicial (seed do schema), apagando as alteraes em produtos, calendrio e matriz.
 
 
 1. O usuario acessa `index.php`.

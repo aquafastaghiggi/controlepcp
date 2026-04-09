@@ -11,7 +11,7 @@ Auth::requireLogin();
 $isSandbox = (getenv('APP_ENV') ?: '') === 'sandbox';
 if (!$isSandbox) {
     http_response_code(403);
-    die('Este relatÃ³rio estÃ¡ disponÃ­vel apenas no ambiente SANDBOX.');
+    die('Este relatório está disponível apenas no ambiente SANDBOX.');
 }
 ?>
 <!DOCTYPE html>
@@ -19,7 +19,7 @@ if (!$isSandbox) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GrÃ¡fico de Sequenciamento - Previsto vs Realizado</title>
+    <title>Gráfico de Sequenciamento - Previsto vs Realizado</title>
     <link rel="stylesheet" href="assets/css/app.css">
     <style>
         :root {

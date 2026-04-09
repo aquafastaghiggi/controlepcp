@@ -3,7 +3,7 @@ $base_url = 'http://192.168.8.246:8080';
 $username = 'Aghiggi';
 $password = '@Ag0351@';
 
-echo "=== TESTANDO SEM PARÂMETROS ===\n\n";
+echo "=== TESTANDO SEM PARMETROS ===\n\n";
 
 $urls = [
     '/action/ger/webservice/rest/ordemProducao',

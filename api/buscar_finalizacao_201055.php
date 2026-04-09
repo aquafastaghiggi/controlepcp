@@ -27,22 +27,22 @@ curl_close($ch);
 
 if ($http_code == 200) {
     $data = json_decode($response, true);
-    
+
     if ($data && isset($data['data'])) {
         echo "✅ Ordem encontrada\n\n";
-        
+
         echo "DADOS COMPLETOS:\n";
         echo str_repeat("=", 80) . "\n";
         echo json_encode($data['data'], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) . "\n";
         echo str_repeat("=", 80) . "\n\n";
-        
+
         // Procurar por campos de finalização
         if (count($data['data']) > 0) {
             $ordem = $data['data'][0];
-            
+
             echo "📋 INFORMAÇÕES PRINCIPAIS:\n";
             echo str_repeat("-", 80) . "\n";
-            
+
             foreach ($ordem as $chave => $valor) {
                 if (is_scalar($valor)) {
                     echo "$chave: $valor\n";

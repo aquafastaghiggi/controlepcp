@@ -81,7 +81,7 @@ class PCPGrafico {
   }
 
   formatDayLabel(dateObj) {
-    const weekdays = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "SÃ¡b"];
+    const weekdays = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
     const dayName = weekdays[dateObj.getDay()];
     const dd = this.pad2(dateObj.getDate());
     const mm = this.pad2(dateObj.getMonth() + 1);

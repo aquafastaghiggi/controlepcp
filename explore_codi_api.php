@@ -81,7 +81,7 @@ foreach ($endpoints as $endpoint) {
 }
 
 // Testar com query parameters
-echo "\n=== TESTANDO PARÂMETROS ===\n\n";
+echo "\n=== TESTANDO PARMETROS ===\n\n";
 
 $params = [
     '?page=1&limit=50',

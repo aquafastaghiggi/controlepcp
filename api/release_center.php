@@ -6,7 +6,7 @@ use App\Auth\Auth;
 
 Auth::startSession();
 
-// Esta API Ã© exclusiva do sandbox.
+// Esta API é exclusiva do sandbox.
 if ((getenv('APP_ENV') ?: '') !== 'sandbox') {
     http_response_code(404);
     exit;
@@ -20,7 +20,7 @@ $storageDir = __DIR__ . '/../.tmp';
 $storagePath = $storageDir . '/release-center.json';
 $featureFlagsPath = $storageDir . '/feature-flags.json';
 
-// ProduÃ§Ã£o fica fora do sandbox (mesma mÃ¡quina). Pode sobrescrever via env se mudar estrutura.
+// Produção fica fora do sandbox (mesma máquina). Pode sobrescrever via env se mudar estrutura.
 $prodRoot = (string) (getenv('PCP_PROD_ROOT') ?: 'C:\\xampp\\htdocs\\controlepcp');
 $prodFeatureFlagsPath = rtrim($prodRoot, "\\/") . '\\.tmp\\feature-flags.json';
 
@@ -80,12 +80,12 @@ $writeState = static function (array $state) use ($storagePath): void {
         JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
     );
     if ($json === false) {
-        throw new RuntimeException('Falha ao serializar estado da Central de PublicaÃ§Ã£o.');
+        throw new RuntimeException('Falha ao serializar estado da Central de Publicação.');
     }
 
-    // Escrita atÃ´mica simples (LOCK_EX) para evitar corrupÃ§Ã£o em acessos rÃ¡pidos.
+    // Escrita atômica simples (LOCK_EX) para evitar corrupção em acessos rápidos.
     if (@file_put_contents($storagePath, $json, LOCK_EX) === false) {
-        throw new RuntimeException('Falha ao gravar estado da Central de PublicaÃ§Ã£o.');
+        throw new RuntimeException('Falha ao gravar estado da Central de Publicação.');
     }
 };
 
@@ -159,13 +159,13 @@ $findGitExecutable = static function (): string {
     throw new RuntimeException('Git não está acessível no servidor sandbox.');
 };
 
-    $runGit = static function (string $cwd, array $args) use ($findGitExecutable): string {
-        $gitExec = $findGitExecutable();
-        $cmd = escapeshellarg($gitExec) . ' -C ' . escapeshellarg($cwd) . ' ' . implode(' ', array_map('escapeshellarg', $args));
-        if (DIRECTORY_SEPARATOR === '\\') {
-            $cmd = str_replace('%', '%%', $cmd);
-        }
-        $output = [];
+$runGit = static function (string $cwd, array $args) use ($findGitExecutable): string {
+    $gitExec = $findGitExecutable();
+    $cmd = escapeshellarg($gitExec) . ' -C ' . escapeshellarg($cwd) . ' ' . implode(' ', array_map('escapeshellarg', $args));
+    if (DIRECTORY_SEPARATOR === '\\') {
+        $cmd = str_replace('%', '%%', $cmd);
+    }
+    $output = [];
     $code = 0;
     @exec($cmd, $output, $code);
     if ($code !== 0) {
@@ -235,7 +235,7 @@ if ($method === 'GET') {
 
 if ($method !== 'POST') {
     http_response_code(405);
-    echo json_encode(['error' => 'MÃ©todo nÃ£o permitido.']);
+    echo json_encode(['error' => 'Método não permitido.']);
     exit;
 }
 
@@ -256,7 +256,7 @@ try {
     Auth::requireCsrf($payload['csrf_token'] ?? null);
 } catch (Throwable $e) {
     http_response_code(403);
-    echo json_encode(['error' => 'CSRF invÃ¡lido.']);
+    echo json_encode(['error' => 'CSRF inválido.']);
     exit;
 }
 
@@ -270,7 +270,7 @@ try {
     if ($action === 'create_item') {
         $title = trim((string) ($payload['title'] ?? ''));
         if ($title === '') {
-            throw new RuntimeException('Informe um tÃ­tulo.');
+            throw new RuntimeException('Informe um título.');
         }
 
         $items = $createItem($items, $title, $username, '');
@@ -286,12 +286,12 @@ try {
     if ($action === 'create_item_from_git') {
         $repoRoot = realpath(__DIR__ . '/..');
         if (!is_string($repoRoot) || $repoRoot === '') {
-            throw new RuntimeException('Pasta do sandbox nÃ£o encontrada para gerar item.');
+            throw new RuntimeException('Pasta do sandbox não encontrada para gerar item.');
         }
 
         $inside = $runGit($repoRoot, ['rev-parse', '--is-inside-work-tree']);
         if (strtolower($inside) !== 'true') {
-            throw new RuntimeException('RepositÃ³rio git nÃ£o encontrado no sandbox.');
+            throw new RuntimeException('Repositório git não encontrado no sandbox.');
         }
 
         $headFull = $runGit($repoRoot, ['rev-parse', 'HEAD']);
@@ -339,7 +339,7 @@ try {
             $fileLines = $runGit($repoRoot, ['show', '--name-status', '--pretty=format:', '-1']);
         }
 
-        $title = trim($subject) !== '' ? trim($subject) : ('AtualizaÃ§Ã£o ' . date('d/m/Y H:i'));
+        $title = trim($subject) !== '' ? trim($subject) : ('Atualização ' . date('d/m/Y H:i'));
         if (function_exists('mb_strlen') && function_exists('mb_substr')) {
             if (mb_strlen($title) > 90) {
                 $title = mb_substr($title, 0, 90) . '...';
@@ -393,10 +393,10 @@ try {
         $allowed = ['testing', 'approved'];
 
         if ($id <= 0) {
-            throw new RuntimeException('ID invÃ¡lido.');
+            throw new RuntimeException('ID inválido.');
         }
         if (!in_array($status, $allowed, true)) {
-            throw new RuntimeException('Status invÃ¡lido.');
+            throw new RuntimeException('Status inválido.');
         }
 
         $now = date('c');
@@ -420,7 +420,7 @@ try {
         unset($it);
 
         if (!$found) {
-            throw new RuntimeException('Item nÃ£o encontrado.');
+            throw new RuntimeException('Item não encontrado.');
         }
 
         $state['items'] = $items;
@@ -435,7 +435,7 @@ try {
         $id = (int) ($payload['id'] ?? 0);
         $note = (string) ($payload['note'] ?? '');
         if ($id <= 0) {
-            throw new RuntimeException('ID invÃ¡lido.');
+            throw new RuntimeException('ID inválido.');
         }
 
         $now = date('c');
@@ -452,7 +452,7 @@ try {
         unset($it);
 
         if (!$found) {
-            throw new RuntimeException('Item nÃ£o encontrado.');
+            throw new RuntimeException('Item não encontrado.');
         }
 
         $state['items'] = $items;
@@ -469,7 +469,7 @@ try {
 
         $allowedKeys = array_keys($defaultState['publish_checklist']);
         if (!in_array($key, $allowedKeys, true)) {
-            throw new RuntimeException('Checklist invÃ¡lido.');
+            throw new RuntimeException('Checklist inválido.');
         }
 
         $value = false;
@@ -493,7 +493,7 @@ try {
         exit;
     }
 
-    throw new RuntimeException('AÃ§Ã£o invÃ¡lida.');
+    throw new RuntimeException('Ação inválida.');
 } catch (Throwable $e) {
     http_response_code(400);
     echo json_encode(['error' => $e->getMessage()], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);

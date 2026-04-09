@@ -2691,7 +2691,7 @@ select {
     text-overflow: ellipsis;
 }
 
-/* Novo label com informa??es de Seq e Dura??o */
+/* Novo label com informações de Seq e Duração */
 .performance-timeline-item-info {
     position: absolute;
     bottom: 2px;

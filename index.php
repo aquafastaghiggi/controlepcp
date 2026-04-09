@@ -39,7 +39,7 @@ if ($showReleaseCenter) {
     }
 }
 
-// Feature flags: usado para mostrar/ocultar mÃ³dulos no Painel Inicial (prod/sandbox).
+// Feature flags: usado para mostrar/ocultar módulos no Painel Inicial (prod/sandbox).
 $features = [
     'performance' => false,
 ];
@@ -85,7 +85,7 @@ if ($rawFeatureFlags !== '') {
         <header class="hero">
             <div class="hero-copy">
                 <img src="/controlepcp/logo.jpg" alt="Aqua Fast" class="hero-logo">
-                <nav class="top-nav" aria-label="Navegacao principal">
+                <nav class="top-nav" aria-label="Navegação principal">
                     <button type="button" class="nav-shortcut" data-target="section-home">Painel Inicial</button>
                     <?php if ($showReleaseCenter): ?>
                         <button type="button" class="nav-shortcut" data-target="section-release-center">Publicação</button>
@@ -122,10 +122,10 @@ if ($rawFeatureFlags !== '') {
                     <div class="panel-heading panel-heading-stack">
                         <div>
                             <h1>Painel inicial</h1>
-                            <p>Escolha uma acao para programar e calcular a producao.</p>
+                            <p>Escolha uma ação para programar e calcular a produção.</p>
                         </div>
                         <div class="home-actions-bar">
-                            <button type="button" class="ghost-button home-quick" data-target="section-program">Nova programacao</button>
+                            <button type="button" class="ghost-button home-quick" data-target="section-program">Nova programação</button>
                             <button type="button" class="ghost-button home-quick" data-home-action="import">Importar Excel</button>
                             <button type="button" class="ghost-button home-quick" data-target="section-programacoes">Ver historico</button>
                             <?php if ($showReleaseCenter): ?>
@@ -140,7 +140,7 @@ if ($rawFeatureFlags !== '') {
                             <div class="home-grid home-grid--operation">
                                 <button type="button" class="home-card home-card--primary" data-target="section-program">
                                     <div class="home-card-top">
-                                        <strong>Programação de PCP</strong>
+                                        <strong>Programa&ccedil;&atilde;o de PCP</strong>
                                         <span class="home-card-badge" data-home-badge="program"></span>
                                     </div>
                                     <span>Importe a planilha, ajuste dias/turnos e calcule.</span>
@@ -218,7 +218,7 @@ if ($rawFeatureFlags !== '') {
                     <div class="panel-heading">
                         <div>
                             <h2>Hor&aacute;rios de Trabalho</h2>
-                            <p>Cadastre os intervalos validos, os dias uteis e os feriados usados no calculo.</p>
+                            <p>Cadastre os intervalos válidos, os dias úteis e os feriados usados no cálculo.</p>
                         </div>
                         <button type="button" id="add-interval" class="ghost-button">Adicionar intervalo</button>
                     </div>
@@ -249,7 +249,7 @@ if ($rawFeatureFlags !== '') {
                             <button type="button" id="add-holiday" class="ghost-button">Adicionar feriado / pausa</button>
                         </div>
                         <div id="holiday-preview" class="holiday-grid">
-                            <div class="holiday-empty">Nenhum feriado lancado.</div>
+                            <div class="holiday-empty">Nenhum feriado lançado.</div>
                         </div>
                     </div>
                 </section>
@@ -342,7 +342,7 @@ if ($rawFeatureFlags !== '') {
                     <div class="panel-heading">
                         <div>
                             <h2>Programação de PCP</h2>
-                            <p>Informe o inÃ­cio base, preencha os itens e deixe as prÃ³ximas datas por conta do cÃ¡lculo.</p>
+                            <p>Informe o início base, preencha os itens e deixe as próximas datas por conta do cálculo.</p>
                         </div>
                         <div class="panel-actions">
                             <button type="button" id="new-programacao-btn" class="ghost-button">+ Nova programação</button>
@@ -404,7 +404,7 @@ if ($rawFeatureFlags !== '') {
                                 <h2>Resultado</h2>
                                 <p>A tabela abaixo mostra producao e setup na ordem real de execucao.</p>
                             </div>
-                            <span class="status-badge" id="result-status">Aguardando calculo</span>
+                            <span class="status-badge" id="result-status">Aguardando cálculo</span>
                         </div>
 
                         <div id="result-summary" class="summary-grid"></div>
@@ -427,7 +427,7 @@ if ($rawFeatureFlags !== '') {
                                 </thead>
                                 <tbody id="result-body">
                                     <tr class="empty-state-row">
-                                        <td colspan="10">Nenhuma simulaÃ§Ã£o calculada ainda.</td>
+                                        <td colspan="10">Nenhuma simulação calculada ainda.</td>
                                     </tr>
                                 </tbody>
                             </table>

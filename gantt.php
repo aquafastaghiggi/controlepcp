@@ -35,52 +35,52 @@ if ($selectedId) {
     $schedule = $repo->getProgramacaoSchedule($selectedId);
 }
 
-// Helper para pegar OP de prg_itens baseado no SKU
-function getOpForSku(PDO $pdo, int $programId, string $sku): string {
-    $stmt = $pdo->prepare(
-        'SELECT prg_itens_op FROM prg_itens WHERE prg_programa_id = :programId AND prg_sku = :sku LIMIT 1'
+// Carregar mapa SKU => OP em uma unica query (evita N+1)
+$opMap = [];
+if ($selectedId) {
+    $stmtOp = $pdo->prepare(
+        'SELECT prg_sku, prg_itens_op FROM prg_itens WHERE prg_programa_id = :programId'
     );
-    $stmt->execute(['programId' => $programId, 'sku' => $sku]);
-    $result = $stmt->fetch(PDO::FETCH_ASSOC);
-    return $result['prg_itens_op'] ?? 'S/OP';
+    $stmtOp->execute(['programId' => $selectedId]);
+    foreach ($stmtOp->fetchAll(PDO::FETCH_ASSOC) as $opRow) {
+        $opMap[$opRow['prg_sku']] = $opRow['prg_itens_op'];
+    }
 }
 
 // Preparar dados para o DHTMLX Gantt
 $tasks = [];
 
-// ===== BUSCAR DADOS REALIZADO =====
+// ===== BUSCAR DADOS REALIZADO (por OP + periodo de cada item) =====
+// Estrategia: buscar o realizado por OP dentro do periodo de cada item do schedule,
+// com margem de +7 dias no fim para capturar apontamentos tardios.
+// Chave do mapa: op . '|' . sch_inicio_producao (distingue lotes da mesma OP)
 $realizadoMap = [];
 if (!empty($schedule) && $selectedId) {
-    // Obter período do schedule
-    $startDate = null;
-    $endDate = null;
-    foreach ($schedule as $row) {
-        $dataRow = strtotime($row['sch_inicio_producao']);
-        if ($dataRow) {
-            if (!$startDate || $dataRow < $startDate) $startDate = $dataRow;
-            if (!$endDate || $dataRow > $endDate) $endDate = $dataRow;
-        }
+    // Coletar todos os periodos e OPs nao-setup de uma vez
+    $opsPeriodos = [];
+    foreach ($schedule as $schRow) {
+        if (strtolower(trim($schRow['sch_tipo'] ?? '')) === 'setup') continue;
+        if (empty($schRow['sch_sku']) || empty($schRow['sch_inicio_producao'])) continue;
+        $opItem = $opMap[$schRow['sch_sku']] ?? 'S/OP';
+        if ($opItem === 'S/OP') continue;
+        $opsPeriodos[] = [
+            'op'     => $opItem,
+            'inicio' => date('Y-m-d', strtotime($schRow['sch_inicio_producao'])),
+            'fim'    => date('Y-m-d', strtotime($schRow['sch_fim_producao'] . ' +7 days')),
+            'chave'  => $opItem . '|' . $schRow['sch_inicio_producao'],
+        ];
     }
-    
-    // Converter para formato SQL
-    if ($startDate && $endDate) {
-        $sqlStart = date('Y-m-d', $startDate);
-        $sqlEnd = date('Y-m-d', $endDate);
-        
-        // Query para buscar realizado agrupado por OP
-        $stmt = $pdo->prepare("
-            SELECT ordem_op, SUM(quantidade) as total_realizado
-            FROM realizado_2026_excel
-            WHERE data_evento >= ? AND data_evento <= ?
-            GROUP BY ordem_op
-        ");
-        $stmt->execute([$sqlStart, $sqlEnd]);
-        $realizadoRows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        
-        // Mapear por OP
-        foreach ($realizadoRows as $row) {
-            $realizadoMap[(string)$row['ordem_op']] = (float)$row['total_realizado'];
-        }
+
+    // Buscar realizado para cada item individualmente
+    $stmtReal = $pdo->prepare("
+        SELECT SUM(quantidade) as total
+        FROM realizado_2026_excel
+        WHERE ordem_op = ? AND data_evento >= ? AND data_evento <= ?
+    ");
+    foreach ($opsPeriodos as $item) {
+        $stmtReal->execute([$item['op'], $item['inicio'], $item['fim']]);
+        $res = $stmtReal->fetch(PDO::FETCH_ASSOC);
+        $realizadoMap[$item['chave']] = (float)($res['total'] ?? 0);
     }
 }
 
@@ -95,11 +95,12 @@ if (!empty($schedule)) {
             // Pegar a OP do item correspondente em prg_itens
             $op = 'S/OP';
             if (!$isSetup && $row['sch_sku'] && $selectedId) {
-                $op = getOpForSku($pdo, $selectedId, $row['sch_sku']);
+                $op = $opMap[$row['sch_sku']] ?? 'S/OP';
             }
             
             // Buscar realizado para esta OP
-            $quantidadeRealizada = $realizadoMap[$op] ?? 0.0;
+            $chaveRealizado = $op . '|' . $row['sch_inicio_producao'];
+            $quantidadeRealizada = $realizadoMap[$chaveRealizado] ?? 0.0;
             $quantidadePrevista = (float)($row['sch_quantidade'] ?? 0);
             $percentualCumprimento = $quantidadePrevista > 0 ? ($quantidadeRealizada / $quantidadePrevista) * 100 : 0;
             
@@ -144,8 +145,8 @@ if (!empty($schedule)) {
     <title>Gantt PCP - Visualização de Cronograma</title>
     <link rel="stylesheet" href="assets/css/app.css">
     <link rel="stylesheet" href="assets/css/theme.css">
-    <!-- DHTMLX Gantt CSS -->
-    <link rel="stylesheet" href="https://cdn.dhtmlx.com/gantt/edge/dhtmlxgantt.css">
+    <!-- DHTMLX Gantt 9.0.6 - versão fixada para evitar quebras por atualização automática -->
+    <link rel="stylesheet" href="https://cdn.dhtmlx.com/gantt/9.0/dhtmlxgantt.css">
     <style>
         :root {
             --primary-dark: #2c3e50;
@@ -339,7 +340,12 @@ if (!empty($schedule)) {
             </select>
         </form>
         <?php if ($programacaoInfo): ?>
-            <span style="color: #666;">Eficiência: <b><?= $programacaoInfo['prg_eficiencia'] ?>%</b> | Início: <b><?= date('d/m/Y H:i', strtotime($programacaoInfo['prg_base_inicio'])) ?></b></span>
+            <?php
+                $baseInicio = !empty($programacaoInfo['prg_base_inicio'])
+                    ? date('d/m/Y H:i', strtotime($programacaoInfo['prg_base_inicio']))
+                    : 'S/data';
+            ?>
+            <span style="color: #666;">Eficiência: <b><?= $programacaoInfo['prg_eficiencia'] ?? 0 ?>%</b> | Início: <b><?= $baseInicio ?></b></span>
         <?php endif; ?>
     </div>
 </div>
@@ -352,8 +358,7 @@ if (!empty($schedule)) {
     <div style="margin-left: auto; color: #888; font-style: italic;">* Use as barras de rolagem para navegar no tempo e nos itens.</div>
 </div>
 
-<!-- DHTMLX Gantt JS -->
-<script src="https://cdn.dhtmlx.com/gantt/edge/dhtmlxgantt.js"></script>
+<script src="https://cdn.dhtmlx.com/gantt/9.0/dhtmlxgantt.js"></script>
 <script>
     // Localização para Português (Deve vir antes da config)
     gantt.i18n.setLocale("pt");
@@ -463,12 +468,6 @@ if (!empty($schedule)) {
     gantt.config.row_height = 44;
     gantt.config.min_column_width = 100;
 
-    // Esconder coluna "realizado" (informação agora está nas barras)
-    setTimeout(function() {
-        var col = document.querySelector('[data-column-name="realizado"]');
-        if(col) col.style.display = 'none';
-    }, 100);
-
     // Inicialização com os dados
     var tasksData = {
         data: <?= json_encode($tasks) ?>
@@ -514,8 +513,12 @@ if (!empty($schedule)) {
         overlay.style.zIndex = '10';
         
         // Criar spans para cada número com cores diferentes
+        var corRealizado = '#6b7280'; // Cinza: sem dados
+        if (real > 0) {
+            corRealizado = pct >= 100 ? '#10b981' : (pct >= 80 ? '#f59e0b' : '#ef4444');
+        }
         var realSpan = document.createElement('span');
-        realSpan.style.backgroundColor = '#ef4444';  // Vermelho para realizado
+        realSpan.style.backgroundColor = corRealizado;
         realSpan.style.padding = '0 3px';
         realSpan.textContent = real.toFixed(0);
         
@@ -542,12 +545,6 @@ if (!empty($schedule)) {
         bar.style.position = 'relative';
         bar.appendChild(overlay);
     });
-
-    // Mostrar coluna "realizado" novamente
-    setTimeout(function() {
-        var col = document.querySelector('[data-column-name="realizado"]');
-        if(col) col.style.display = '';  // Mostrar
-    }, 100);
 
     // ========== SINCRONIZAÇÃO CODI AUTOMÁTICA ==========
     // Verifica se já sincronizou hoje, se não sincroniza automaticamente

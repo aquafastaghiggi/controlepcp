@@ -48,6 +48,42 @@ function getOpForSku(PDO $pdo, int $programId, string $sku): string {
 // Preparar dados para o DHTMLX Gantt
 $tasks = [];
 
+// ===== BUSCAR DADOS REALIZADO =====
+$realizadoMap = [];
+if (!empty($schedule) && $selectedId) {
+    // Obter período do schedule
+    $startDate = null;
+    $endDate = null;
+    foreach ($schedule as $row) {
+        $dataRow = strtotime($row['sch_inicio_producao']);
+        if ($dataRow) {
+            if (!$startDate || $dataRow < $startDate) $startDate = $dataRow;
+            if (!$endDate || $dataRow > $endDate) $endDate = $dataRow;
+        }
+    }
+    
+    // Converter para formato SQL
+    if ($startDate && $endDate) {
+        $sqlStart = date('Y-m-d', $startDate);
+        $sqlEnd = date('Y-m-d', $endDate);
+        
+        // Query para buscar realizado agrupado por OP
+        $stmt = $pdo->prepare("
+            SELECT ordem_op, SUM(quantidade) as total_realizado
+            FROM realizado_2026_excel
+            WHERE data_evento >= ? AND data_evento <= ?
+            GROUP BY ordem_op
+        ");
+        $stmt->execute([$sqlStart, $sqlEnd]);
+        $realizadoRows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        // Mapear por OP
+        foreach ($realizadoRows as $row) {
+            $realizadoMap[(string)$row['ordem_op']] = (float)$row['total_realizado'];
+        }
+    }
+}
+
 if (!empty($schedule)) {
     foreach ($schedule as $row) {
         $start = $row['sch_inicio_producao'];
@@ -62,16 +98,40 @@ if (!empty($schedule)) {
                 $op = getOpForSku($pdo, $selectedId, $row['sch_sku']);
             }
             
+            // Buscar realizado para esta OP
+            $quantidadeRealizada = $realizadoMap[$op] ?? 0.0;
+            $quantidadePrevista = (float)($row['sch_quantidade'] ?? 0);
+            $percentualCumprimento = $quantidadePrevista > 0 ? ($quantidadeRealizada / $quantidadePrevista) * 100 : 0;
+            
+            // Cor baseada em cumprimento
+            $cor = '#3498db'; // Azul padrão para previsto
+            if (!$isSetup) {
+                if ($quantidadeRealizada > 0) {
+                    if ($percentualCumprimento >= 100) {
+                        $cor = '#10b981'; // Verde - cumprimento >= 100%
+                    } elseif ($percentualCumprimento >= 80) {
+                        $cor = '#f59e0b'; // Laranja - cumprimento 80-99%
+                    } else {
+                        $cor = '#ef4444'; // Vermelho - cumprimento < 80%
+                    }
+                }
+            }
+            
             $tasks[] = [
                 'id' => (int)$row['sch_id'],
-                'text' => ($isSetup ? "⚙️ SETUP" : "📦 OP " . $op),
+                'text' => ($isSetup ? "⚙️ SETUP" : "📦 OP " . $op . "\n" . trim($row['sch_descricao'] ?? '-')),
+                'descricao_produto' => trim($row['sch_descricao'] ?? '-'),
                 'start_date' => date('d-m-Y H:i', strtotime($start)),
                 'end_date' => date('d-m-Y H:i', strtotime($end)),
-                'color' => $isSetup ? '#e67e22' : '#3498db',
+                'color' => $cor,
                 'progress' => 1,
                 'open' => true,
                 'sku' => $row['sch_sku'] ?: '-',
-                'tipo' => $row['sch_tipo']
+                'tipo' => $row['sch_tipo'],
+                'op' => $op,
+                'quantidade_prevista' => $quantidadePrevista,
+                'quantidade_realizada' => $quantidadeRealizada,
+                'percentual_cumprimento' => $percentualCumprimento
             ];
         }
     }
@@ -132,6 +192,90 @@ if (!empty($schedule)) {
         .gantt_task_content { font-size: 11px; font-weight: bold; }
         .gantt_grid_head_cell { font-weight: bold; color: #555; }
         .gantt_scale_cell { font-weight: bold; color: #2c3e50; border-right: 1px solid #ebebeb; }
+
+        /* Permitir 2 linhas na coluna de texto (OP em cima, produto abaixo) */
+        .gantt_grid_data .gantt_cell,
+        .gantt_grid_data .gantt_tree_content {
+            white-space: normal !important;
+            line-height: 1.15;
+        }
+
+        .pcp-grid-op {
+            font-weight: 800;
+            color: #0f172a;
+        }
+
+        .pcp-grid-setup {
+            width: 100%;
+            text-align: right;
+            padding-right: 10px;
+            font-weight: 900;
+            color: #0f172a;
+            line-height: 44px; /* alinha no meio da linha (row_height) */
+        }
+
+        .pcp-grid-prod {
+            font-size: 11px;
+            font-weight: 600;
+            color: #64748b;
+            margin-top: 2px;
+        }
+
+        /* Centralizar verticalmente os badges Previsto/Realizado dentro da linha */
+        .pcp-realizado-cell {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            height: 100%;
+            width: 100%;
+        }
+
+        /* Para SETUP: deixar o "-" bem a direita na coluna */
+        .pcp-realizado-cell--setup {
+            justify-content: flex-end;
+            padding-right: 10px;
+            text-align: right;
+        }
+
+        .pcp-realizado-setup {
+            display: block;
+            width: 100%;
+            text-align: right;
+            color: #94a3b8;
+            font-weight: 800;
+        }
+
+        /* Garante centralizacao vertical do conteudo na coluna Previsto|Realizado */
+        .gantt_grid_data .gantt_cell[data-column-name="realizado"] {
+            display: flex;
+            align-items: center;
+        }
+
+        .pcp-realizado-sep {
+            color: #94a3b8;
+            font-weight: 700;
+        }
+
+        .pcp-realizado-badge {
+            color: #fff;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: 800;
+            display: inline-block;
+            text-align: center;
+            line-height: 1.25;
+            min-width: 60px;
+        }
+
+        .pcp-realizado-badge--prev {
+            background: #10b981;
+        }
+
+        .pcp-realizado-badge--real {
+            min-width: 95px;
+        }
         
         /* Forçar visibilidade das barras de scroll - APARECER SEMPRE QUE NECESSÁRIO */
         .gantt_hor_scroll { 
@@ -172,7 +316,10 @@ if (!empty($schedule)) {
 <div class="header-card">
     <div class="top-row">
         <h1 style="margin:0; font-size: 20px; color: var(--primary-dark);">📊 Gráfico de Sequenciamento do PCP</h1>
-        <a href="index.php" class="btn-home">← Voltar ao Sistema</a>
+        <div style="display: flex; gap: 10px;">
+            <button type="button" id="syncCodiBtn" class="btn-home" style="background: #27ae60; cursor: pointer;">🔄 Sincronizar CODI</button>
+            <a href="index.php" class="btn-home">← Voltar ao Sistema</a>
+        </div>
     </div>
     <div class="controls">
         <form method="GET" id="filterForm">
@@ -211,6 +358,16 @@ if (!empty($schedule)) {
     // Localização para Português (Deve vir antes da config)
     gantt.i18n.setLocale("pt");
 
+    function escapeHtml(text) {
+        if (text === null || text === undefined) return "";
+        return String(text)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/\"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
     // Configurações Básicas
     gantt.config.date_format = "%d-%m-%Y %H:%i";
     gantt.config.readonly = true;
@@ -243,10 +400,50 @@ if (!empty($schedule)) {
             width: 220, 
             tree: true,
             template: function(task) {
-                if(task.text && task.text.indexOf("SETUP") !== -1) {
-                    return '<span style="float: right; margin-right: 8px;">' + task.text + '</span>';
+                // Simplesmente retornar o text - ele já contém a quebra de linha e descrição
+                // OP na primeira linha e produto abaixo (mesma linha/raia no grid).
+                var isSetup = (task.tipo && String(task.tipo).toLowerCase() === "setup")
+                    || (task.text && task.text.indexOf("SETUP") !== -1);
+
+                if (isSetup) {
+                    // Move o "SETUP" para a coluna Previsto | Realizado (no lugar do "-").
+                    return '<div class="pcp-grid-op">&nbsp;</div>';
                 }
-                return task.text;
+
+                var op = escapeHtml(task.op || "");
+                var prod = escapeHtml(task.descricao_produto || "-");
+
+                return '<div class="pcp-grid-op">OP ' + op + '</div>' +
+                       '<div class="pcp-grid-prod">' + prod + '</div>';
+            }
+        },
+        {
+            name: "realizado",
+            label: "<span style='display: inline-block; width: 60px; text-align: center;'>Previsto</span><span style='display: inline-block; margin: 0 8px;'>|</span><span style='display: inline-block; width: 80px; text-align: center;'>Realizado</span>",
+            width: 200,
+            template: function(task) {
+                // Se for SETUP, não mostrar
+                if(task.text && task.text.indexOf("SETUP") !== -1) {
+                    return '<div class="pcp-realizado-cell pcp-realizado-cell--setup"><span class="pcp-realizado-setup">SETUP</span></div>';
+                }
+                
+                var prev = task.quantidade_prevista || 0;
+                var real = task.quantidade_realizada || 0;
+                var pct = task.percentual_cumprimento || 0;
+                
+                // Cor para o REALIZADO (baseado em porcentagem)
+                var bgColorRealizado = '#d1d5db'; // Cinza padrão
+                if (real > 0) {
+                    bgColorRealizado = pct >= 100 ? '#10b981' : (pct >= 80 ? '#f59e0b' : '#ef4444');
+                }
+                
+                return '<div class="pcp-realizado-cell">' +
+                       '<span class="pcp-realizado-badge pcp-realizado-badge--prev">' + prev.toFixed(0) + '</span>' +
+                       '<span class="pcp-realizado-sep">|</span>' +
+                       '<span class="pcp-realizado-badge pcp-realizado-badge--real" style="background:' + bgColorRealizado + ';">' +
+                          real.toFixed(0) + ' (' + pct.toFixed(0) + '%)' +
+                       '</span>' +
+                       '</div>';
             }
         }
     ];
@@ -262,8 +459,15 @@ if (!empty($schedule)) {
 
     // Ajustes de Dimensões para forçar o scroll horizontal
     gantt.config.scale_height = 50;
-    gantt.config.row_height = 32;
-    gantt.config.min_column_width = 100; // Largura mínima das colunas
+    // 2 linhas no grid: OP + produto
+    gantt.config.row_height = 44;
+    gantt.config.min_column_width = 100;
+
+    // Esconder coluna "realizado" (informação agora está nas barras)
+    setTimeout(function() {
+        var col = document.querySelector('[data-column-name="realizado"]');
+        if(col) col.style.display = 'none';
+    }, 100);
 
     // Inicialização com os dados
     var tasksData = {
@@ -273,11 +477,154 @@ if (!empty($schedule)) {
     gantt.init("gantt_here");
     gantt.parse(tasksData);
 
-    // Centralizar na primeira tarefa ao carregar
-    if(tasksData.data.length > 0){
-        var firstTask = tasksData.data[0];
-        gantt.showDate(gantt.date.parseDate(firstTask.start_date, "%d-%m-%Y %H:%i"));
+    // ===== ADICIONAR INFORMAÇÃO REALIZADO SOBRE AS BARRAS =====
+    gantt.attachEvent("onAfterTaskRender", function(id, task, div){
+        // Pular se for SETUP ou se não houver espaço
+        if(task.text && task.text.indexOf("SETUP") !== -1) {
+            return;
+        }
+        
+        var prev = task.quantidade_prevista || 0;
+        var real = task.quantidade_realizada || 0;
+        var pct = task.percentual_cumprimento || 0;
+        
+        // Procurar a barra (elemento com classe gantt_task_bar)
+        var bars = div.getElementsByClassName("gantt_task_bar");
+        if(bars.length === 0) return;
+        
+        var bar = bars[0];
+        
+        // Criar overlay com informação - REALIZADO | PREVISTO
+        var overlay = document.createElement('div');
+        overlay.style.position = 'absolute';
+        // Centraliza verticalmente dentro da barra (evita ficar "colado" no topo nas linhas de baixo).
+        overlay.style.top = '50%';
+        overlay.style.left = '6px';
+        overlay.style.transform = 'translateY(-50%)';
+        overlay.style.fontSize = '9px';
+        overlay.style.fontWeight = 'bold';
+        overlay.style.color = '#fff';
+        overlay.style.display = 'flex';
+        overlay.style.alignItems = 'center';
+        overlay.style.gap = '4px';
+        overlay.style.padding = '1px 3px';
+        overlay.style.borderRadius = '2px';
+        overlay.style.whiteSpace = 'nowrap';
+        overlay.style.pointerEvents = 'none';
+        overlay.style.zIndex = '10';
+        
+        // Criar spans para cada número com cores diferentes
+        var realSpan = document.createElement('span');
+        realSpan.style.backgroundColor = '#ef4444';  // Vermelho para realizado
+        realSpan.style.padding = '0 3px';
+        realSpan.textContent = real.toFixed(0);
+        
+        var divider = document.createElement('span');
+        divider.style.color = '#999';
+        divider.textContent = '|';
+        
+        var prevSpan = document.createElement('span');
+        prevSpan.style.backgroundColor = '#10b981';  // Verde para previsto
+        prevSpan.style.padding = '0 3px';
+        prevSpan.textContent = prev.toFixed(0);
+        
+        var pctSpan = document.createElement('span');
+        pctSpan.style.color = '#fff';
+        pctSpan.style.margin = '0 2px 0 0';
+        pctSpan.textContent = '(' + pct.toFixed(0) + '%)';
+        
+        overlay.appendChild(realSpan);
+        overlay.appendChild(divider);
+        overlay.appendChild(prevSpan);
+        overlay.appendChild(pctSpan);
+        
+        // Adicionar ao bar
+        bar.style.position = 'relative';
+        bar.appendChild(overlay);
+    });
+
+    // Mostrar coluna "realizado" novamente
+    setTimeout(function() {
+        var col = document.querySelector('[data-column-name="realizado"]');
+        if(col) col.style.display = '';  // Mostrar
+    }, 100);
+
+    // ========== SINCRONIZAÇÃO CODI AUTOMÁTICA ==========
+    // Verifica se já sincronizou hoje, se não sincroniza automaticamente
+    function autoSyncCODI() {
+        const today = new Date().toISOString().split('T')[0];
+        const lastSyncKey = 'codi_last_sync_date';
+        const lastSyncDate = localStorage.getItem(lastSyncKey);
+        
+        // Se já sincronizou hoje, não faz nada
+        if (lastSyncDate === today) {
+            console.log('[CODI] Ja sincronizado hoje:', today);
+            return;
+        }
+        
+        console.log('[CODI] Iniciando sincronizacao automática...');
+        
+        // Sincronizar silenciosamente
+        fetch('api/sync_codi.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'sync_yesterday' })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                console.log('[CODI OK] Sincronizado:', data.message);
+                localStorage.setItem(lastSyncKey, today);
+            } else {
+                console.warn('[CODI] Ja sincronizado hoje:', data.message);
+                localStorage.setItem(lastSyncKey, today);
+            }
+        })
+        .catch(error => {
+            console.error('[CODI ERRO]', error);
+        });
     }
+    
+    // Executar auto-sync quando página carrega
+    autoSyncCODI();
+
+    // ========== SINCRONIZAÇÃO CODI (BOTÃO MANUAL) ==========
+    document.getElementById('syncCodiBtn').addEventListener('click', function() {
+        const btn = this;
+        btn.disabled = true;
+        btn.textContent = '⏳ Sincronizando...';
+        
+        fetch('api/sync_codi.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                action: 'sync_yesterday',
+                force: true
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const today = new Date().toISOString().split('T')[0];
+                localStorage.setItem('codi_last_sync_date', today);
+                alert('✅ Sincronização concluída!\n\n' + data.message);
+                btn.textContent = '🔄 Sincronizar CODI';
+                btn.disabled = false;
+            } else {
+                alert('⚠️ ' + data.message);
+                btn.textContent = '🔄 Sincronizar CODI';
+                btn.disabled = false;
+            }
+        })
+        .catch(error => {
+            console.error('Erro:', error);
+            alert('❌ Erro ao sincronizar: ' + error.message);
+            btn.textContent = '🔄 Sincronizar CODI';
+            btn.disabled = false;
+        });
+    });
 </script>
 </body>
 </html>

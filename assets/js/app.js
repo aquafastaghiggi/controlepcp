@@ -3311,7 +3311,6 @@ async function loadHistoryProgramacoes() {
     const payload = await response.json();
     const rawHistory = payload?.data ?? payload ?? [];
     const lista = Array.isArray(rawHistory) ? rawHistory : [];
-    const HISTORY_PER_LINE_LIMIT = 2;
 
     const parseSqlDateTimeToMs = (value) => {
       if (!value) return 0;
@@ -3363,7 +3362,7 @@ async function loadHistoryProgramacoes() {
         parseSqlDateTimeToMs(b?.programacao_criada_em || b?.prg_criado_em || '') -
         parseSqlDateTimeToMs(a?.programacao_criada_em || a?.prg_criado_em || '')
       ));
-      limited.push(...items.slice(0, HISTORY_PER_LINE_LIMIT));
+      limited.push(...items);
     }
 
     const lineLabelForHistory = (item) =>

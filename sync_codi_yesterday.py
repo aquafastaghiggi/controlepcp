@@ -26,6 +26,15 @@ def log(msg, type='info'):
     else:
         print(f"{prefix}[INFO] {msg}")
 
+def normalizar_ordem(valor):
+    """Normaliza número da OP para casar com o padrão usado no PCP local."""
+    texto = str(valor or '').strip()
+    if not texto:
+        return ''
+    if texto.isdigit():
+        return texto.lstrip('0') or '0'
+    return texto
+
 def connect_db():
     """Conecta ao banco MySQL"""
     try:
@@ -76,24 +85,31 @@ def get_codi_data_from_api():
                     for item in json_data["data"]:
                         # Extrair informacoes de ordens (pode ter multiplas ordens por evento)
                         ordens = item.get('ordens', [])
+                        inicio_evento = item.get('inicio')
+                        fim_evento = item.get('fim')
                         if ordens and isinstance(ordens, list):
                             for ordem in ordens:
-                                # Extrair SKU do item como identificador da OP
+                                # Extrair numero real da OP; fallback para SKU apenas se a OP nao vier.
                                 ordem_prod = ordem.get('ordemProducao', {})
                                 if isinstance(ordem_prod, dict):
+                                    ordem_op = normalizar_ordem(ordem_prod.get('ordem'))
                                     item_obj = ordem_prod.get('item', {})
                                     sku = item_obj.get('codItem', '').strip()
                                 else:
+                                    ordem_op = ''
                                     sku = ''
+                                identificador_op = ordem_op or sku
                                 
-                                # Preferir quantidadeProduzidaRecurso, depois quantidadeProduzidaItem
-                                quantidade = ordem.get('quantidadeProduzidaRecurso') or ordem.get('quantidadeProduzidaItem') or 0
+                                # Usar a mesma base do Excel importado: quantidade boa por item.
+                                quantidade = ordem.get('quantidadeBoasItem') or 0
                                 
-                                if sku and quantidade and quantidade > 0:
+                                if identificador_op and quantidade and quantidade > 0:
                                     linha = {
                                         'data_evento': data_str,
-                                        'ordem_op': sku,  # SKU como identificador da OP
+                                        'ordem_op': identificador_op,
                                         'quantidade': float(quantidade),
+                                        'inicio_evento': inicio_evento,
+                                        'fim_evento': fim_evento,
                                         'status': 'realizado'
                                     }
                                     todos_os_dados.append(linha)
@@ -120,19 +136,33 @@ def get_codi_data_from_api():
     for linha in todos_os_dados:
         chave = (linha['data_evento'], linha['ordem_op'])
         if chave in dados_agrupados:
-            dados_agrupados[chave] += linha['quantidade']
+            dados_agrupados[chave]['quantidade'] += linha['quantidade']
+            if linha.get('inicio_evento'):
+                inicio_atual = dados_agrupados[chave].get('inicio_evento')
+                if not inicio_atual or linha['inicio_evento'] < inicio_atual:
+                    dados_agrupados[chave]['inicio_evento'] = linha['inicio_evento']
+            if linha.get('fim_evento'):
+                fim_atual = dados_agrupados[chave].get('fim_evento')
+                if not fim_atual or linha['fim_evento'] > fim_atual:
+                    dados_agrupados[chave]['fim_evento'] = linha['fim_evento']
         else:
-            dados_agrupados[chave] = linha['quantidade']
+            dados_agrupados[chave] = {
+                'quantidade': linha['quantidade'],
+                'inicio_evento': linha.get('inicio_evento'),
+                'fim_evento': linha.get('fim_evento')
+            }
     
     # Converter de volta para lista de dicionarios
     dados_consolidados = [
         {
             'data_evento': chave[0],
             'ordem_op': chave[1],
-            'quantidade': quantidade,
+            'quantidade': dados['quantidade'],
+            'inicio_evento': dados.get('inicio_evento'),
+            'fim_evento': dados.get('fim_evento'),
             'status': 'realizado'
         }
-        for chave, quantidade in dados_agrupados.items()
+        for chave, dados in dados_agrupados.items()
     ]
     
     log(f"Apos consolidacao: {len(dados_consolidados)} registros unicos", 'success')
@@ -146,10 +176,12 @@ def insert_realizado_data(conn, data):
     
     sql = """
         INSERT INTO realizado_2026_excel 
-        (data_evento, ordem_op, quantidade)
-        VALUES (%s, %s, %s)
+        (data_evento, ordem_op, quantidade, inicio_evento, fim_evento)
+        VALUES (%s, %s, %s, %s, %s)
         ON DUPLICATE KEY UPDATE
         quantidade = VALUES(quantidade),
+        inicio_evento = VALUES(inicio_evento),
+        fim_evento = VALUES(fim_evento),
         imported_at = NOW()
     """
     
@@ -160,7 +192,9 @@ def insert_realizado_data(conn, data):
                 cursor.execute(sql, (
                     row['data_evento'],
                     row['ordem_op'],
-                    qtd
+                    qtd,
+                    row.get('inicio_evento'),
+                    row.get('fim_evento')
                 ))
                 inserted += 1
         except Exception as e:

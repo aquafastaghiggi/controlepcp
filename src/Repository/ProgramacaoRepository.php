@@ -19,6 +19,11 @@ final class ProgramacaoRepository
         $this->pdo = $pdo ?? Connection::get();
     }
 
+    public function getConnection(): PDO
+    {
+        return $this->pdo;
+    }
+
     private function productsHasExcelLineColumn(): bool
     {
         if ($this->productsHasExcelLineColumn !== null) {
@@ -79,7 +84,7 @@ final class ProgramacaoRepository
 
         $lineId = $this->ensureLine($lineCode);
 
-        // Se a OP já existe, atualizamos a mesma programação (para evitar duplicidade)
+        // Se a OP j? existe, atualizamos a mesma programa??o (para evitar duplicidade)
         $programId = null;
         if ($numeroOp) {
             $stmt = $this->pdo->prepare('SELECT prg_id FROM prg_programas WHERE prg_numero_op = :op ORDER BY prg_criado_em DESC LIMIT 1');
@@ -130,7 +135,7 @@ final class ProgramacaoRepository
 
     private function saveProgramItems(int $programId, array $items): void
     {
-        // Remover itens prévios caso a mesma programação esteja sendo recalculada
+        // Remover itens pr?vios caso a mesma programa??o esteja sendo recalculada
         $this->pdo->prepare('DELETE FROM prg_itens WHERE prg_programa_id = :programId')->execute(['programId' => $programId]);
 
         $stmt = $this->pdo->prepare(
@@ -167,7 +172,7 @@ final class ProgramacaoRepository
 
     private function saveScheduleRows(int $programId, array $rows): void
     {
-        // Sempre remover registros anteriores da mesma programação para evitar duplicações
+        // Sempre remover registros anteriores da mesma programa??o para evitar duplica??es
         $this->pdo->prepare('DELETE FROM sch_linhas WHERE sch_programa_id = :programId')->execute(['programId' => $programId]);
 
         $stmt = $this->pdo->prepare(
@@ -343,7 +348,7 @@ final class ProgramacaoRepository
 
     public function getProgramacaoByOp(string $op): ?array
     {
-        // Sempre retornar a última programação criada para essa OP
+        // Sempre retornar a ?ltima programa??o criada para essa OP
         $sql = 'SELECT p.*, l.lin_codigo, l.lin_nome,'
             . ' ' . $this->sqlDominantExcelLineExpr('p', 'l')
             . ' FROM prg_programas p'
@@ -371,7 +376,7 @@ final class ProgramacaoRepository
 
     public function getProgramacaoSchedule(int $programId): array
     {
-        // Retorna apenas a última execução (batch) para essa programacao, evitando mostrar linhas antigas duplicadas.
+        // Retorna apenas a ?ltima execu??o (batch) para essa programacao, evitando mostrar linhas antigas duplicadas.
         $stmt = $this->pdo->prepare(
             'SELECT *
              FROM sch_linhas
@@ -401,12 +406,12 @@ final class ProgramacaoRepository
     ): int {
         $lineId = $this->ensureLine($lineCode);
 
-        // Verificar se número da OP já existe
+        // Verificar se n?mero da OP j? existe
         if ($numeroOp) {
             $stmt = $this->pdo->prepare('SELECT prg_id FROM prg_programas WHERE prg_numero_op = :op LIMIT 1');
             $stmt->execute(['op' => $numeroOp]);
             if ($stmt->fetch()) {
-                throw new \Exception("Número da OP {$numeroOp} já existe.");
+                throw new \Exception("N?mero da OP {$numeroOp} j? existe.");
             }
         }
 
@@ -435,12 +440,12 @@ final class ProgramacaoRepository
         ?float $efficiency = null,
         ?string $status = null
     ): void {
-        // Se está tentando atualizar o OP, verificar se já existe outro com esse OP
+        // Se est? tentando atualizar o OP, verificar se j? existe outro com esse OP
         if ($numeroOp !== null) {
             $stmt = $this->pdo->prepare('SELECT prg_id FROM prg_programas WHERE prg_numero_op = :op AND prg_id != :programId LIMIT 1');
             $stmt->execute(['op' => $numeroOp, 'programId' => $programId]);
             if ($stmt->fetch()) {
-                throw new \Exception("Número da OP {$numeroOp} já existe.");
+                throw new \Exception("N?mero da OP {$numeroOp} j? existe.");
             }
         }
 

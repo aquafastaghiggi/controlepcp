@@ -459,11 +459,11 @@
             let sheetRowCount = 0;
 
             dataRows.forEach((row) => {
-                const originRaw = String(row[columns.from] ?? '').trim();
-                let destinationRaw = String(row[columns.to] ?? '').trim();
-                const durationRaw = String(row[columns.duration] ?? '').trim();
+                const originRaw = String(row[columns.from] || '').trim();
+                let destinationRaw = String(row[columns.to] || '').trim();
+                const durationRaw = String(row[columns.duration] || '').trim();
 
-                const concatenated = String(row[0] ?? '').trim();
+                const concatenated = String(row[0] || '').trim();
                 const timeValue = durationRaw || String(row[2] || row[1] || '').trim();
 
                 const destinationLooksLikeDuration = /^\d{1,2}:\d{2}(?::\d{2})?$/.test(destinationRaw) || parseNumber(destinationRaw) !== null;
@@ -640,8 +640,8 @@
     }
 
     function parseProgramRow(row, columns, rowNumber, errors) {
-        const op = String(row[columns.op] ?? '').trim();
-        const sku = String(row[columns.sku] ?? '').trim();
+        const op = String(row[columns.op] || '').trim();
+        const sku = String(row[columns.sku] || '').trim();
         const scheduledDate = formatProgramDate(row[columns.scheduledDate]);
         const sequenceValue = parseNumber(row[columns.sequence]);
         const quantityValue = parseNumber(row[columns.quantity]);

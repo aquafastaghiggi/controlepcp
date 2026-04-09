@@ -1,17 +1,17 @@
-# Sandbox e Publicação (PCP)
+# Sandbox e Publica??o (PCP)
 
-Este documento descreve o padrão adotado para:
+Este documento descreve o padr?o adotado para:
 
-- trabalhar no **sandbox** sem impactar a produção
-- aprovar mudanças com um **backlog visível**
-- publicar do sandbox → produção com **backup** e **rollback**
+- trabalhar no **sandbox** sem impactar a produ??o
+- aprovar mudan?as com um **backlog vis?vel**
+- publicar do sandbox ? produ??o com **backup** e **rollback**
 
 ## URLs
 
-- Produção: `http://<IP-DO-SERVIDOR>/`
+- Produ??o: `http://<IP-DO-SERVIDOR>/`
 - Sandbox (local): `http://<IP-DO-SERVIDOR>:8081/`
 
-## 1) Configuração do Sandbox (Apache)
+## 1) Configura??o do Sandbox (Apache)
 
 O sandbox depende de um vhost separado (porta `8081`) e de `SetEnv` para isolar ambiente e banco.
 
@@ -27,7 +27,7 @@ Listen 8081
     DocumentRoot "C:/xampp/htdocs/controlepcp_sandbox"
     DirectoryIndex index.php index.html
 
-    # Identifica o ambiente (usa na UI e bloqueia APIs de sandbox na produção)
+    # Identifica o ambiente (usa na UI e bloqueia APIs de sandbox na produ??o)
     SetEnv APP_ENV sandbox
 
     # Banco do sandbox (somente local)
@@ -45,19 +45,19 @@ Listen 8081
 </VirtualHost>
 ```
 
-## 2) Central de Publicação (UI)
+## 2) Central de Publica??o (UI)
 
-No sandbox, usuários admin veem a seção **“Publicação”** no topo e no Painel Inicial.
+No sandbox, usu?rios admin veem a se??o **"Publica??o"** no topo e no Painel Inicial.
 
 Ela controla:
 
 - Backlog (itens em teste/aprovados/publicados)
-- Checklist de validação (obrigatório antes de publicar)
-- Histórico de releases e rollbacks
+- Checklist de valida??o (obrigat?rio antes de publicar)
+- Hist?rico de releases e rollbacks
 
-Estado runtime (não versionado): `.tmp/release-center.json`
+Estado runtime (n?o versionado): `.tmp/release-center.json`
 
-## 3) Publicar para produção (com backup)
+## 3) Publicar para produ??o (com backup)
 
 No servidor (PowerShell), dentro da pasta do sandbox:
 
@@ -67,26 +67,26 @@ powershell -ExecutionPolicy Bypass -File tools\publish.ps1 -AllApproved -Message
 
 O script:
 
-- faz backup completo da produção em `C:\xampp\backups\controlepcp\releases\...`
-- copia arquivos do sandbox → produção (exclui `.tmp`, `tools`, `.git`, etc.)
-- registra a publicação na Central
+- faz backup completo da produ??o em `C:\xampp\backups\controlepcp\releases\...`
+- copia arquivos do sandbox ? produ??o (exclui `.tmp`, `tools`, `.git`, etc.)
+- registra a publica??o na Central
 
 ## 4) Rollback (restaurar backup)
 
-Restaurar o último backup:
+Restaurar o ?ltimo backup:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools\rollback.ps1 -Latest -Message "rollback"
 ```
 
-Restaurar um backup específico:
+Restaurar um backup espec?fico:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools\rollback.ps1 -ToBackupDir "C:\xampp\backups\controlepcp\releases\YYYYMMDD_HHMMSS" -Message "rollback"
 ```
 
-## Notas de segurança
+## Notas de seguran?a
 
 - O MySQL deve permanecer **local apenas** (`127.0.0.1`), sem porta aberta na rede.
-- Evite colocar senhas reais em arquivos do Git. Use `SetEnv` no Apache na máquina alvo.
+- Evite colocar senhas reais em arquivos do Git. Use `SetEnv` no Apache na m?quina alvo.
 

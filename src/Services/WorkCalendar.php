@@ -26,7 +26,7 @@ final class WorkCalendar
     {
         $dateKey = $day->format('Y-m-d');
 
-        // Regra A: se a data existir em orders_by_day, ela é soberana (sem fallback).
+        // Regra A: se a data existir em orders_by_day, ela ? soberana (sem fallback).
         if (array_key_exists($dateKey, $this->dayOrdersByDate)) {
             $dayOrders = $this->dayOrdersByDate[$dateKey] ?? null;
             if (!is_array($dayOrders)) {
@@ -48,7 +48,7 @@ final class WorkCalendar
             return !empty($dayOrders[$orderNumber]);
         }
 
-        // Data ausente: fallback antigo (ordem não é filtrada por data).
+        // Data ausente: fallback antigo (ordem n?o ? filtrada por data).
         return true;
     }
 
@@ -279,7 +279,7 @@ final class WorkCalendar
                 $nextDayStart = $nextDay->setTime(0, 0);
                 $end = $nextDay->setTime($endHour, $endMinute);
 
-                // Regra B: trecho após 00:00 só existe se o dia seguinte for válido para a mesma ordem.
+                // Regra B: trecho ap?s 00:00 s? existe se o dia seguinte for v?lido para a mesma ordem.
                 // Regra B (ajustada): turno overnight pertence ao dia em que iniciou (bloqueia domingo/feriado).
                 $nextDayNumber = (int) $nextDay->format('N');
                 if ($nextDayNumber === 7 || !$this->isCalendarOpenForDay($nextDay)) {

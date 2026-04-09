@@ -1,15 +1,15 @@
-﻿const fs = require('fs');
+const fs = require('fs');
 const path = require('path');
 const file = path.join('assets', 'js', 'app.js');
 let text = fs.readFileSync(file, 'utf8');
 const pipe = String.fromCharCode(124);
 const target = [
-      const lineLabel = escapeHtml(data.lin_nome  data.lin_codigo  'Linha não informada');,
+      const lineLabel = escapeHtml(data.lin_nome  data.lin_codigo  'Linha n?o informada');,
       const loteLabel = escapeHtml(data.prg_id  prgId);,
       const baseInicio = safeCell(data.prg_base_inicio);,
 ].join('\r\n');
 const replacement = [
-      const lineLabel = escapeHtml(data.lin_nome  data.lin_codigo  'Linha não informada');,
+      const lineLabel = escapeHtml(data.lin_nome  data.lin_codigo  'Linha n?o informada');,
       const loteLabel = escapeHtml(data.prg_id  prgId);,
   '',
   '    const formatDateTimeBR = (dataStr, horaStr) => {',

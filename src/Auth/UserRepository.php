@@ -74,7 +74,7 @@ final class UserRepository
         $username = trim($username);
 
         if ($name === '' || $username === '' || $password === '') {
-            throw new \InvalidArgumentException('Nome, usuário e senha são obrigatórios.');
+            throw new \InvalidArgumentException('Nome, usu?rio e senha s?o obrigat?rios.');
         }
 
         $hash = password_hash($password, PASSWORD_DEFAULT);

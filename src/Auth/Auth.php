@@ -95,7 +95,7 @@ final class Auth
 
         http_response_code(401);
         header('Content-Type: application/json; charset=utf-8');
-        echo json_encode(['ok' => false, 'error' => 'Não autenticado.'], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['ok' => false, 'error' => 'N?o autenticado.'], JSON_UNESCAPED_UNICODE);
         exit;
     }
 
@@ -140,7 +140,7 @@ final class Auth
         }
 
         http_response_code(400);
-        echo 'Falha de validação (CSRF).';
+        echo 'Falha de valida??o (CSRF).';
         exit;
     }
 

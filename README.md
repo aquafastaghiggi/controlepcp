@@ -35,7 +35,7 @@ Componentes principais:
 
 - topo com logo reduzida e atalho unico para o Painel Inicial
 - painel inicial como ponto central de navegacao para Horarios de Trabalho, SKU (Produtos), Matrizes e Programacao de PCP
-- secoes editaveis no proprio navegador, com dados persistidos no banco (sem localStorage como fonte primária)
+- secoes editaveis no proprio navegador, com dados persistidos no banco (sem localStorage como fonte prim?ria)
 - tela de programacao separada da manutencao dos cadastros
 - resultado operacional exibido apenas apos a acao de calcular programacao, mantendo campos tecnicos em segundo plano
 ## Stack atual
@@ -55,25 +55,25 @@ Padrao de trabalho (sandbox -> aprovacao -> publicacao com backup/rollback):
 
 ```text
 controlepcp/
-â”œâ”€â”€ api/
-â”‚   â””â”€â”€ calculate.php
-â”œâ”€â”€ assets/
-â”‚   â”œâ”€â”€ css/
-â”‚   â”‚   â””â”€â”€ app.css
-â”‚   â”‚   â””â”€â”€ theme.css
-â”‚   â””â”€â”€ js/
-â”‚       â””â”€â”€ app.js
-â”œâ”€â”€ src/
-â”‚   â”œâ”€â”€ Data/
-â”‚   â”œâ”€â”€ Services/
-â”‚   â”‚   â”œâ”€â”€ Scheduler.php
-â”‚   â”‚   â””â”€â”€ WorkCalendar.php
-â”‚   â”œâ”€â”€ Support/
-â”‚   â”‚   â””â”€â”€ DateTimeHelper.php
-â”‚   â””â”€â”€ bootstrap.php
-â”œâ”€â”€ .gitignore
-â”œâ”€â”€ index.php
-â””â”€â”€ README.md
+?"o?"??"? api/
+?",   ?""?"??"? calculate.php
+?"o?"??"? assets/
+?",   ?"o?"??"? css/
+?",   ?",   ?""?"??"? app.css
+?",   ?",   ?""?"??"? theme.css
+?",   ?""?"??"? js/
+?",       ?""?"??"? app.js
+?"o?"??"? src/
+?",   ?"o?"??"? Data/
+?",   ?"o?"??"? Services/
+?",   ?",   ?"o?"??"? Scheduler.php
+?",   ?",   ?""?"??"? WorkCalendar.php
+?",   ?"o?"??"? Support/
+?",   ?",   ?""?"??"? DateTimeHelper.php
+?",   ?""?"??"? bootstrap.php
+?"o?"??"? .gitignore
+?"o?"??"? index.php
+?""?"??"? README.md
 ```
 
 ## Papel de cada pasta e arquivo
@@ -231,7 +231,7 @@ Responsabilidades:
 
 ### Reset de dados
 
-A interface possui um bot�o�o "Resetar dados" que restaura o banco para o estado inicial (seed do schema), apagando as altera��es em produtos, calend��rio e matriz.
+A interface possui um bot?o?o "Resetar dados" que restaura o banco para o estado inicial (seed do schema), apagando as altera??es em produtos, calend??rio e matriz.
 
 
 1. O usuario acessa `index.php`.
@@ -261,20 +261,20 @@ O motor foi estruturado para seguir esta linha:
 
 ## Observacoes para manutencao futura
 
-### 1. Persistência de dados em banco
+### 1. Persist?ncia de dados em banco
 
 O sistema persiste todos os dados em MySQL, incluindo:
 
-- calendário produtivo (intervalos, dias úteis e feriados)
+- calend?rio produtivo (intervalos, dias ?teis e feriados)
 - produtos (SKUs)
 - matriz de setup
-- execuções de cálculo (programas e linhas de resultado)
+- execu??es de c?lculo (programas e linhas de resultado)
 
-O frontend não depende de armazenamento local para a operação; ele carrega e grava dados via APIs REST que acessam o banco.
+O frontend n?o depende de armazenamento local para a opera??o; ele carrega e grava dados via APIs REST que acessam o banco.
 
-### 2. Persistência local no navegador
+### 2. Persist?ncia local no navegador
 
-Não há mais persistência em `localStorage`. A fonte única de verdade é o banco de dados e as APIs do backend.
+N?o h? mais persist?ncia em `localStorage`. A fonte ?nica de verdade ? o banco de dados e as APIs do backend.
 
 ### 3. Separacao de responsabilidades
 

@@ -1,0 +1,21 @@
+POST: array (
+  'username' => 'admin@attendant.local',
+  'password' => 'admin123',
+)
+RAW: username=admin@attendant.local&password=admin123
+POST: array (
+  'username' => 'admin@attendant.local',
+  'password' => 'admin123',
+)
+RAW: username=admin@attendant.local&password=admin123
+POST: array (
+  'username' => 'admin@attendant.local',
+  'password' => 'admin123',
+)
+RAW: username=admin@attendant.local&password=admin123
+POST: array (
+  'username' => 'admin@attendant.local',
+  'password' => 'admin123',
+  'csrf_token' => '7ccdf134d2801e5af005a252f6f165d4',
+)
+RAW: username=admin%40attendant.local&password=admin123&csrf_token=7ccdf134d2801e5af005a252f6f165d4

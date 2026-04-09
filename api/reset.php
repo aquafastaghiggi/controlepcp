@@ -51,7 +51,7 @@ try {
         try {
             $pdo->rollBack();
         } catch (\Throwable $rollbackEx) {
-            // Ignora se não houver transação ativa ou se já tiver sido finalizada.
+            // Ignora se n?o houver transa??o ativa ou se j? tiver sido finalizada.
         }
     }
 

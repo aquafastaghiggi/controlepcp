@@ -47,7 +47,7 @@ $isSandbox = (getenv('APP_ENV') ?: '') === 'sandbox';
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Usuários - Controle PCP</title>
+    <title>Usu?rios - Controle PCP</title>
     <link rel="stylesheet" href="assets/css/app.css?v=<?= urlencode((string) $appCssVersion) ?>">
     <link rel="stylesheet" href="assets/css/theme.css?v=<?= urlencode((string) (@filemtime(__DIR__ . '/assets/css/theme.css') ?: 'dev')) ?>">
     <style>
@@ -69,7 +69,7 @@ $isSandbox = (getenv('APP_ENV') ?: '') === 'sandbox';
         <header class="hero">
             <div class="hero-copy">
                 <img src="/controlepcp/logo.jpg" alt="Aqua Fast" class="hero-logo">
-                <nav class="top-nav" aria-label="Navegação principal">
+                <nav class="top-nav" aria-label="Navega??o principal">
                     <a class="nav-link" href="index.php">Painel Inicial</a>
                     <a class="nav-link" href="logout.php">Sair</a>
                     <?php if ($me): ?>
@@ -84,8 +84,8 @@ $isSandbox = (getenv('APP_ENV') ?: '') === 'sandbox';
                 <section class="panel">
                     <div class="panel-heading panel-heading-stack">
                         <div>
-                            <h1>Usuários</h1>
-                            <p>Cadastro de acessos (sem restrição de permissões nesta etapa).</p>
+                            <h1>Usu?rios</h1>
+                            <p>Cadastro de acessos (sem restri??o de permiss?es nesta etapa).</p>
                         </div>
                     </div>
 
@@ -99,10 +99,10 @@ $isSandbox = (getenv('APP_ENV') ?: '') === 'sandbox';
                                 <thead>
                                     <tr>
                                         <th>Nome</th>
-                                        <th>Usuário</th>
+                                        <th>Usu?rio</th>
                                         <th>Status</th>
                                         <th>Criado em</th>
-                                        <th>Último login</th>
+                                        <th>?ltimo login</th>
                                         <th></th>
                                     </tr>
                                 </thead>
@@ -140,7 +140,7 @@ $isSandbox = (getenv('APP_ENV') ?: '') === 'sandbox';
                         <section class="panel">
                             <div class="panel-heading">
                                 <div>
-                                    <h2>Novo usuário</h2>
+                                    <h2>Novo usu?rio</h2>
                                     <p>Cria um novo acesso para o sistema.</p>
                                 </div>
                             </div>
@@ -155,7 +155,7 @@ $isSandbox = (getenv('APP_ENV') ?: '') === 'sandbox';
                                 </label>
 
                                 <label>
-                                    <span>Usuário</span>
+                                    <span>Usu?rio</span>
                                     <input type="text" name="username" required>
                                 </label>
 

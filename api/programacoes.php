@@ -27,7 +27,7 @@ try {
         handleDelete($repo);
     } else {
         http_response_code(405);
-        echo json_encode(['message' => 'Método não permitido'], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['message' => 'M?todo n?o permitido'], JSON_UNESCAPED_UNICODE);
     }
 } catch (Exception $e) {
     http_response_code(400);
@@ -36,14 +36,14 @@ try {
 
 function handleGet(ProgramacaoRepository $repo): void
 {
-    // Se tem O parâmetro 'op' na query, buscar por OP
+    // Se tem O par?metro 'op' na query, buscar por OP
     if (!empty($_GET['op'])) {
         $op = (string) $_GET['op'];
         $programacao = $repo->getProgramacaoByOp($op);
 
         if (!$programacao) {
             http_response_code(404);
-            echo json_encode(['message' => 'Programação não encontrada'], JSON_UNESCAPED_UNICODE);
+            echo json_encode(['message' => 'Programa??o n?o encontrada'], JSON_UNESCAPED_UNICODE);
             return;
         }
 
@@ -61,7 +61,7 @@ function handleGet(ProgramacaoRepository $repo): void
         $filteredId = filter_var(trim($rawId), FILTER_VALIDATE_INT);
         if ($filteredId === false || $filteredId === null || $filteredId <= 0) {
             http_response_code(400);
-            echo json_encode(['message' => 'ID inválido'], JSON_UNESCAPED_UNICODE);
+            echo json_encode(['message' => 'ID inv?lido'], JSON_UNESCAPED_UNICODE);
             return;
         }
 
@@ -70,7 +70,7 @@ function handleGet(ProgramacaoRepository $repo): void
 
         if (!$programacao) {
             http_response_code(404);
-            echo json_encode(['message' => 'Programação não encontrada'], JSON_UNESCAPED_UNICODE);
+            echo json_encode(['message' => 'Programa??o n?o encontrada'], JSON_UNESCAPED_UNICODE);
             return;
         }
 
@@ -82,7 +82,7 @@ function handleGet(ProgramacaoRepository $repo): void
         return;
     }
 
-    // Buscar todas as programações com paginação
+    // Buscar todas as programa??es com pagina??o
     $limit = (int) ($_GET['limit'] ?? 100);
     $page = (int) ($_GET['page'] ?? 1);
     $offset = ($page - 1) * $limit;
@@ -103,7 +103,7 @@ function handlePost(ProgramacaoRepository $repo): void
 
     if (!is_array($payload)) {
         http_response_code(400);
-        echo json_encode(['message' => 'Payload inválido'], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['message' => 'Payload inv?lido'], JSON_UNESCAPED_UNICODE);
         return;
     }
 
@@ -123,7 +123,7 @@ function handlePost(ProgramacaoRepository $repo): void
     $baseStart = DateTimeHelper::fromLocalInput($baseStartStr);
     if (!$baseStart) {
         http_response_code(422);
-        echo json_encode(['message' => 'Data/hora base inválida'], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['message' => 'Data/hora base inv?lida'], JSON_UNESCAPED_UNICODE);
         return;
     }
 
@@ -137,7 +137,7 @@ function handlePost(ProgramacaoRepository $repo): void
     http_response_code(201);
     echo json_encode([
         'prg_id' => $programId,
-        'message' => 'Programação criada com sucesso',
+        'message' => 'Programa??o criada com sucesso',
     ], JSON_UNESCAPED_UNICODE);
 }
 
@@ -147,21 +147,21 @@ function handlePut(ProgramacaoRepository $repo): void
 
     if (!is_array($payload)) {
         http_response_code(400);
-        echo json_encode(['message' => 'Payload inválido'], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['message' => 'Payload inv?lido'], JSON_UNESCAPED_UNICODE);
         return;
     }
 
     $id = (int) ($payload['prg_id'] ?? 0);
     if (!$id) {
         http_response_code(422);
-        echo json_encode(['message' => 'Informe o ID da programação (prg_id)'], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['message' => 'Informe o ID da programa??o (prg_id)'], JSON_UNESCAPED_UNICODE);
         return;
     }
 
     $existente = $repo->getProgramacaoById($id);
     if (!$existente) {
         http_response_code(404);
-        echo json_encode(['message' => 'Programação não encontrada'], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['message' => 'Programa??o n?o encontrada'], JSON_UNESCAPED_UNICODE);
         return;
     }
 
@@ -172,7 +172,7 @@ function handlePut(ProgramacaoRepository $repo): void
         $baseStart = DateTimeHelper::fromLocalInput((string) $payload['prg_base_inicio']);
         if (!$baseStart) {
             http_response_code(422);
-            echo json_encode(['message' => 'Data/hora base inválida'], JSON_UNESCAPED_UNICODE);
+            echo json_encode(['message' => 'Data/hora base inv?lida'], JSON_UNESCAPED_UNICODE);
             return;
         }
     }
@@ -189,7 +189,7 @@ function handlePut(ProgramacaoRepository $repo): void
 
     echo json_encode([
         'prg_id' => $id,
-        'message' => 'Programação atualizada com sucesso',
+        'message' => 'Programa??o atualizada com sucesso',
     ], JSON_UNESCAPED_UNICODE);
 }
 
@@ -199,21 +199,21 @@ function handleDelete(ProgramacaoRepository $repo): void
 
     if (!is_array($payload)) {
         http_response_code(400);
-        echo json_encode(['message' => 'Payload inválido'], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['message' => 'Payload inv?lido'], JSON_UNESCAPED_UNICODE);
         return;
     }
 
     $id = (int) ($payload['prg_id'] ?? 0);
     if (!$id) {
         http_response_code(422);
-        echo json_encode(['message' => 'Informe o ID da programação (prg_id)'], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['message' => 'Informe o ID da programa??o (prg_id)'], JSON_UNESCAPED_UNICODE);
         return;
     }
 
     $existente = $repo->getProgramacaoById($id);
     if (!$existente) {
         http_response_code(404);
-        echo json_encode(['message' => 'Programação não encontrada'], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['message' => 'Programa??o n?o encontrada'], JSON_UNESCAPED_UNICODE);
         return;
     }
 
@@ -221,7 +221,7 @@ function handleDelete(ProgramacaoRepository $repo): void
 
     echo json_encode([
         'prg_id' => $id,
-        'message' => 'Programação deletada com sucesso',
+        'message' => 'Programa??o deletada com sucesso',
     ], JSON_UNESCAPED_UNICODE);
 }
 

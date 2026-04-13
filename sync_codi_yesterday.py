@@ -35,14 +35,47 @@ def normalizar_ordem(valor):
         return texto.lstrip('0') or '0'
     return texto
 
+def normalizar_nome_parada(valor):
+    """Normaliza o nome da parada para persistencia e filtros do relatorio."""
+    return str(valor or '').strip()
+
+def prioridade_parada(nome):
+    """Prioriza as paradas alvo do relatorio."""
+    texto = normalizar_nome_parada(nome).upper()
+    if texto == 'TROCA DE KIT':
+        return 2
+    if texto == 'TROCA DE LIQUIDO':
+        return 1
+    return 0
+
+def eh_parada_alvo(nome):
+    """Retorna True quando a parada deve entrar no relatorio de setup."""
+    return prioridade_parada(nome) > 0
+
+def calcular_duracao_minutos(inicio, fim):
+    """Calcula a duracao em minutos de um evento do CODI."""
+    try:
+        if not inicio or not fim:
+            return 0.0
+        dt_inicio = datetime.fromisoformat(str(inicio))
+        dt_fim = datetime.fromisoformat(str(fim))
+        return max(0.0, (dt_fim - dt_inicio).total_seconds() / 60.0)
+    except Exception:
+        return 0.0
+
 def connect_db():
     """Conecta ao banco MySQL"""
     try:
+        # Permite rodar em sandbox/produção sem hardcode (defaults pelo nome da pasta do projeto)
+        # e ainda permite override via env vars (DB_HOST/DB_USER/DB_PASS/DB_NAME).
+        project_dir = os.path.basename(os.path.dirname(os.path.abspath(__file__))) or ''
+        default_db = project_dir if project_dir in ('controlepcp', 'controlepcp_sandbox') else 'controlepcp_sandbox'
+
         db_config = {
-            'host': 'localhost',
-            'user': 'root',
-            'password': 'k7m2y9u4',
-            'database': 'controlepcp_sandbox'
+            'host': os.getenv('DB_HOST', 'localhost'),
+            'user': os.getenv('DB_USER', 'root'),
+            'password': os.getenv('DB_PASS', 'k7m2y9u4'),
+            'database': os.getenv('DB_NAME', default_db)
         }
         
         conn = mysql.connector.connect(**db_config)
@@ -87,6 +120,10 @@ def get_codi_data_from_api():
                         ordens = item.get('ordens', [])
                         inicio_evento = item.get('inicio')
                         fim_evento = item.get('fim')
+                        parada = item.get('parada')
+                        parada_nome = ''
+                        if isinstance(parada, dict):
+                            parada_nome = normalizar_nome_parada(parada.get('nomeParada'))
                         if ordens and isinstance(ordens, list):
                             for ordem in ordens:
                                 # Extrair numero real da OP; fallback para SKU apenas se a OP nao vier.
@@ -101,15 +138,21 @@ def get_codi_data_from_api():
                                 identificador_op = ordem_op or sku
                                 
                                 # Usar a mesma base do Excel importado: quantidade boa por item.
+                                # Se a parada for um setup alvo, manter mesmo com quantidade zero
+                                # para nao perder o intervalo de tempo do setup realizado.
                                 quantidade = ordem.get('quantidadeBoasItem') or 0
+                                setup_duracao_minutos = calcular_duracao_minutos(inicio_evento, fim_evento) if eh_parada_alvo(parada_nome) else 0.0
                                 
-                                if identificador_op and quantidade and quantidade > 0:
+                                if identificador_op and ((quantidade and quantidade > 0) or eh_parada_alvo(parada_nome)):
                                     linha = {
                                         'data_evento': data_str,
                                         'ordem_op': identificador_op,
                                         'quantidade': float(quantidade),
                                         'inicio_evento': inicio_evento,
                                         'fim_evento': fim_evento,
+                                        'parada_nomeParada': parada_nome,
+                                        'setup_duracao_minutos': setup_duracao_minutos,
+                                        'setup_eventos_count': 1 if eh_parada_alvo(parada_nome) else 0,
                                         'status': 'realizado'
                                     }
                                     todos_os_dados.append(linha)
@@ -137,6 +180,14 @@ def get_codi_data_from_api():
         chave = (linha['data_evento'], linha['ordem_op'])
         if chave in dados_agrupados:
             dados_agrupados[chave]['quantidade'] += linha['quantidade']
+            dados_agrupados[chave]['setup_duracao_minutos'] += float(linha.get('setup_duracao_minutos') or 0)
+            dados_agrupados[chave]['setup_eventos_count'] += int(linha.get('setup_eventos_count') or 0)
+            nome_atual = dados_agrupados[chave].get('parada_nomeParada')
+            nome_novo = normalizar_nome_parada(linha.get('parada_nomeParada'))
+            if prioridade_parada(nome_novo) > prioridade_parada(nome_atual):
+                dados_agrupados[chave]['parada_nomeParada'] = nome_novo
+            elif not nome_atual and nome_novo:
+                dados_agrupados[chave]['parada_nomeParada'] = nome_novo
             if linha.get('inicio_evento'):
                 inicio_atual = dados_agrupados[chave].get('inicio_evento')
                 if not inicio_atual or linha['inicio_evento'] < inicio_atual:
@@ -149,7 +200,10 @@ def get_codi_data_from_api():
             dados_agrupados[chave] = {
                 'quantidade': linha['quantidade'],
                 'inicio_evento': linha.get('inicio_evento'),
-                'fim_evento': linha.get('fim_evento')
+                'fim_evento': linha.get('fim_evento'),
+                'parada_nomeParada': normalizar_nome_parada(linha.get('parada_nomeParada')),
+                'setup_duracao_minutos': float(linha.get('setup_duracao_minutos') or 0),
+                'setup_eventos_count': int(linha.get('setup_eventos_count') or 0)
             }
     
     # Converter de volta para lista de dicionarios
@@ -160,6 +214,9 @@ def get_codi_data_from_api():
             'quantidade': dados['quantidade'],
             'inicio_evento': dados.get('inicio_evento'),
             'fim_evento': dados.get('fim_evento'),
+            'parada_nomeParada': normalizar_nome_parada(dados.get('parada_nomeParada')),
+            'setup_duracao_minutos': float(dados.get('setup_duracao_minutos') or 0),
+            'setup_eventos_count': int(dados.get('setup_eventos_count') or 0),
             'status': 'realizado'
         }
         for chave, dados in dados_agrupados.items()
@@ -176,25 +233,32 @@ def insert_realizado_data(conn, data):
     
     sql = """
         INSERT INTO realizado_2026_excel 
-        (data_evento, ordem_op, quantidade, inicio_evento, fim_evento)
-        VALUES (%s, %s, %s, %s, %s)
+        (data_evento, ordem_op, quantidade, inicio_evento, fim_evento, parada_nomeParada, setup_duracao_minutos, setup_eventos_count)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         ON DUPLICATE KEY UPDATE
         quantidade = VALUES(quantidade),
         inicio_evento = VALUES(inicio_evento),
         fim_evento = VALUES(fim_evento),
+        parada_nomeParada = COALESCE(NULLIF(VALUES(parada_nomeParada), ''), parada_nomeParada),
+        setup_duracao_minutos = VALUES(setup_duracao_minutos),
+        setup_eventos_count = VALUES(setup_eventos_count),
         imported_at = NOW()
     """
     
     for row in data:
         try:
             qtd = float(row['quantidade']) if row['quantidade'] else 0
-            if qtd > 0:
+            setup_eventos = int(row.get('setup_eventos_count') or 0)
+            if qtd > 0 or setup_eventos > 0:
                 cursor.execute(sql, (
                     row['data_evento'],
                     row['ordem_op'],
                     qtd,
                     row.get('inicio_evento'),
-                    row.get('fim_evento')
+                    row.get('fim_evento'),
+                    row.get('parada_nomeParada') or None,
+                    row.get('setup_duracao_minutos') or 0,
+                    row.get('setup_eventos_count') or 0
                 ))
                 inserted += 1
         except Exception as e:

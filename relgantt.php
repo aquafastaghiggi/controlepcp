@@ -5,7 +5,10 @@ declare(strict_types=1);
 require __DIR__ . '/src/bootstrap.php';
 
 use App\Auth\Auth;
+use App\Data\DatabaseData;
 use App\Database\Connection;
+use App\Services\WorkCalendar;
+use App\Support\DateTimeHelper;
 
 Auth::startSession();
 
@@ -16,19 +19,30 @@ function h(?string $value): string
     return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
 }
 
-function formatMinutes(float $minutes): string
+function formatMinutesClock(float $minutes, bool $signed = false): string
 {
     $rounded = (int) round($minutes);
-    $sign = $rounded < 0 ? '-' : '';
+    $sign = '';
+    if ($signed) {
+        if ($rounded > 0) {
+            $sign = '+';
+        } elseif ($rounded < 0) {
+            $sign = '-';
+        }
+    } elseif ($rounded < 0) {
+        $sign = '-';
+    }
+
     $rounded = abs($rounded);
     $hours = intdiv($rounded, 60);
     $mins = $rounded % 60;
 
-    if ($hours > 0) {
-        return sprintf('%s%dh %02dm', $sign, $hours, $mins);
-    }
+    return sprintf('%s%02d:%02d', $sign, $hours, $mins);
+}
 
-    return sprintf('%s%dm', $sign, $mins);
+function formatMinutes(float $minutes): string
+{
+    return formatMinutesClock($minutes, false);
 }
 
 function formatQty(float $value): string
@@ -43,11 +57,7 @@ function formatQtyRounded(float $value): string
 
 function formatDurationClock(float $minutes): string
 {
-    $rounded = max(0, (int) round($minutes));
-    $hours = intdiv($rounded, 60);
-    $mins = $rounded % 60;
-
-    return sprintf('%02d:%02d', $hours, $mins);
+    return formatMinutesClock(max(0.0, $minutes), false);
 }
 
 function formatSetupReferenceLabel(string $tipoBloco): string
@@ -57,8 +67,7 @@ function formatSetupReferenceLabel(string $tipoBloco): string
 
 function formatSignedMinutes(float $minutes): string
 {
-    $prefix = $minutes > 0 ? '+' : '';
-    return $prefix . formatMinutes($minutes);
+    return formatMinutesClock($minutes, true);
 }
 
 function normalizeDateInput(?string $value): string
@@ -195,6 +204,41 @@ function resolveProgramOp(array &$itemsBySku, string $sku, float $plannedQty): s
     return 'S/OP';
 }
 
+function buildWorkCalendarForLine(?string $lineCode): ?WorkCalendar
+{
+    $lineCode = trim((string) $lineCode);
+    if ($lineCode === '') {
+        return null;
+    }
+
+    $datasets = (new DatabaseData(null, $lineCode))->all();
+    $calendarData = is_array($datasets['calendar'] ?? null) ? $datasets['calendar'] : [];
+    $rawIntervals = array_values(is_array($calendarData['intervals'] ?? null) ? $calendarData['intervals'] : []);
+    if ($rawIntervals === []) {
+        return null;
+    }
+
+    $intervals = [];
+    foreach ($rawIntervals as $index => $interval) {
+        if (!is_array($interval)) {
+            continue;
+        }
+
+        $intervals[] = $interval + ['order' => $index + 1];
+    }
+
+    if ($intervals === []) {
+        return null;
+    }
+
+    return new WorkCalendar(
+        $intervals,
+        is_array($calendarData['working_days'] ?? null) ? $calendarData['working_days'] : [1, 2, 3, 4, 5],
+        is_array($calendarData['holidays'] ?? null) ? $calendarData['holidays'] : [],
+        []
+    );
+}
+
 function getRowSetupStatus(array $row): array
 {
     $setupPlan = (float) ($row['setup_previsto_min'] ?? 0);
@@ -283,6 +327,40 @@ function paradaGroupKey(?string $value): string
 {
     $value = trim((string) $value);
     return $value !== '' ? strtoupper($value) : '__NULL__';
+}
+
+function isVisibleComplementaryParada(?string $value): bool
+{
+    $label = trim((string) $value);
+    if ($label === '') {
+        return false;
+    }
+
+    return normalizeParadaLabel($label) !== 'Sem classificaÃ§Ã£o';
+}
+
+function isVisibleComplementaryParadaVisible(?string $value): bool
+{
+    $label = trim((string) $value);
+    if ($label === '') {
+        return false;
+    }
+
+    $upperLabel = function_exists('mb_strtoupper')
+        ? mb_strtoupper($label, 'UTF-8')
+        : strtoupper($label);
+
+    $asciiLabel = preg_replace('/[^A-Z]/u', '', $upperLabel);
+
+    if ($asciiLabel === 'DESCONEXO') {
+        return false;
+    }
+
+    if ($upperLabel === 'DESCONEXÃO' || $upperLabel === 'DESCONEXAO') {
+        return false;
+    }
+
+    return isVisibleComplementaryParada($label);
 }
 
 function fetchOpDetail(PDO $pdo, string $op, string $periodStart, string $periodEnd, ?float $setupReferenceMinutes = null): array
@@ -424,6 +502,10 @@ function fetchOpDetail(PDO $pdo, string $op, string $periodStart, string $period
                 continue;
             }
 
+            if (!isVisibleComplementaryParadaVisible($nomeParada)) {
+                continue;
+            }
+
             $duracao = (float) ($row['duracao_evento_minutos'] ?? 0);
             $apoio[] = [
                 'data_evento' => (string) ($row['data_evento'] ?? ''),
@@ -469,6 +551,10 @@ function fetchOpDetail(PDO $pdo, string $op, string $periodStart, string $period
         foreach ($rows as $row) {
             $nomeParada = (string) ($row['parada_nomeParada'] ?? '');
             if (isSetupTargetParada($nomeParada)) {
+                continue;
+            }
+
+            if (!isVisibleComplementaryParadaVisible($nomeParada)) {
                 continue;
             }
 
@@ -790,6 +876,8 @@ if ($selectedProgramId > 0) {
         ];
     }
 
+    $workCalendar = buildWorkCalendarForLine((string) ($selectedProgram['lin_codigo'] ?? ''));
+
     $scheduleStmt = $pdo->prepare(
         "
         SELECT
@@ -800,7 +888,9 @@ if ($selectedProgramId > 0) {
             s.sch_quantidade,
             s.sch_sku,
             s.sch_duracao_minutos,
-            s.sch_data_inicio
+            s.sch_data_inicio,
+            s.sch_inicio_producao,
+            s.sch_fim_producao
         FROM sch_linhas s
         WHERE s.sch_programa_id = ?
         ORDER BY s.sch_data_inicio ASC, s.sch_sequencia ASC, s.sch_id ASC
@@ -834,6 +924,8 @@ if ($selectedProgramId > 0) {
                 'setup_realizado_min' => 0.0,
                 'producao_prevista' => 0.0,
                 'producao_realizada' => 0.0,
+                'tempo_previsto_min' => 0.0,
+                'tempo_realizado_min' => 0.0,
                 'setup_eventos' => 0,
                 'setup_realizado_eventos' => 0,
                 'program_order' => $programSortIndex++,
@@ -853,6 +945,18 @@ if ($selectedProgramId > 0) {
         $reportRows[$op]['sku'] = $reportRows[$op]['sku'] !== '' ? $reportRows[$op]['sku'] : $sku;
         $reportRows[$op]['setup_previsto_min'] += $pendingSetupMinutes;
         $reportRows[$op]['producao_prevista'] += $plannedQty;
+        $reportRows[$op]['tempo_previsto_min'] += $durationMinutes;
+        $tempoRealizadoMin = 0.0;
+        if ($workCalendar instanceof WorkCalendar) {
+            $inicioProducao = DateTimeHelper::fromLocalInput((string) ($row['sch_inicio_producao'] ?? ''));
+            $fimProducao = DateTimeHelper::fromLocalInput((string) ($row['sch_fim_producao'] ?? ''));
+
+            if ($inicioProducao instanceof DateTimeImmutable && $fimProducao instanceof DateTimeImmutable) {
+                $tempoRealizadoMin = (float) $workCalendar->workingMinutesBetween($inicioProducao, $fimProducao);
+            }
+        }
+
+        $reportRows[$op]['tempo_realizado_min'] += max(0.0, $tempoRealizadoMin);
         $reportRows[$op]['setup_eventos'] += $pendingSetupMinutes > 0 ? 1 : 0;
         $pendingSetupMinutes = 0.0;
     }
@@ -1011,6 +1115,11 @@ if ($selectedProgramId > 0) {
         return strnatcasecmp((string) ($a['op'] ?? ''), (string) ($b['op'] ?? ''));
     });
 
+    // Regra operacional: a primeira OP da sequência real não herda setup anterior.
+    if (!empty($sortableRows)) {
+        $sortableRows[0]['is_first_sequence_op'] = true;
+    }
+
     $reportRows = array_values(array_filter(
         $sortableRows,
         static function (array $row) use ($selectedStatus): bool {
@@ -1027,6 +1136,7 @@ if ($selectedProgramId > 0) {
             };
         }
     ));
+
 }
 
 $setupDiff = $summary['setup_realizado'] - $summary['setup_previsto'];
@@ -1964,6 +2074,8 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
                         <th>Prod. previsto</th>
                         <th>Prod. realizado</th>
                         <th>Diferença</th>
+                        <th>Tempo previsto</th>
+                        <th>Tempo realizado</th>
                         <th>Eventos / situação</th>
                     </tr>
                 </thead>
@@ -1977,6 +2089,12 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
                                 $prodPlan = (float) $row['producao_prevista'];
                                 $prodReal = (float) $row['producao_realizada'];
                                 $prodRowDiff = $prodReal - $prodPlan;
+                                $tempoPrevisto = (float) ($row['tempo_previsto_min'] ?? 0);
+                                $tempoRealizado = (float) ($row['tempo_realizado_min'] ?? 0);
+                                $isFirstSequenceOp = !empty($row['is_first_sequence_op']);
+                                // Regra operacional: a primeira OP da sequência não herda setup anterior.
+                                $setupRealDisplay = $isFirstSequenceOp ? 0.0 : $setupReal;
+                                $setupDiffDisplay = $isFirstSequenceOp ? 0.0 : $setupRowDiff;
                                 $setupClass = $setupRowDiff > 0.01 ? 'cell-danger' : ($setupRowDiff < -0.01 ? 'cell-positive' : 'cell-neutral');
                                 if (!empty($row['is_critical'])) {
                                     $setupClass .= ' cell-critical';
@@ -1986,6 +2104,8 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
                                 $setupRealClass = ((int) $row['setup_realizado_eventos'] > 0)
                                     ? 'cell-success'
                                     : ($setupPlan > 0.01 ? 'cell-warning' : 'cell-muted');
+                                $setupRealClassDisplay = $isFirstSequenceOp ? 'cell-muted' : $setupRealClass;
+                                $setupClassDisplay = $isFirstSequenceOp ? 'cell-neutral' : $setupClass;
                                 $desc = trim((string) ($row['descricao'] ?? ''));
                                 if ($desc === '') {
                                     $desc = 'Sem descrição';
@@ -1996,11 +2116,13 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
                                 <td class="desc-cell"><?= h($desc) ?></td>
                                 <td class="sku-cell"><?= h((string) ($row['sku'] ?? '')) ?></td>
                                 <td><?= h(formatMinutes($setupPlan)) ?></td>
-                                <td class="<?= h($setupRealClass) ?>"><?= h(formatMinutes($setupReal)) ?></td>
-                                <td class="<?= $setupClass ?>"><?= h(sprintf('%s%s', $setupRowDiff >= 0 ? '+' : '-', formatMinutes(abs($setupRowDiff)))) ?></td>
+                                <td class="<?= h($setupRealClassDisplay) ?>"><?= h(formatMinutes($setupRealDisplay)) ?></td>
+                                <td class="<?= $setupClassDisplay ?>"><?= h(formatSignedMinutes($setupDiffDisplay)) ?></td>
                                 <td><?= h(formatQtyRounded($prodPlan)) ?></td>
                                 <td><?= h(formatQtyRounded($prodReal)) ?></td>
                                 <td class="<?= $prodClass ?>"><?= h(sprintf('%s%s', $prodRowDiff >= 0 ? '+' : '-', formatQtyRounded(abs($prodRowDiff)))) ?></td>
+                                <td><?= h(formatDurationClock(max(0.0, $tempoPrevisto))) ?></td>
+                                <td><?= h(formatDurationClock(max(0.0, $tempoRealizado))) ?></td>
                                 <td>
                                     <span class="tag <?= h((string) ($row['tag_class'] ?? $setupStatus['tag_class'])) ?>" title="<?= h((string) ($row['tag_title'] ?? $setupStatus['title'])) ?>">
                                         <?= h((string) ($row['tag_label'] ?? $setupStatus['label'])) ?>
@@ -2023,7 +2145,7 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
                         <?php endforeach; ?>
                     <?php else: ?>
                         <tr>
-                            <td colspan="10">
+                            <td colspan="12">
                                 <div class="empty-state">
                                     Nenhuma OP encontrada para a programação selecionada.
                                 </div>
@@ -2207,16 +2329,37 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
             .replace(/'/g, '&#39;');
     }
 
+    function isVisibleComplementaryParada(value) {
+        const label = String(value ?? '').trim();
+        if (!label) {
+            return false;
+        }
+
+        return label !== 'Sem classificaÃ§Ã£o';
+    }
+
+    function isVisibleComplementaryParadaVisible(value) {
+        const label = String(value ?? '').trim();
+        if (!label) {
+            return false;
+        }
+
+        const upperLabel = label.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+        if (upperLabel === 'DESCONEXAO') {
+            return false;
+        }
+
+        const normalized = isVisibleComplementaryParada(value);
+        return normalized;
+    }
+
     function formatMinutesLabel(minutes) {
         const rounded = Math.round(Number(minutes) || 0);
         const sign = rounded < 0 ? '-' : '';
         const abs = Math.abs(rounded);
         const hours = Math.floor(abs / 60);
         const mins = abs % 60;
-        if (hours > 0) {
-            return `${sign}${hours}h ${String(mins).padStart(2, '0')}m`;
-        }
-        return `${sign}${mins}m`;
+        return `${sign}${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
     }
 
     function parseDateParts(value) {
@@ -2303,6 +2446,16 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
         return row.tipo_bloco === 'setup_principal' || row.is_principal;
     }
 
+    function filterVisibleComplementaryRows(rows) {
+        return rows.filter((row) => {
+            if (row && row.tipo_bloco === 'setup_principal') {
+                return true;
+            }
+
+            return isVisibleComplementaryParadaVisible(row && row.parada_nomeParada);
+        });
+    }
+
     function formatShareLabel(minutes, totalMinutes) {
         if (totalMinutes <= 0) {
             return '0,0';
@@ -2312,7 +2465,7 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
     }
 
     function renderRows(target, rows, emptyText, badgeClass, mainOnly, showReference = true) {
-        const filteredRows = rows.filter((row) => matchesMainOnly(row, mainOnly));
+        const filteredRows = filterVisibleComplementaryRows(rows).filter((row) => matchesMainOnly(row, mainOnly));
 
         if (!filteredRows.length) {
             target.innerHTML = `<tr><td colspan="${showReference ? 6 : 5}" class="empty-state">${escapeHtml(emptyText)}</td></tr>`;
@@ -2323,7 +2476,7 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
     }
 
     function renderGroupedRows(target, rows, emptyText, totalMinutes, mainOnly) {
-        const filteredRows = rows.filter((row) => matchesMainOnly(row, mainOnly));
+        const filteredRows = filterVisibleComplementaryRows(rows).filter((row) => matchesMainOnly(row, mainOnly));
 
         if (!filteredRows.length) {
             target.innerHTML = `<tr><td colspan="2" class="empty-state">${escapeHtml(emptyText)}</td></tr>`;
@@ -2377,7 +2530,7 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
         const summary = data.summary || {};
         const groupedRows = data.paradas_agrupadas || [];
         const mainOnly = detailState.mainOnly;
-        const filteredGroupedRows = groupedRows.filter((row) => matchesMainOnly(row, mainOnly));
+        const filteredGroupedRows = filterVisibleComplementaryRows(groupedRows).filter((row) => matchesMainOnly(row, mainOnly));
         const principalRows = data.principal || [];
         const apoioRows = data.apoio || [];
         const namedCounts = data.support_named_paradas || {};

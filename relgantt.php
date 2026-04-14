@@ -36,6 +36,25 @@ function formatQty(float $value): string
     return number_format($value, 2, ',', '.');
 }
 
+function formatQtyRounded(float $value): string
+{
+    return number_format((float) round($value), 0, ',', '.');
+}
+
+function formatDurationClock(float $minutes): string
+{
+    $rounded = max(0, (int) round($minutes));
+    $hours = intdiv($rounded, 60);
+    $mins = $rounded % 60;
+
+    return sprintf('%02d:%02d', $hours, $mins);
+}
+
+function formatSetupReferenceLabel(string $tipoBloco): string
+{
+    return $tipoBloco === 'setup_principal' ? 'Setup principal' : 'Parada complementar';
+}
+
 function formatSignedMinutes(float $minutes): string
 {
     $prefix = $minutes > 0 ? '+' : '';
@@ -57,10 +76,95 @@ function normalizeDateInput(?string $value): string
     return '';
 }
 
+function parseDateValue(?string $value): ?DateTimeImmutable
+{
+    $value = trim((string) $value);
+    if ($value === '') {
+        return null;
+    }
+
+    $normalized = str_replace('T', ' ', $value);
+    $formats = [
+        'Y-m-d H:i:s',
+        'Y-m-d H:i',
+        'Y-m-d',
+        'd/m/Y H:i:s',
+        'd/m/Y H:i',
+        'd/m/Y',
+    ];
+
+    foreach ($formats as $format) {
+        $dt = DateTimeImmutable::createFromFormat($format, $normalized);
+        if ($dt instanceof DateTimeImmutable) {
+            $errors = DateTimeImmutable::getLastErrors();
+            $warningCount = is_array($errors) ? (int) ($errors['warning_count'] ?? 0) : 0;
+            $errorCount = is_array($errors) ? (int) ($errors['error_count'] ?? 0) : 0;
+            if ($warningCount === 0 && $errorCount === 0) {
+                return $dt;
+            }
+        }
+    }
+
+    try {
+        return new DateTimeImmutable($normalized);
+    } catch (Throwable) {
+        return null;
+    }
+}
+
+function formatDateDisplay(?string $value, string $empty = 'S/data'): string
+{
+    $dt = parseDateValue($value);
+    if (!$dt instanceof DateTimeImmutable) {
+        return $empty;
+    }
+
+    return $dt->format('d/m/Y');
+}
+
+function formatTimeDisplay(?string $value, string $empty = '--'): string
+{
+    $dt = parseDateValue($value);
+    if (!$dt instanceof DateTimeImmutable) {
+        return $empty;
+    }
+
+    return $dt->format('H:i');
+}
+
+function formatDateTimeDisplay(?string $value, string $empty = 'S/data'): string
+{
+    $dt = parseDateValue($value);
+    if (!$dt instanceof DateTimeImmutable) {
+        return $empty;
+    }
+
+    if ($dt->format('H:i:s') === '00:00:00' && !preg_match('/\d{2}:\d{2}/', (string) $value)) {
+        return $dt->format('d/m/Y');
+    }
+
+    return $dt->format('d/m/Y H:i');
+}
+
+function lineFilterKey(?string $lineCode): string
+{
+    $lineCode = trim((string) $lineCode);
+    return strtoupper(preg_replace('/\s+/', '', $lineCode));
+}
+
 function lineLabel(?string $lineCode): string
 {
     $lineCode = trim((string) $lineCode);
-    return $lineCode !== '' ? $lineCode : 'S/linha';
+    if ($lineCode === '') {
+        return 'S/linha';
+    }
+
+    $normalized = lineFilterKey($lineCode);
+    if (preg_match('/^LN0*(\d+)$/', $normalized, $match)) {
+        return sprintf('Linha %02d', (int) $match[1]);
+    }
+
+    return $lineCode;
 }
 
 function resolveProgramOp(array &$itemsBySku, string $sku, float $plannedQty): string
@@ -132,6 +236,345 @@ function getRowSetupStatus(array $row): array
     ];
 }
 
+function isSetupTargetParada(?string $nomeParada): bool
+{
+    $nomeParada = strtoupper(trim((string) $nomeParada));
+    return in_array($nomeParada, ['TROCA DE KIT', 'TROCA DE LIQUIDO'], true);
+}
+
+function formatNullableEventText(?string $value): string
+{
+    $value = trim((string) $value);
+    return $value !== '' ? $value : 'Sem classificação';
+}
+
+function tableExists(PDO $pdo, string $tableName): bool
+{
+    static $cache = [];
+
+    if (array_key_exists($tableName, $cache)) {
+        return $cache[$tableName];
+    }
+
+    try {
+        $stmt = $pdo->prepare(
+            "SELECT 1
+             FROM information_schema.tables
+             WHERE table_schema = DATABASE()
+               AND table_name = ?
+             LIMIT 1"
+        );
+        $stmt->execute([$tableName]);
+        $cache[$tableName] = (bool) $stmt->fetchColumn();
+    } catch (Throwable) {
+        $cache[$tableName] = false;
+    }
+
+    return $cache[$tableName];
+}
+
+function normalizeParadaLabel(?string $value): string
+{
+    $value = trim((string) $value);
+    return $value !== '' ? $value : 'Sem classificação';
+}
+
+function paradaGroupKey(?string $value): string
+{
+    $value = trim((string) $value);
+    return $value !== '' ? strtoupper($value) : '__NULL__';
+}
+
+function fetchOpDetail(PDO $pdo, string $op, string $periodStart, string $periodEnd, ?float $setupReferenceMinutes = null): array
+{
+    $rawEventsTableAvailable = tableExists($pdo, 'realizado_2026_eventos');
+    $setupWindowsByDate = [];
+
+    $stmt = $pdo->prepare(
+        "
+        SELECT
+            id,
+            data_evento,
+            ordem_op,
+            quantidade,
+            inicio_evento,
+            fim_evento,
+            parada_nomeParada,
+            setup_duracao_minutos,
+            setup_eventos_count
+        FROM realizado_2026_excel
+        WHERE ordem_op = ?
+          AND data_evento BETWEEN ? AND ?
+        ORDER BY data_evento ASC, COALESCE(inicio_evento, ''), COALESCE(fim_evento, ''), id ASC
+        "
+    );
+    $stmt->execute([$op, $periodStart, $periodEnd]);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $principal = [];
+    $apoio = [];
+    $supportNamedCounts = [];
+    $groupedParadas = [];
+    $summary = [
+        'rows_total' => 0,
+        'raw_rows_total' => 0,
+        'principal_rows' => 0,
+        'apoio_rows' => 0,
+        'principal_events' => 0,
+        'apoio_events' => 0,
+        'principal_minutes' => 0.0,
+        'apoio_minutes' => 0.0,
+    ];
+    $hasOtherNamedParadas = false;
+
+    foreach ($rows as $row) {
+        $nomeParada = (string) ($row['parada_nomeParada'] ?? '');
+        if (!isSetupTargetParada($nomeParada)) {
+            continue;
+        }
+
+        $duration = (float) ($row['setup_duracao_minutos'] ?? 0);
+        $events = (int) ($row['setup_eventos_count'] ?? 0);
+        $dataEvento = (string) ($row['data_evento'] ?? '');
+        $setupWindow = $dataEvento !== '' ? ($setupWindowsByDate[$dataEvento] ?? null) : null;
+
+        $principal[] = [
+            'data_evento' => $dataEvento,
+            'inicio_evento' => (string) ($setupWindow['inicio_evento'] ?? $row['inicio_evento'] ?? ''),
+            'fim_evento' => (string) ($setupWindow['fim_evento'] ?? $row['fim_evento'] ?? ''),
+            'parada_nomeParada' => formatNullableEventText($nomeParada),
+            'parada_tipo_nome' => 'Setup principal',
+            'setup_referencia' => formatDurationClock($setupReferenceMinutes ?? $duration),
+            'setup_referencia_detail' => 'Setup previsto',
+            'setup_duracao_minutos' => $duration,
+            'setup_eventos_count' => $events,
+            'quantidade' => (float) ($row['quantidade'] ?? 0),
+            'tipo_bloco' => 'setup_principal',
+            'origem' => 'agregado',
+        ];
+        $summary['principal_rows'] += 1;
+        $summary['principal_events'] += $events > 0 ? $events : 1;
+        $summary['principal_minutes'] += $duration;
+
+        $groupKey = paradaGroupKey($nomeParada);
+        if (!isset($groupedParadas[$groupKey])) {
+            $groupedParadas[$groupKey] = [
+                'parada_nomeParada' => normalizeParadaLabel($nomeParada),
+                'eventos_count' => 0,
+                'duracao_total_minutos' => 0.0,
+                'is_principal' => true,
+                'is_null' => trim($nomeParada) === '',
+                'categoria_label' => 'Setup principal',
+            ];
+        }
+        $groupedParadas[$groupKey]['eventos_count'] += 1;
+        $groupedParadas[$groupKey]['duracao_total_minutos'] += $duration;
+    }
+
+    if ($rawEventsTableAvailable) {
+        $rawStmt = $pdo->prepare(
+            "
+            SELECT
+                evt_id,
+                evt_codigo_evento,
+                data_evento,
+                ordem_op,
+                quantidade,
+                inicio_evento,
+                fim_evento,
+                duracao_evento_minutos,
+                parada_nomeParada,
+                parada_tipo_nome,
+                setup_duracao_minutos,
+                setup_eventos_count
+            FROM realizado_2026_eventos
+            WHERE ordem_op = ?
+              AND data_evento BETWEEN ? AND ?
+            ORDER BY data_evento ASC, COALESCE(inicio_evento, ''), COALESCE(fim_evento, ''), evt_id ASC
+            "
+        );
+        $rawStmt->execute([$op, $periodStart, $periodEnd]);
+        $rawRows = $rawStmt->fetchAll(PDO::FETCH_ASSOC);
+        $summary['raw_rows_total'] = count($rawRows);
+
+        foreach ($rawRows as $row) {
+            $nomeParada = (string) ($row['parada_nomeParada'] ?? '');
+            $dataEvento = (string) ($row['data_evento'] ?? '');
+            if (isSetupTargetParada($nomeParada)) {
+                if ($dataEvento !== '') {
+                    if (!isset($setupWindowsByDate[$dataEvento])) {
+                        $setupWindowsByDate[$dataEvento] = [
+                            'inicio_evento' => (string) ($row['inicio_evento'] ?? ''),
+                            'fim_evento' => (string) ($row['fim_evento'] ?? ''),
+                        ];
+                    } else {
+                        $currentInicio = $setupWindowsByDate[$dataEvento]['inicio_evento'] ?? '';
+                        $currentFim = $setupWindowsByDate[$dataEvento]['fim_evento'] ?? '';
+                        $rowInicio = (string) ($row['inicio_evento'] ?? '');
+                        $rowFim = (string) ($row['fim_evento'] ?? '');
+
+                        if ($rowInicio !== '' && ($currentInicio === '' || $rowInicio < $currentInicio)) {
+                            $setupWindowsByDate[$dataEvento]['inicio_evento'] = $rowInicio;
+                        }
+                        if ($rowFim !== '' && ($currentFim === '' || $rowFim > $currentFim)) {
+                            $setupWindowsByDate[$dataEvento]['fim_evento'] = $rowFim;
+                        }
+                    }
+                }
+                continue;
+            }
+
+            $duracao = (float) ($row['duracao_evento_minutos'] ?? 0);
+            $apoio[] = [
+                'data_evento' => (string) ($row['data_evento'] ?? ''),
+                'inicio_evento' => (string) ($row['inicio_evento'] ?? ''),
+                'fim_evento' => (string) ($row['fim_evento'] ?? ''),
+                'parada_nomeParada' => formatNullableEventText($nomeParada),
+                'parada_tipo_nome' => formatNullableEventText((string) ($row['parada_tipo_nome'] ?? '')),
+                'setup_referencia' => 'Contexto complementar',
+                'setup_referencia_detail' => 'Somente contexto complementar',
+                'setup_duracao_minutos' => 0.0,
+                'duracao_evento_minutos' => $duracao,
+                'setup_eventos_count' => (int) ($row['setup_eventos_count'] ?? 0),
+                'quantidade' => (float) ($row['quantidade'] ?? 0),
+                'tipo_bloco' => 'apoio',
+                'origem' => 'bruto',
+                'codigo_evento' => (string) ($row['evt_codigo_evento'] ?? ''),
+            ];
+            $summary['apoio_rows'] += 1;
+            $summary['apoio_events'] += 1;
+            $summary['apoio_minutes'] += $duracao;
+
+            $groupKey = paradaGroupKey($nomeParada);
+            if (!isset($groupedParadas[$groupKey])) {
+                $groupedParadas[$groupKey] = [
+                    'parada_nomeParada' => normalizeParadaLabel($nomeParada),
+                    'eventos_count' => 0,
+                    'duracao_total_minutos' => 0.0,
+                    'is_principal' => false,
+                    'is_null' => trim($nomeParada) === '',
+                    'categoria_label' => trim($nomeParada) === '' ? 'Sem classificação' : 'Paradas complementares',
+                ];
+            }
+            $groupedParadas[$groupKey]['eventos_count'] += 1;
+            $groupedParadas[$groupKey]['duracao_total_minutos'] += $duracao;
+
+            if (trim($nomeParada) !== '') {
+                $hasOtherNamedParadas = true;
+                $supportNamedCounts[$nomeParada] = ($supportNamedCounts[$nomeParada] ?? 0) + 1;
+            }
+        }
+    } else {
+        $summary['raw_rows_total'] = 0;
+        foreach ($rows as $row) {
+            $nomeParada = (string) ($row['parada_nomeParada'] ?? '');
+            if (isSetupTargetParada($nomeParada)) {
+                continue;
+            }
+
+            $duration = (float) ($row['setup_duracao_minutos'] ?? 0);
+            $events = (int) ($row['setup_eventos_count'] ?? 0);
+            $apoio[] = [
+                'data_evento' => (string) ($row['data_evento'] ?? ''),
+                'inicio_evento' => (string) ($row['inicio_evento'] ?? ''),
+                'fim_evento' => (string) ($row['fim_evento'] ?? ''),
+                'parada_nomeParada' => formatNullableEventText($nomeParada),
+                'parada_tipo_nome' => 'Sem detalhe bruto',
+                'setup_referencia' => 'Contexto complementar',
+                'setup_referencia_detail' => 'Somente contexto complementar',
+                'setup_duracao_minutos' => $duration,
+                'setup_eventos_count' => $events,
+                'quantidade' => (float) ($row['quantidade'] ?? 0),
+                'tipo_bloco' => 'apoio',
+                'origem' => 'agregado',
+            ];
+            $summary['apoio_rows'] += 1;
+            $summary['apoio_events'] += $events > 0 ? $events : 0;
+            $summary['apoio_minutes'] += $duration;
+
+            $groupKey = paradaGroupKey($nomeParada);
+            if (!isset($groupedParadas[$groupKey])) {
+                $groupedParadas[$groupKey] = [
+                    'parada_nomeParada' => normalizeParadaLabel($nomeParada),
+                    'eventos_count' => 0,
+                    'duracao_total_minutos' => 0.0,
+                    'is_principal' => false,
+                    'is_null' => trim($nomeParada) === '',
+                    'categoria_label' => trim($nomeParada) === '' ? 'Sem classificação' : 'Paradas complementares',
+                ];
+            }
+            $groupedParadas[$groupKey]['eventos_count'] += 1;
+            $groupedParadas[$groupKey]['duracao_total_minutos'] += $duration;
+
+            if (trim($nomeParada) !== '') {
+                $hasOtherNamedParadas = true;
+                $supportNamedCounts[$nomeParada] = ($supportNamedCounts[$nomeParada] ?? 0) + 1;
+            }
+        }
+    }
+
+    $summary['rows_total'] = $summary['principal_rows'] + $summary['apoio_rows'];
+
+    $groupedParadas = array_values($groupedParadas);
+    usort($groupedParadas, static function (array $a, array $b): int {
+        $minutesA = (float) ($a['duracao_total_minutos'] ?? 0);
+        $minutesB = (float) ($b['duracao_total_minutos'] ?? 0);
+        if ($minutesA !== $minutesB) {
+            return $minutesB <=> $minutesA;
+        }
+
+        $countA = (int) ($a['eventos_count'] ?? 0);
+        $countB = (int) ($b['eventos_count'] ?? 0);
+        if ($countA !== $countB) {
+            return $countB <=> $countA;
+        }
+
+        return strnatcasecmp((string) ($a['parada_nomeParada'] ?? ''), (string) ($b['parada_nomeParada'] ?? ''));
+    });
+
+    return [
+        'op' => $op,
+        'period_start' => $periodStart,
+        'period_end' => $periodEnd,
+        'summary' => $summary,
+        'paradas_agrupadas' => $groupedParadas,
+        'principal' => $principal,
+        'apoio' => $apoio,
+        'has_other_named_paradas' => $hasOtherNamedParadas,
+        'support_named_paradas' => $supportNamedCounts,
+        'detail_source' => $rawEventsTableAvailable ? 'realizado_2026_eventos' : 'realizado_2026_excel',
+    ];
+}
+
+if (($_GET['action'] ?? '') === 'op_detail') {
+    header('Content-Type: application/json; charset=utf-8');
+
+    $op = trim((string) ($_GET['op'] ?? ''));
+    $periodStart = normalizeDateInput($_GET['period_start'] ?? null);
+    $periodEnd = normalizeDateInput($_GET['period_end'] ?? null);
+    $setupReferenceMinutes = isset($_GET['setup_plan_min']) ? (float) $_GET['setup_plan_min'] : null;
+
+    if ($op === '' || $periodStart === '' || $periodEnd === '') {
+        http_response_code(400);
+        echo json_encode([
+            'success' => false,
+            'message' => 'Parâmetros inválidos para o detalhe da OP.',
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
+    }
+
+    if ($periodStart > $periodEnd) {
+        [$periodStart, $periodEnd] = [$periodEnd, $periodStart];
+    }
+
+    $payload = fetchOpDetail($pdo, $op, $periodStart, $periodEnd, $setupReferenceMinutes);
+    $payload['success'] = true;
+    $payload['main_rule'] = 'TROCA DE KIT / TROCA DE LIQUIDO';
+
+    echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
 $programacoes = $pdo->query(
     "
     SELECT
@@ -142,6 +585,7 @@ $programacoes = $pdo->query(
         l.lin_codigo,
         MIN(s.sch_data_inicio) AS data_inicio,
         MAX(s.sch_data_inicio) AS data_fim,
+        MIN(s.sch_criado_em) AS programacao_criada_em,
         COUNT(*) AS total_linhas
     FROM prg_programas p
     INNER JOIN sch_linhas s ON s.sch_programa_id = p.prg_id
@@ -162,9 +606,31 @@ $linhasDisponiveis = $pdo->query(
         SELECT DISTINCT sch_programa_id
         FROM sch_linhas
     )
-    ORDER BY lin_codigo ASC
     "
 )->fetchAll(PDO::FETCH_COLUMN);
+
+usort($linhasDisponiveis, static function (string $a, string $b): int {
+    $aKey = lineFilterKey($a);
+    $bKey = lineFilterKey($b);
+    $aNumeric = preg_match('/^LN0*(\d+)$/', $aKey, $aMatch) === 1;
+    $bNumeric = preg_match('/^LN0*(\d+)$/', $bKey, $bMatch) === 1;
+
+    if ($aNumeric && $bNumeric) {
+        $aNumber = (int) $aMatch[1];
+        $bNumber = (int) $bMatch[1];
+        if ($aNumber !== $bNumber) {
+            return $aNumber <=> $bNumber;
+        }
+
+        return strcasecmp($a, $b);
+    }
+
+    if ($aNumeric !== $bNumeric) {
+        return $aNumeric ? -1 : 1;
+    }
+
+    return strcasecmp($a, $b);
+});
 
 $selectedLine = trim((string) ($_GET['linha'] ?? ''));
 $selectedLine = $selectedLine !== '' ? $selectedLine : '';
@@ -179,9 +645,47 @@ $filteredProgramacoes = $programacoes;
 if ($selectedLine !== '') {
     $filteredProgramacoes = array_values(array_filter(
         $programacoes,
-        static fn(array $programacao): bool => lineLabel((string) ($programacao['lin_codigo'] ?? '')) === $selectedLine
+        static fn(array $programacao): bool => lineFilterKey((string) ($programacao['lin_codigo'] ?? '')) === lineFilterKey($selectedLine)
     ));
 }
+
+usort($filteredProgramacoes, static function (array $a, array $b): int {
+    $lineA = trim((string) ($a['lin_codigo'] ?? ''));
+    $lineB = trim((string) ($b['lin_codigo'] ?? ''));
+    $keyA = lineFilterKey($lineA);
+    $keyB = lineFilterKey($lineB);
+    $isNumericA = preg_match('/^LN0*(\d+)$/', $keyA, $matchA) === 1;
+    $isNumericB = preg_match('/^LN0*(\d+)$/', $keyB, $matchB) === 1;
+
+    if ($isNumericA && $isNumericB) {
+        $numA = (int) $matchA[1];
+        $numB = (int) $matchB[1];
+        if ($numA !== $numB) {
+            return $numA <=> $numB;
+        }
+    } elseif ($isNumericA !== $isNumericB) {
+        return $isNumericA ? -1 : 1;
+    } else {
+        $cmpLine = strcasecmp($lineA, $lineB);
+        if ($cmpLine !== 0) {
+            return $cmpLine;
+        }
+    }
+
+    $dataInicioA = (string) ($a['data_inicio'] ?? '');
+    $dataInicioB = (string) ($b['data_inicio'] ?? '');
+    if ($dataInicioA !== $dataInicioB) {
+        return strcmp($dataInicioA, $dataInicioB);
+    }
+
+    $criadaEmA = (string) ($a['programacao_criada_em'] ?? '');
+    $criadaEmB = (string) ($b['programacao_criada_em'] ?? '');
+    if ($criadaEmA !== $criadaEmB) {
+        return strcmp($criadaEmA, $criadaEmB);
+    }
+
+    return ((int) ($a['prg_id'] ?? 0)) <=> ((int) ($b['prg_id'] ?? 0));
+});
 
 $selectedProgramId = (int) ($_GET['programacao_id'] ?? 0);
 if ($selectedProgramId <= 0 && !empty($filteredProgramacoes)) {
@@ -204,6 +708,21 @@ if ($selectedProgram === null && !empty($filteredProgramacoes)) {
 if ($selectedProgram === null && !empty($programacoes)) {
     $selectedProgram = $programacoes[0];
     $selectedProgramId = (int) $selectedProgram['prg_id'];
+}
+
+$reportPeriodStart = $selectedPeriodStartInput !== ''
+    ? $selectedPeriodStartInput
+    : (!empty($selectedProgram['data_inicio'])
+        ? (new DateTimeImmutable((string) $selectedProgram['data_inicio']))->modify('-1 day')->format('Y-m-d')
+        : date('Y-m-d'));
+$reportPeriodEnd = $selectedPeriodEndInput !== ''
+    ? $selectedPeriodEndInput
+    : (!empty($selectedProgram['data_fim'])
+        ? (new DateTimeImmutable((string) $selectedProgram['data_fim']))->modify('+1 day')->format('Y-m-d')
+        : date('Y-m-d'));
+
+if ($reportPeriodStart > $reportPeriodEnd) {
+    [$reportPeriodStart, $reportPeriodEnd] = [$reportPeriodEnd, $reportPeriodStart];
 }
 
 $reportRows = [];
@@ -291,6 +810,7 @@ if ($selectedProgramId > 0) {
     $scheduleRows = $scheduleStmt->fetchAll(PDO::FETCH_ASSOC);
 
     $pendingSetupMinutes = 0.0;
+    $programSortIndex = 0;
 
     foreach ($scheduleRows as $row) {
         $tipo = strtolower(trim((string) ($row['sch_tipo'] ?? '')));
@@ -316,6 +836,9 @@ if ($selectedProgramId > 0) {
                 'producao_realizada' => 0.0,
                 'setup_eventos' => 0,
                 'setup_realizado_eventos' => 0,
+                'program_order' => $programSortIndex++,
+                'program_seq' => (int) ($row['sch_sequencia'] ?? 0),
+                'program_data_inicio' => (string) ($row['sch_data_inicio'] ?? ''),
             ];
         }
 
@@ -340,21 +863,6 @@ if ($selectedProgramId > 0) {
 
     if (!empty($ops)) {
         $placeholders = implode(',', array_fill(0, count($ops), '?'));
-
-        $periodStart = $selectedPeriodStartInput !== ''
-            ? $selectedPeriodStartInput
-            : (!empty($selectedProgram['data_inicio'])
-                ? (new DateTimeImmutable((string) $selectedProgram['data_inicio']))->modify('-1 day')->format('Y-m-d')
-                : date('Y-m-d'));
-        $periodEnd = $selectedPeriodEndInput !== ''
-            ? $selectedPeriodEndInput
-            : (!empty($selectedProgram['data_fim'])
-                ? (new DateTimeImmutable((string) $selectedProgram['data_fim']))->modify('+1 day')->format('Y-m-d')
-                : date('Y-m-d'));
-
-        if ($periodStart > $periodEnd) {
-            [$periodStart, $periodEnd] = [$periodEnd, $periodStart];
-        }
 
         $realizadoStmt = $pdo->prepare(
             "
@@ -381,7 +889,7 @@ if ($selectedProgramId > 0) {
             GROUP BY ordem_op
             "
         );
-        $realizadoStmt->execute(array_merge([$periodStart, $periodEnd], $ops));
+        $realizadoStmt->execute(array_merge([$reportPeriodStart, $reportPeriodEnd], $ops));
         $realizadoRows = $realizadoStmt->fetchAll(PDO::FETCH_ASSOC);
 
         foreach ($realizadoRows as $row) {
@@ -408,7 +916,7 @@ if ($selectedProgramId > 0) {
               AND ordem_op IN ($placeholders)
             "
         );
-        $diagStmt->execute(array_merge([$periodStart, $periodEnd], $ops));
+        $diagStmt->execute(array_merge([$reportPeriodStart, $reportPeriodEnd], $ops));
         $diagRow = $diagStmt->fetch(PDO::FETCH_ASSOC) ?: [];
         $realizadoDiagnostics = [
             'rows' => (int) ($diagRow['rows_total'] ?? 0),
@@ -482,22 +990,22 @@ if ($selectedProgramId > 0) {
     }
 
     usort($sortableRows, static function (array $a, array $b): int {
-        $setupAbsA = abs((float) ($a['setup_row_diff'] ?? 0));
-        $setupAbsB = abs((float) ($b['setup_row_diff'] ?? 0));
-        if ($setupAbsA !== $setupAbsB) {
-            return $setupAbsB <=> $setupAbsA;
+        $orderA = (int) ($a['program_order'] ?? PHP_INT_MAX);
+        $orderB = (int) ($b['program_order'] ?? PHP_INT_MAX);
+        if ($orderA !== $orderB) {
+            return $orderA <=> $orderB;
         }
 
-        $setupEventsA = (int) ($a['setup_realizado_eventos'] ?? 0);
-        $setupEventsB = (int) ($b['setup_realizado_eventos'] ?? 0);
-        if ($setupEventsA !== $setupEventsB) {
-            return $setupEventsB <=> $setupEventsA;
+        $seqA = (int) ($a['program_seq'] ?? PHP_INT_MAX);
+        $seqB = (int) ($b['program_seq'] ?? PHP_INT_MAX);
+        if ($seqA !== $seqB) {
+            return $seqA <=> $seqB;
         }
 
-        $prodAbsA = abs((float) ($a['prod_row_diff'] ?? 0));
-        $prodAbsB = abs((float) ($b['prod_row_diff'] ?? 0));
-        if ($prodAbsA !== $prodAbsB) {
-            return $prodAbsB <=> $prodAbsA;
+        $dateA = (string) ($a['program_data_inicio'] ?? '');
+        $dateB = (string) ($b['program_data_inicio'] ?? '');
+        if ($dateA !== $dateB) {
+            return strcmp($dateA, $dateB);
         }
 
         return strnatcasecmp((string) ($a['op'] ?? ''), (string) ($b['op'] ?? ''));
@@ -664,7 +1172,7 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
 
         .filter-row {
             display: flex;
-            gap: 14px;
+            gap: 12px;
             flex-wrap: wrap;
             margin-top: 18px;
             align-items: flex-end;
@@ -674,6 +1182,8 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
             display: flex;
             flex-direction: column;
             gap: 6px;
+            flex: 1 1 240px;
+            min-width: 220px;
         }
 
         .filter-group label {
@@ -686,7 +1196,8 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
 
         select,
         input[type="date"] {
-            min-width: 320px;
+            width: 100%;
+            min-width: 0;
             max-width: 100%;
             padding: 12px 14px;
             border-radius: 12px;
@@ -697,7 +1208,7 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
         }
 
         input[type="date"] {
-            min-width: 180px;
+            min-width: 0;
         }
 
         .meta-line {
@@ -868,6 +1379,33 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
             color: #475569;
         }
 
+        .detail-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-top: 8px;
+            padding: 6px 10px;
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            background: #fff;
+            color: var(--accent-2);
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+        }
+
+        .detail-btn:hover {
+            transform: translateY(-1px);
+            border-color: #94a3b8;
+            box-shadow: 0 6px 14px rgba(15, 23, 42, 0.08);
+        }
+
+        .detail-btn:focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: 2px;
+        }
+
         .cell-positive { color: var(--success); font-weight: 800; }
         .cell-success { color: var(--success); font-weight: 800; }
         .cell-warning { color: var(--warn); font-weight: 800; }
@@ -931,6 +1469,267 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
             color: var(--text);
         }
 
+        .detail-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 18px;
+        }
+
+        .detail-modal.is-open {
+            display: flex;
+        }
+
+        .detail-modal__backdrop {
+            position: absolute;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.55);
+            backdrop-filter: blur(3px);
+        }
+
+        .detail-modal__panel {
+            position: relative;
+            z-index: 1;
+            width: min(1200px, 100%);
+            max-height: min(90vh, 980px);
+            overflow: hidden;
+            background: var(--card);
+            border-radius: 24px;
+            border: 1px solid var(--border);
+            box-shadow: 0 28px 80px rgba(15, 23, 42, 0.28);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .detail-modal__head {
+            padding: 18px 20px 14px;
+            border-bottom: 1px solid var(--border);
+            background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+        }
+
+        .detail-modal__topline {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: flex-start;
+            flex-wrap: wrap;
+        }
+
+        .detail-modal__title {
+            margin: 0;
+            font-size: 22px;
+            line-height: 1.15;
+            color: var(--accent-2);
+        }
+
+        .detail-modal__subtitle {
+            margin: 6px 0 0;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .detail-modal__close {
+            border: 1px solid #cbd5e1;
+            background: #fff;
+            color: var(--accent-2);
+            border-radius: 12px;
+            width: 38px;
+            height: 38px;
+            cursor: pointer;
+            font-size: 18px;
+            line-height: 1;
+        }
+
+        .detail-modal__content {
+            padding: 14px 16px 16px;
+            overflow: auto;
+        }
+
+        .detail-kpis {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .detail-kpi {
+            background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 10px 12px;
+        }
+
+        .detail-kpi .label {
+            font-size: 10px;
+            font-weight: 700;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+            margin-bottom: 6px;
+        }
+
+        .detail-kpi .value {
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--accent-2);
+        }
+
+        .detail-section {
+            margin-top: 10px;
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            overflow: hidden;
+            background: #fff;
+        }
+
+        .detail-section__head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 14px;
+            background: #f8fbff;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .detail-section__head h3 {
+            margin: 0;
+            font-size: 14px;
+            color: var(--accent-2);
+        }
+
+        .detail-section__head p {
+            margin: 2px 0 0;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .detail-section__body {
+            overflow: auto;
+        }
+
+        .detail-table {
+            min-width: 980px;
+        }
+
+        .detail-modal .detail-table thead th {
+            padding: 10px 12px;
+            font-size: 11px;
+        }
+
+        .detail-modal .detail-table tbody td {
+            padding: 9px 12px;
+            font-size: 13px;
+        }
+
+        .detail-section--summary .detail-table {
+            min-width: 0;
+            width: 100%;
+        }
+
+        .detail-section--summary .detail-table thead th,
+        .detail-section--summary .detail-table tbody td {
+            padding: 8px 10px;
+        }
+
+        .detail-table__meta {
+            margin-top: 2px;
+            font-size: 11px;
+            color: var(--muted);
+        }
+
+        .detail-duration-highlight {
+            color: #b91c1c;
+            font-weight: 700;
+            background: rgba(239, 68, 68, 0.05);
+        }
+
+        .detail-duration-highlight .detail-table__meta {
+            color: #b91c1c;
+        }
+
+        .badge-main {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .badge-secondary {
+            background: #e2e8f0;
+            color: #475569;
+        }
+
+        .badge-summary {
+            background: #dbeafe;
+            color: #1d4ed8;
+        }
+
+        .detail-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            text-align: right;
+        }
+
+        .detail-toggle__control {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--accent-2);
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .detail-toggle__control input {
+            width: 16px;
+            height: 16px;
+            accent-color: var(--accent);
+        }
+
+        .detail-toggle__hint {
+            font-size: 10px;
+            color: var(--muted);
+            max-width: 320px;
+        }
+
+        .detail-group-total {
+            background: #eef2ff;
+            font-weight: 700;
+        }
+
+        .detail-group-total td {
+            border-top: 2px solid #c7d2fe;
+        }
+
+        .group-row--top {
+            background: #eff6ff;
+        }
+
+        .group-row--main {
+            background: #f0fdf4;
+        }
+
+        .group-row--null {
+            background: #fafafa;
+        }
+
+        .detail-note {
+            margin-top: 16px;
+            padding: 14px 16px;
+            border-radius: 16px;
+            background: #f8fbff;
+            border: 1px dashed #cbd5e1;
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
         @media (max-width: 1200px) {
             .summary-grid {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -938,6 +1737,10 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
 
             .status-grid {
                 grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+
+            .detail-kpis {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
             }
         }
 
@@ -958,9 +1761,17 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
                 grid-template-columns: 1fr;
             }
 
+            .detail-kpis {
+                grid-template-columns: 1fr;
+            }
+
             select,
             input[type="date"] {
                 min-width: 100%;
+            }
+
+            .filter-group {
+                flex: 1 1 100%;
             }
         }
     </style>
@@ -990,7 +1801,7 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
                     <option value="">Todas</option>
                     <?php foreach ($linhasDisponiveis as $linCodigo): ?>
                         <option value="<?= h((string) $linCodigo) ?>" <?= (string) $linCodigo === $selectedLine ? 'selected' : '' ?>>
-                            <?= h((string) $linCodigo) ?>
+                            <?= h(lineLabel((string) $linCodigo)) ?>
                         </option>
                     <?php endforeach; ?>
                 </select>
@@ -998,18 +1809,19 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
             <div class="filter-group">
                 <label for="programacao_id">Programação</label>
                 <select id="programacao_id" name="programacao_id" onchange="this.form.submit()">
-                    <?php foreach ($filteredProgramacoes as $programacao): ?>
-                        <?php
-                            $progId = (int) $programacao['prg_id'];
-                            $progNumero = (string) ($programacao['prg_numero_op'] ?? 'S/OP');
-                            $linha = lineLabel((string) ($programacao['lin_codigo'] ?? ''));
-                            $inicio = !empty($programacao['data_inicio']) ? date('d/m/Y', strtotime((string) $programacao['data_inicio'])) : 'S/data';
-                            $fim = !empty($programacao['data_fim']) ? date('d/m/Y', strtotime((string) $programacao['data_fim'])) : 'S/data';
-                        ?>
-                        <option value="<?= $progId ?>" <?= $progId === $selectedProgramId ? 'selected' : '' ?>>
-                            <?= h(sprintf('OP %s | Linha %s | %s a %s', $progNumero, $linha, $inicio, $fim)) ?>
-                        </option>
-                    <?php endforeach; ?>
+                        <?php foreach ($filteredProgramacoes as $programacao): ?>
+                            <?php
+                                $progId = (int) $programacao['prg_id'];
+                                $progNumero = (string) ($programacao['prg_numero_op'] ?? 'S/OP');
+                                $linha = lineLabel((string) ($programacao['lin_codigo'] ?? ''));
+                                $inicio = formatDateTimeDisplay($programacao['data_inicio'] ?? null);
+                                $programacaoCriadaEm = formatDateTimeDisplay($programacao['programacao_criada_em'] ?? null);
+                                $eficiencia = number_format((float) ($programacao['prg_eficiencia'] ?? 0), 0, ',', '.');
+                            ?>
+                            <option value="<?= $progId ?>" <?= $progId === $selectedProgramId ? 'selected' : '' ?>>
+                                <?= h(sprintf('%s | Início: %s | Data da Programação: %s | Eficiência: %s%%', $linha, $inicio, $programacaoCriadaEm, $eficiencia)) ?>
+                            </option>
+                        <?php endforeach; ?>
                 </select>
             </div>
             <div class="filter-group">
@@ -1036,19 +1848,19 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
         <div class="meta-line">
             <?= h($programLabel) ?>
             <?php if ($programStart && $programEnd): ?>
-                | Período base: <strong><?= h(date('d/m/Y', strtotime((string) $programStart))) ?></strong>
-                até <strong><?= h(date('d/m/Y', strtotime((string) $programEnd))) ?></strong>
+                | Período base: <strong><?= h(formatDateDisplay($programStart)) ?></strong>
+                até <strong><?= h(formatDateDisplay($programEnd)) ?></strong>
             <?php endif; ?>
             <?php if ($selectedLine !== '' || $selectedPeriodStartInput !== '' || $selectedPeriodEndInput !== ''): ?>
                 <br>
                 Filtros ativos:
                 <?php if ($selectedLine !== ''): ?>
-                    linha <strong><?= h($selectedLine) ?></strong>
+                    linha <strong><?= h(lineLabel($selectedLine)) ?></strong>
                 <?php endif; ?>
                 <?php if ($selectedPeriodStartInput !== '' || $selectedPeriodEndInput !== ''): ?>
                     <?php if ($selectedLine !== ''): ?> | <?php endif; ?>
-                    período <strong><?= h($selectedPeriodStartInput !== '' ? date('d/m/Y', strtotime($selectedPeriodStartInput)) : 'início livre') ?></strong>
-                    até <strong><?= h($selectedPeriodEndInput !== '' ? date('d/m/Y', strtotime($selectedPeriodEndInput)) : 'fim livre') ?></strong>
+                    período <strong><?= h($selectedPeriodStartInput !== '' ? formatDateDisplay($selectedPeriodStartInput, 'início livre') : 'início livre') ?></strong>
+                    até <strong><?= h($selectedPeriodEndInput !== '' ? formatDateDisplay($selectedPeriodEndInput, 'fim livre') : 'fim livre') ?></strong>
                 <?php endif; ?>
             <?php endif; ?>
         </div>
@@ -1097,8 +1909,8 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
         </div>
         <div class="summary-card">
             <div class="label">Produção prev. x real.</div>
-            <div class="value"><?= h(formatQty($summary['producao_prevista'])) ?> / <?= h(formatQty($summary['producao_realizada'])) ?></div>
-            <div class="sub">Desvio: <?= h(sprintf('%s%s', $prodDiff >= 0 ? '+' : '-', formatQty(abs($prodDiff)))) ?> | <?= h(number_format($prodPct, 1, ',', '.')) ?>%</div>
+            <div class="value"><?= h(formatQtyRounded($summary['producao_prevista'])) ?> / <?= h(formatQtyRounded($summary['producao_realizada'])) ?></div>
+            <div class="sub">Desvio: <?= h(sprintf('%s%s', $prodDiff >= 0 ? '+' : '-', formatQtyRounded(abs($prodDiff)))) ?> | <?= h(number_format($prodPct, 1, ',', '.')) ?>%</div>
         </div>
     </div>
 
@@ -1134,7 +1946,7 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
         <div class="report-head">
             <div>
                 <h2>Detalhe por OP</h2>
-                <p>Ordenado por maior desvio absoluto de setup. O setup previsto vem de <code>sch_linhas.sch_duracao_minutos</code> e o realizado de <code>setup_duracao_minutos</code> para as paradas alvo.</p>
+                <p>Ordenado pela sequência da programação/histórico. O setup previsto vem de <code>sch_linhas.sch_duracao_minutos</code> e o realizado de <code>setup_duracao_minutos</code> para as paradas alvo.</p>
             </div>
             <div class="tag"><?= h($setupRuleLabel) ?></div>
         </div>
@@ -1186,13 +1998,26 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
                                 <td><?= h(formatMinutes($setupPlan)) ?></td>
                                 <td class="<?= h($setupRealClass) ?>"><?= h(formatMinutes($setupReal)) ?></td>
                                 <td class="<?= $setupClass ?>"><?= h(sprintf('%s%s', $setupRowDiff >= 0 ? '+' : '-', formatMinutes(abs($setupRowDiff)))) ?></td>
-                                <td><?= h(formatQty($prodPlan)) ?></td>
-                                <td><?= h(formatQty($prodReal)) ?></td>
-                                <td class="<?= $prodClass ?>"><?= h(sprintf('%s%s', $prodRowDiff >= 0 ? '+' : '-', formatQty(abs($prodRowDiff)))) ?></td>
+                                <td><?= h(formatQtyRounded($prodPlan)) ?></td>
+                                <td><?= h(formatQtyRounded($prodReal)) ?></td>
+                                <td class="<?= $prodClass ?>"><?= h(sprintf('%s%s', $prodRowDiff >= 0 ? '+' : '-', formatQtyRounded(abs($prodRowDiff)))) ?></td>
                                 <td>
                                     <span class="tag <?= h((string) ($row['tag_class'] ?? $setupStatus['tag_class'])) ?>" title="<?= h((string) ($row['tag_title'] ?? $setupStatus['title'])) ?>">
                                         <?= h((string) ($row['tag_label'] ?? $setupStatus['label'])) ?>
                                     </span>
+                                    <button
+                                        class="detail-btn"
+                                        type="button"
+                                        data-op="<?= h((string) $row['op']) ?>"
+                                        data-period-start="<?= h($reportPeriodStart) ?>"
+                                        data-period-end="<?= h($reportPeriodEnd) ?>"
+                                        data-setup-plan-min="<?= h((string) $setupPlan) ?>"
+                                        data-setup-plan="<?= h(formatMinutes($setupPlan)) ?>"
+                                        data-setup-real="<?= h(formatMinutes($setupReal)) ?>"
+                                        title="Abrir detalhe complementar da OP"
+                                    >
+                                        Ver detalhe
+                                    </button>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
@@ -1217,13 +2042,10 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
         Os filtros de linha e período só refinam a leitura da tela; eles não alteram a regra de cálculo validada.
     </div>
     <div class="note-card">
-        <strong>Assunções desta primeira versão:</strong>
-        o tempo de setup realizado é estimado pelo intervalo <code>inicio_evento</code> x <code>fim_evento</code>
-        dos registros da tabela <code>realizado_2026_excel</code> que têm
-        <code>parada_nomeParada</code> igual a <code>TROCA DE KIT</code> ou <code>TROCA DE LIQUIDO</code>.
-        Para esta etapa, mantive a consolidação atual do import por <code>data_evento + ordem_op</code>.
-        Se houver eventos mistos na mesma OP/dia, esta é uma aproximação inicial e a próxima evolução pode
-        granular o import por evento do CODI.
+        <strong>Visão complementar:</strong>
+        o cálculo principal continua restrito a <code>TROCA DE KIT</code> e <code>TROCA DE LIQUIDO</code>
+        na tabela <code>realizado_2026_excel</code>. Para investigação, o sandbox preserva o evento bruto do CODI
+        em <code>realizado_2026_eventos</code>, incluindo outras paradas nomeadas e seus intervalos originais.
         <br><br>
         <strong>Diagnóstico atual do sandbox:</strong>
         há <?= (int) $realizadoDiagnostics['rows'] ?> registros de realizado ligados às OPs desta programação,
@@ -1233,11 +2055,493 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
             No estado atual, o setup realizado permanece em 0 porque a coluna
             <code>parada_nomeParada</code> ainda não está populada com os nomes alvo no import.
         <?php endif; ?>
-        <?php if ((float) $summary['setup_pendente'] > 0): ?>
-            Há também <?= h(formatMinutes((float) $summary['setup_pendente'])) ?> de setup previsto sem OP de produção seguinte
-            nesta programação; esse valor fica separado para não simular uma associação incorreta.
-        <?php endif; ?>
+    </div>
+
+    <div id="op-detail-modal" class="detail-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="op-detail-title">
+        <div class="detail-modal__backdrop" data-close-detail="1"></div>
+        <div class="detail-modal__panel">
+            <div class="detail-modal__head">
+                <div class="detail-modal__topline">
+                    <div>
+                        <h2 id="op-detail-title" class="detail-modal__title">Detalhe complementar da OP</h2>
+                        <p id="op-detail-subtitle" class="detail-modal__subtitle">
+                            Cálculo principal preservado: somente <strong><?= h($setupRuleLabel) ?></strong>.
+                        </p>
+                    </div>
+                    <button class="detail-modal__close" type="button" data-close-detail="1" aria-label="Fechar detalhe">×</button>
+                </div>
+            </div>
+            <div class="detail-modal__content">
+                <div id="op-detail-kpis" class="detail-kpis">
+                    <div class="detail-kpi">
+                        <div class="label">Carregando</div>
+                        <div class="value">...</div>
+                    </div>
+                </div>
+
+                <div class="detail-section">
+                    <div class="detail-section__head">
+                        <div>
+                            <h3>Setup principal</h3>
+                            <p>Somente registros com <code>TROCA DE KIT</code> ou <code>TROCA DE LIQUIDO</code>.</p>
+                        </div>
+                        <span class="tag badge-main">Regra principal</span>
+                    </div>
+                    <div class="detail-section__body">
+                        <table class="detail-table">
+                            <thead>
+                                <tr>
+                                    <th>Data</th>
+                                    <th>Início</th>
+                                    <th>Fim</th>
+                                    <th>Parada</th>
+                                    <th>Referência</th>
+                                    <th>Duração</th>
+                                </tr>
+                            </thead>
+                            <tbody id="detail-principal-body">
+                                <tr>
+                                    <td colspan="6" class="empty-state">Selecione uma OP para ver o detalhe.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="detail-section">
+                    <div class="detail-section__head">
+                        <div>
+                            <h3>Paradas complementares</h3>
+                            <p>Eventos do mesmo contexto que ajudam a explicar o desvio, sem entrar no cálculo principal.</p>
+                        </div>
+                        <span class="tag badge-secondary">Contexto complementar</span>
+                    </div>
+                    <div class="detail-section__body">
+                        <table class="detail-table">
+                            <thead>
+                                <tr>
+                                    <th>Data</th>
+                                    <th>Início</th>
+                                    <th>Fim</th>
+                                    <th>Parada</th>
+                                    <th>Duração</th>
+                                </tr>
+                            </thead>
+                            <tbody id="detail-apoio-body">
+                                <tr>
+                                    <td colspan="5" class="empty-state">Selecione uma OP para ver o detalhe.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="detail-section detail-section--summary">
+                    <div class="detail-section__head">
+                        <div>
+                            <h3>Resumo por parada</h3>
+                            <p>Agrupado por <code>parada_nomeParada</code> e ordenado pelo maior impacto em minutos.</p>
+                        </div>
+                        <div class="detail-toggle">
+                            <label class="detail-toggle__control" for="detail-main-only-toggle">
+                                <input type="checkbox" id="detail-main-only-toggle" checked>
+                                <span>Mostrar somente a regra principal</span>
+                            </label>
+                            <div class="detail-toggle__hint">
+                                Desmarque para exibir as paradas complementares disponíveis para a OP/período.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="detail-section__body">
+                        <table class="detail-table">
+                            <thead>
+                                <tr>
+                                    <th>Parada</th>
+                                    <th>Duração total</th>
+                                </tr>
+                            </thead>
+                            <tbody id="detail-grouped-body">
+                                <tr>
+                                    <td colspan="2" class="empty-state">Selecione uma OP para ver o resumo.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="op-detail-note" class="detail-note">
+                    O detalhe complementar será carregado ao abrir uma OP.
+                </div>
+            </div>
+        </div>
     </div>
 </div>
+<script>
+(function () {
+    const modal = document.getElementById('op-detail-modal');
+    if (!modal) {
+        return;
+    }
+
+    const titleEl = document.getElementById('op-detail-title');
+    const subtitleEl = document.getElementById('op-detail-subtitle');
+    const kpisEl = document.getElementById('op-detail-kpis');
+    const groupedBody = document.getElementById('detail-grouped-body');
+    const principalBody = document.getElementById('detail-principal-body');
+    const apoioBody = document.getElementById('detail-apoio-body');
+    const noteEl = document.getElementById('op-detail-note');
+    const mainOnlyToggle = document.getElementById('detail-main-only-toggle');
+    const closeTargets = modal.querySelectorAll('[data-close-detail]');
+    const detailButtons = document.querySelectorAll('.detail-btn[data-op]');
+    const detailState = {
+        mainOnly: true,
+        data: null
+    };
+
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function formatMinutesLabel(minutes) {
+        const rounded = Math.round(Number(minutes) || 0);
+        const sign = rounded < 0 ? '-' : '';
+        const abs = Math.abs(rounded);
+        const hours = Math.floor(abs / 60);
+        const mins = abs % 60;
+        if (hours > 0) {
+            return `${sign}${hours}h ${String(mins).padStart(2, '0')}m`;
+        }
+        return `${sign}${mins}m`;
+    }
+
+    function parseDateParts(value) {
+        const text = String(value ?? '').trim().replace('T', ' ');
+        if (!text) {
+            return null;
+        }
+
+        const match = text.match(/^(\d{4})-(\d{2})-(\d{2})(?:\s+(\d{2}):(\d{2})(?::\d{2})?)?$/);
+        if (!match) {
+            return null;
+        }
+
+        return {
+            year: match[1],
+            month: match[2],
+            day: match[3],
+            hour: match[4] || '',
+            minute: match[5] || ''
+        };
+    }
+
+    function formatDateDisplay(value) {
+        const parts = parseDateParts(value);
+        if (!parts) {
+            return String(value ?? '--') || '--';
+        }
+
+        return `${parts.day}/${parts.month}/${parts.year}`;
+    }
+
+    function formatTimeDisplay(value) {
+        const parts = parseDateParts(value);
+        if (!parts || !parts.hour || !parts.minute) {
+            return '--';
+        }
+
+        return `${parts.hour}:${parts.minute}`;
+    }
+
+    function formatDateTimeDisplay(value) {
+        const parts = parseDateParts(value);
+        if (!parts) {
+            return String(value ?? '--') || '--';
+        }
+
+        if (!parts.hour || !parts.minute) {
+            return `${parts.day}/${parts.month}/${parts.year}`;
+        }
+
+        return `${parts.day}/${parts.month}/${parts.year} ${parts.hour}:${parts.minute}`;
+    }
+
+    function rowHtml(row, badgeClass, showReference = true) {
+        const dataEvento = formatDateTimeDisplay(row.data_evento || '--');
+        const inicio = formatDateTimeDisplay(row.inicio_evento || '--');
+        const fim = formatDateTimeDisplay(row.fim_evento || '--');
+        const duration = formatMinutesLabel(row.duracao_evento_minutos ?? row.setup_duracao_minutos ?? 0);
+        const durationClass = row.tipo_bloco === 'setup_principal' ? 'detail-duration-highlight' : '';
+        const rowClass = row.tipo_bloco === 'setup_principal' ? 'row-realized' : 'row-neutral';
+
+        return `
+            <tr class="${rowClass}">
+                <td>${escapeHtml(dataEvento)}</td>
+                <td>${escapeHtml(inicio)}</td>
+                <td>${escapeHtml(fim)}</td>
+                <td>
+                    <span class="tag ${badgeClass}">${escapeHtml(row.parada_nomeParada || 'Sem classificação')}</span>
+                </td>
+                ${showReference ? `
+                <td>
+                    <span class="tag ${row.tipo_bloco === 'setup_principal' ? 'badge-main' : 'badge-secondary'}">${escapeHtml(row.setup_referencia || (row.tipo_bloco === 'setup_principal' ? '00:00' : 'Contexto complementar'))}</span>
+                </td>` : ''}
+                <td class="${durationClass}">${escapeHtml(duration)}</td>
+            </tr>
+        `;
+    }
+
+    function matchesMainOnly(row, mainOnly) {
+        if (!mainOnly) {
+            return true;
+        }
+
+        return row.tipo_bloco === 'setup_principal' || row.is_principal;
+    }
+
+    function formatShareLabel(minutes, totalMinutes) {
+        if (totalMinutes <= 0) {
+            return '0,0';
+        }
+
+        return ((minutes / totalMinutes) * 100).toFixed(1).replace('.', ',');
+    }
+
+    function renderRows(target, rows, emptyText, badgeClass, mainOnly, showReference = true) {
+        const filteredRows = rows.filter((row) => matchesMainOnly(row, mainOnly));
+
+        if (!filteredRows.length) {
+            target.innerHTML = `<tr><td colspan="${showReference ? 6 : 5}" class="empty-state">${escapeHtml(emptyText)}</td></tr>`;
+            return;
+        }
+
+        target.innerHTML = filteredRows.map((row) => rowHtml(row, badgeClass, showReference)).join('');
+    }
+
+    function renderGroupedRows(target, rows, emptyText, totalMinutes, mainOnly) {
+        const filteredRows = rows.filter((row) => matchesMainOnly(row, mainOnly));
+
+        if (!filteredRows.length) {
+            target.innerHTML = `<tr><td colspan="2" class="empty-state">${escapeHtml(emptyText)}</td></tr>`;
+            return;
+        }
+
+        const visibleTotalMinutes = filteredRows.reduce((sum, row) => sum + Number(row.duracao_total_minutos || 0), 0);
+
+        const summaryRows = filteredRows.map((row, index) => {
+            const minutes = Number(row.duracao_total_minutos || 0);
+            const rowClass = [
+                index === 0 ? 'group-row--top' : '',
+                row.is_principal ? 'group-row--main' : '',
+                row.is_null ? 'group-row--null' : ''
+            ].filter(Boolean).join(' ');
+            const badgeClass = row.is_principal ? 'badge-main' : 'badge-secondary';
+            const label = row.parada_nomeParada || 'Sem classificação';
+            const duration = formatMinutesLabel(minutes);
+
+            return `
+                <tr class="${rowClass}">
+                    <td>
+                        <span class="tag ${badgeClass}">${escapeHtml(label)}</span>
+                    </td>
+            <td>${escapeHtml(duration)}</td>
+        </tr>
+            `;
+        }).join('');
+
+        target.innerHTML = summaryRows;
+    }
+
+    function getGroupedLabel(rows) {
+        return rows
+            .slice(0, 4)
+            .map((row) => `${row.parada_nomeParada || 'Sem classificação'} (${Number(row.eventos_count || 0)})`)
+            .join(', ');
+    }
+
+    function setMainOnly(checked) {
+        detailState.mainOnly = Boolean(checked);
+        if (mainOnlyToggle) {
+            mainOnlyToggle.checked = detailState.mainOnly;
+        }
+        if (detailState.data) {
+            renderDetailViews(detailState.data);
+        }
+    }
+
+    function renderDetailViews(data) {
+        const summary = data.summary || {};
+        const groupedRows = data.paradas_agrupadas || [];
+        const mainOnly = detailState.mainOnly;
+        const filteredGroupedRows = groupedRows.filter((row) => matchesMainOnly(row, mainOnly));
+        const principalRows = data.principal || [];
+        const apoioRows = data.apoio || [];
+        const namedCounts = data.support_named_paradas || {};
+        const visibleTotalMinutes = filteredGroupedRows.reduce((sum, row) => sum + Number(row.duracao_total_minutos || 0), 0);
+        const periodLabel = `${formatDateDisplay(data.period_start)} a ${formatDateDisplay(data.period_end)}`;
+
+        titleEl.textContent = `OP ${data.op} - detalhe complementar`;
+        subtitleEl.innerHTML = `Cálculo principal preservado: somente <strong><?= h($setupRuleLabel) ?></strong>. Período: <strong>${escapeHtml(periodLabel)}</strong>.`;
+        kpisEl.innerHTML = `
+            <div class="detail-kpi">
+                <div class="label">Registros</div>
+                <div class="value">${escapeHtml(summary.rows_total || 0)}</div>
+            </div>
+            <div class="detail-kpi">
+                <div class="label">Setup principal</div>
+                <div class="value">${escapeHtml(summary.principal_rows || 0)} linhas</div>
+            </div>
+            <div class="detail-kpi">
+                <div class="label">Paradas complementares</div>
+                <div class="value">${escapeHtml(summary.apoio_rows || 0)} linhas</div>
+            </div>
+            <div class="detail-kpi">
+                <div class="label">Minutos principais</div>
+                <div class="value">${escapeHtml(formatMinutesLabel(summary.principal_minutes || 0))}</div>
+            </div>
+        `;
+
+        renderRows(principalBody, principalRows, 'Nenhum setup principal encontrado neste período.', 'badge-main', mainOnly);
+        renderRows(
+            apoioBody,
+            mainOnly ? [] : apoioRows,
+            mainOnly
+                ? 'Controle ativo: desmarque para exibir as paradas complementares.'
+                : 'Nenhuma parada complementar encontrada neste período.',
+            'badge-secondary',
+            mainOnly,
+            false
+        );
+        renderGroupedRows(
+            groupedBody,
+            groupedRows,
+            mainOnly
+                ? 'Somente a regra principal está visível neste momento.'
+                : 'Nenhuma parada encontrada para este período.',
+            visibleTotalMinutes,
+            mainOnly
+        );
+
+        const groupedLabel = getGroupedLabel(filteredGroupedRows);
+
+        if ((summary.raw_rows_total || 0) === 0 && data.detail_source === 'realizado_2026_eventos') {
+            noteEl.textContent = 'Este período/OP ainda não tem eventos brutos no sandbox. Sem bruto não há como exibir paradas complementares reais para este caso.';
+        } else if (mainOnly) {
+            noteEl.textContent = filteredGroupedRows.length > 0
+                ? `Controle ativo: mostrando somente a regra principal. Destaques: ${groupedLabel}. Desmarque para liberar as paradas complementares disponíveis no banco.`
+                : 'Controle ativo: somente a regra principal está visível neste momento.';
+        } else if (filteredGroupedRows.length > 0) {
+            noteEl.textContent = `Controle desmarcado: exibindo regra principal e paradas complementares. Destaques: ${groupedLabel}.`;
+        } else if (Object.keys(namedCounts).length > 0) {
+            noteEl.textContent = 'O detalhe bruto foi carregado, mas não há paradas complementares nomeadas para este caso.';
+        } else if (data.detail_source === 'realizado_2026_eventos') {
+            noteEl.textContent = 'O detalhe bruto foi carregado, mas este período/OP não trouxe paradas complementares nomeadas além do setup principal.';
+        } else {
+            noteEl.textContent = 'A visão complementar caiu no agregado principal porque a tabela de detalhe bruto ainda não está disponível neste sandbox.';
+        }
+    }
+
+    function openModal() {
+        modal.classList.add('is-open');
+        modal.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeModal() {
+        modal.classList.remove('is-open');
+        modal.setAttribute('aria-hidden', 'true');
+        document.body.style.overflow = '';
+    }
+
+    async function loadDetail(button) {
+        const op = button.getAttribute('data-op') || '';
+        const periodStart = button.getAttribute('data-period-start') || '';
+        const periodEnd = button.getAttribute('data-period-end') || '';
+        const setupPlanMin = button.getAttribute('data-setup-plan-min') || '';
+        const setupPlan = button.getAttribute('data-setup-plan') || '';
+        const setupReal = button.getAttribute('data-setup-real') || '';
+
+        titleEl.textContent = `OP ${op} - detalhe complementar`;
+        subtitleEl.innerHTML = `Cálculo principal preservado: somente <strong><?= h($setupRuleLabel) ?></strong>. Período: <strong>${escapeHtml(formatDateDisplay(periodStart))} a ${escapeHtml(formatDateDisplay(periodEnd))}</strong>.`;
+        detailState.data = null;
+        if (mainOnlyToggle) {
+            mainOnlyToggle.checked = true;
+        }
+        detailState.mainOnly = true;
+        kpisEl.innerHTML = `
+            <div class="detail-kpi">
+                <div class="label">OP</div>
+                <div class="value">${escapeHtml(op)}</div>
+            </div>
+            <div class="detail-kpi">
+                <div class="label">Setup previsto</div>
+                <div class="value">${escapeHtml(setupPlan)}</div>
+            </div>
+            <div class="detail-kpi">
+                <div class="label">Setup realizado</div>
+                <div class="value">${escapeHtml(setupReal)}</div>
+            </div>
+            <div class="detail-kpi">
+                <div class="label">Período</div>
+                <div class="value">${escapeHtml(formatDateDisplay(periodStart))} a ${escapeHtml(formatDateDisplay(periodEnd))}</div>
+            </div>
+        `;
+        principalBody.innerHTML = '<tr><td colspan="6" class="empty-state">Carregando detalhe da OP...</td></tr>';
+        apoioBody.innerHTML = '<tr><td colspan="5" class="empty-state">Carregando detalhe da OP...</td></tr>';
+        groupedBody.innerHTML = '<tr><td colspan="2" class="empty-state">Carregando resumo por parada...</td></tr>';
+        noteEl.textContent = 'Carregando dados do sandbox...';
+        setMainOnly(true);
+
+        const url = new URL(window.location.href);
+        url.searchParams.set('action', 'op_detail');
+        url.searchParams.set('op', op);
+        url.searchParams.set('period_start', periodStart);
+        url.searchParams.set('period_end', periodEnd);
+        url.searchParams.set('setup_plan_min', setupPlanMin);
+
+        try {
+            const response = await fetch(url.toString(), { headers: { 'Accept': 'application/json' } });
+            const data = await response.json();
+
+            if (!response.ok || !data.success) {
+                throw new Error(data.message || 'Não foi possível carregar o detalhe.');
+            }
+
+            detailState.data = data;
+            renderDetailViews(data);
+            openModal();
+        } catch (error) {
+            principalBody.innerHTML = `<tr><td colspan="6" class="empty-state">${escapeHtml(error.message || 'Erro ao carregar')}</td></tr>`;
+            apoioBody.innerHTML = '<tr><td colspan="5" class="empty-state">Nenhum dado disponível.</td></tr>';
+            noteEl.textContent = 'Falha ao carregar o detalhe complementar.';
+            openModal();
+        }
+    }
+
+    detailButtons.forEach((button) => {
+        button.addEventListener('click', () => loadDetail(button));
+    });
+
+    if (mainOnlyToggle) {
+        mainOnlyToggle.addEventListener('change', () => {
+            setMainOnly(mainOnlyToggle.checked);
+        });
+    }
+
+    closeTargets.forEach((el) => {
+        el.addEventListener('click', closeModal);
+    });
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && modal.classList.contains('is-open')) {
+            closeModal();
+        }
+    });
+})();
+</script>
 </body>
 </html>

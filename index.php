@@ -229,7 +229,7 @@ if ($rawFeatureFlags !== '') {
                                 <tr>
                                     <th>Ordem</th>
                                     <th>Dias</th>
-                                    <th>Inicio</th>
+                                    <th>Início</th>
                                     <th>Fim</th>
                                     <th></th>
                                 </tr>
@@ -274,10 +274,10 @@ if ($rawFeatureFlags !== '') {
                             <thead>
                                 <tr>
                                     <th>SKU</th>
-                                    <th>Descricao</th>
+                                    <th>Descrição</th>
                                     <th>Ref. setup</th>
                                     <th>Linha</th>
-                                    <th>Producao/h</th>
+                                    <th>Produção/h</th>
                                     <th>Unidade</th>
                                     <th></th>
                                 </tr>
@@ -384,7 +384,7 @@ if ($rawFeatureFlags !== '') {
                                         <th>OP</th>
                                         <th>SKU</th>
                                         <th>Quantidade (cx)</th>
-                                        <th>Inicio informado (1&ordm; item)</th>
+                                        <th>Início informado (1&ordm; item)</th>
                                         <th></th>
                                     </tr>
                                 </thead>
@@ -416,12 +416,12 @@ if ($rawFeatureFlags !== '') {
                                         <th>Tipo</th>
                                         <th>Seq.</th>
                                         <th>Produto</th>
-                                        <th>Producao/h</th>
+                                        <th>Produção/h</th>
                                         <th>Programado</th>
                                         <th>Tempo</th>
-                                        <th>Data inicio</th>
-                                        <th>Inicio</th>
-                                        <th class="is-hidden-column">Memoria do calculo</th>
+                                        <th>Data início</th>
+                                        <th>Início</th>
+                                        <th class="is-hidden-column">Memória do cálculo</th>
                                         <th>Fim</th>
                                     </tr>
                                 </thead>

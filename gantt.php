@@ -124,55 +124,68 @@ usort($programacoes, static function (array $a, array $b) use ($ganttExtractLine
     return ((int) ($a['prg_id'] ?? 0)) <=> ((int) ($b['prg_id'] ?? 0));
 });
 
-// Se um ID espec?fico foi selecionado
-$selectedId = isset($_GET['id']) ? (int)$_GET['id'] : null;
+// Se uma programacao especifica foi selecionada
+$selectedProgramId = (int) ($_GET['programacao_id'] ?? $_GET['id'] ?? 0);
 $periodStartInput = isset($_GET['data_inicio']) ? trim((string)$_GET['data_inicio']) : '';
 $periodEndInput = isset($_GET['data_fim']) ? trim((string)$_GET['data_fim']) : '';
 $hasValidPeriodFilter = preg_match('/^\d{4}-\d{2}-\d{2}$/', $periodStartInput) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $periodEndInput);
-$isPeriodFilterMode = false;
 $schedule = [];
 $programacaoInfo = null;
-$periodProgramCount = 0;
+
+if ($selectedProgramId <= 0 && !empty($programacoes)) {
+    $selectedProgramId = (int) $programacoes[0]['prg_id'];
+}
+
+if ($selectedProgramId > 0) {
+    $programacaoInfo = $repo->getProgramacaoById($selectedProgramId);
+    if ($programacaoInfo === null && !empty($programacoes)) {
+        $selectedProgramId = (int) $programacoes[0]['prg_id'];
+        $programacaoInfo = $programacoes[0];
+    }
+}
+
+if ($selectedProgramId > 0) {
+    $stmtSchedule = $pdo->prepare("
+        SELECT s.*
+        FROM sch_linhas s
+        WHERE s.sch_programa_id = :programId
+        ORDER BY s.sch_data_inicio ASC, s.sch_sequencia ASC, s.sch_id ASC
+    ");
+    $stmtSchedule->execute(['programId' => $selectedProgramId]);
+    $schedule = $stmtSchedule->fetchAll(PDO::FETCH_ASSOC);
+}
 
 if ($hasValidPeriodFilter && strtotime($periodStartInput) !== false && strtotime($periodEndInput) !== false) {
     if (strtotime($periodStartInput) > strtotime($periodEndInput)) {
         [$periodStartInput, $periodEndInput] = [$periodEndInput, $periodStartInput];
     }
+}
 
-    $isPeriodFilterMode = true;
-    $periodStartSql = $periodStartInput . ' 00:00:00';
-    $periodEndSql = $periodEndInput . ' 23:59:59';
-    $stmtPeriod = $pdo->prepare("
-        SELECT s.*
-        FROM sch_linhas s
-        INNER JOIN (
-            SELECT sch_programa_id, MAX(sch_criado_em) AS max_criado_em
-            FROM sch_linhas
-            GROUP BY sch_programa_id
-        ) latest
-            ON latest.sch_programa_id = s.sch_programa_id
-           AND latest.max_criado_em = s.sch_criado_em
-        WHERE s.sch_inicio_producao <= :periodEnd
-          AND s.sch_fim_producao >= :periodStart
-        ORDER BY s.sch_inicio_producao ASC, s.sch_programa_id ASC, s.sch_sequencia ASC
-    ");
-    $stmtPeriod->execute([
-        'periodStart' => $periodStartSql,
-        'periodEnd' => $periodEndSql,
-    ]);
-    $schedule = $stmtPeriod->fetchAll(PDO::FETCH_ASSOC);
-    if (!empty($schedule)) {
-        $periodProgramCount = count(array_unique(array_map(static fn(array $row): int => (int)($row['sch_programa_id'] ?? 0), $schedule)));
+$screenPeriodStart = '';
+$screenPeriodEnd = '';
+if ($hasValidPeriodFilter) {
+    $screenPeriodStart = $periodStartInput;
+    $screenPeriodEnd = $periodEndInput;
+} else {
+    $screenStartCandidates = [];
+    $screenEndCandidates = [];
+    foreach ($schedule as $schRow) {
+        $screenStartCandidate = trim((string) ($schRow['sch_inicio_producao'] ?? ''));
+        $screenEndCandidate = trim((string) ($schRow['sch_fim_producao'] ?? ''));
+        if ($screenStartCandidate !== '') {
+            $screenStartCandidates[] = date('Y-m-d', strtotime($screenStartCandidate));
+        }
+        if ($screenEndCandidate !== '') {
+            $screenEndCandidates[] = date('Y-m-d', strtotime($screenEndCandidate));
+        }
     }
-} elseif ($selectedId) {
-    $programacaoInfo = $repo->getProgramacaoById($selectedId);
-    if ($programacaoInfo) {
-        $schedule = $repo->getProgramacaoSchedule($selectedId);
-    }
-} elseif (!empty($programacoes)) {
-    $selectedId = (int)$programacoes[0]['prg_id'];
-    $programacaoInfo = $programacoes[0];
-    $schedule = $repo->getProgramacaoSchedule($selectedId);
+
+    $screenPeriodStart = !empty($screenStartCandidates) ? min($screenStartCandidates) : date('Y-m-d');
+    $screenPeriodEnd = !empty($screenEndCandidates) ? max($screenEndCandidates) : date('Y-m-d');
+}
+
+if ($screenPeriodStart > $screenPeriodEnd) {
+    [$screenPeriodStart, $screenPeriodEnd] = [$screenPeriodEnd, $screenPeriodStart];
 }
 
 // Carregar buckets programa+SKU => itens/OPs em uma unica query
@@ -251,8 +264,7 @@ if (!empty($schedule)) {
 $tasks = [];
 
 // ===== BUSCAR DADOS REALIZADO (por OP + periodo de cada item) =====
-// Estrategia: buscar o realizado por OP dentro do periodo de cada item do schedule,
-// com margem de +7 dias no fim para capturar apontamentos tardios.
+// Estrategia: buscar o realizado por OP dentro da janela da tela, sem estender o fim.
 // Chave do mapa: op . '|' . sch_inicio_producao (distingue lotes da mesma OP)
 $realizadoMap = [];
 if (!empty($schedule)) {
@@ -282,17 +294,26 @@ if (!empty($schedule)) {
     $colInicio = $pickFirstExisting($realCols, ['inicio_evento', 'inicio', 'data_inicio', 'inicio_apontamento', 'dt_inicio', 'inicio_real']);
     $colFim = $pickFirstExisting($realCols, ['fim_evento', 'fim', 'data_fim', 'fim_apontamento', 'dt_fim', 'fim_real']);
 
-    // Coletar todos os periodos e OPs nao-setup de uma vez
+    // Coletar todos os periodos e OPs nao-setup de uma vez, respeitando a janela da tela
     $opsPeriodos = [];
     foreach ($schedule as $schRow) {
         if (strtolower(trim($schRow['sch_tipo'] ?? '')) === 'setup') continue;
         if (empty($schRow['sch_sku']) || empty($schRow['sch_inicio_producao'])) continue;
         $opItem = $assignedOps[(int)($schRow['sch_id'] ?? 0)] ?? 'S/OP';
         if ($opItem === 'S/OP') continue;
+
+        $itemStart = date('Y-m-d', strtotime((string) $schRow['sch_inicio_producao']));
+        $itemEnd = date('Y-m-d', strtotime((string) $schRow['sch_fim_producao']));
+        $queryStart = max($screenPeriodStart, $itemStart);
+        $queryEnd = $screenPeriodEnd;
+        if ($queryStart > $queryEnd) {
+            continue;
+        }
+
         $opsPeriodos[] = [
             'op'     => $opItem,
-            'inicio' => date('Y-m-d', strtotime($schRow['sch_inicio_producao'])),
-            'fim'    => date('Y-m-d', strtotime($schRow['sch_fim_producao'] . ' +7 days')),
+            'inicio' => $queryStart,
+            'fim'    => $queryEnd,
             'chave'  => $opItem . '|' . $schRow['sch_inicio_producao'],
         ];
     }
@@ -1001,9 +1022,9 @@ if (!empty($schedule)) {
     <div class="controls">
         <form method="GET" id="filterForm" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
             <strong>Programa&ccedil;&atilde;o:</strong>
-            <select name="id" onchange="this.form.submit()">
+            <select name="programacao_id" onchange="this.form.submit()">
                 <?php foreach ($programacoes as $prg): ?>
-                    <option value="<?= $prg['prg_id'] ?>" <?= $selectedId === (int)$prg['prg_id'] ? 'selected' : '' ?>>
+                    <option value="<?= $prg['prg_id'] ?>" <?= $selectedProgramId === (int)$prg['prg_id'] ? 'selected' : '' ?>>
                         <?php 
                             $linha = htmlspecialchars($ganttNormalizeLineLabel((string) ($prg['linha_excel_dominante'] ?: $prg['lin_codigo'] ?: 'S/Linha')), ENT_QUOTES, 'UTF-8');
                             $inicio = $prg['inicio_base_cronograma'] ? date('d/m/Y H:i', strtotime($prg['inicio_base_cronograma'])) : 'S/data';
@@ -1264,8 +1285,8 @@ if (!empty($schedule)) {
                 "<div class='pcp-tooltip-label'>SKU:</div><div>" + sku + "</div>" +
                 "<div class='pcp-tooltip-label'>Previsto:</div><div>" + prev.toFixed(0) + "</div>" +
                 "<div class='pcp-tooltip-label'>Realizado:</div><div>" + real.toFixed(0) + " (" + pct.toFixed(0) + "%)</div>" +
-                "<div class='pcp-tooltip-label'>In\u00edcio:</div><div>" + dateToStr(start) + "</div>" +
-                "<div class='pcp-tooltip-label'>Fim:</div><div>" + dateToStr(end) + "</div>" +
+                "<div class='pcp-tooltip-label'>Envelope de produ\u00e7\u00e3o:</div><div>" + dateToStr(start) + " - " + dateToStr(end) + "</div>" +
+                "<div class='pcp-tooltip-label'>Nota:</div><div>Tempo produtivo abaixo considera pausas/calend\u00e1rio.</div>" +
                 (isSetupTooltip ? "<div class='pcp-tooltip-label'>Dura\u00e7\u00e3o:</div><div>" + durationLabel + "</div>" : "") +
             "</div>" +
             "<div class='pcp-tooltip-memory'>" +

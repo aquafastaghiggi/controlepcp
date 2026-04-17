@@ -121,6 +121,104 @@ function parseDateValue(?string $value): ?DateTimeImmutable
     }
 }
 
+function consolidateIntervals(array $intervals): array
+{
+    if ($intervals === []) {
+        return [];
+    }
+
+    usort($intervals, static function (array $a, array $b): int {
+        $aStart = $a['start'] instanceof DateTimeImmutable ? $a['start']->getTimestamp() : 0;
+        $bStart = $b['start'] instanceof DateTimeImmutable ? $b['start']->getTimestamp() : 0;
+        if ($aStart !== $bStart) {
+            return $aStart <=> $bStart;
+        }
+
+        $aEnd = $a['end'] instanceof DateTimeImmutable ? $a['end']->getTimestamp() : 0;
+        $bEnd = $b['end'] instanceof DateTimeImmutable ? $b['end']->getTimestamp() : 0;
+        return $aEnd <=> $bEnd;
+    });
+
+    $merged = [];
+    $current = $intervals[0];
+
+    foreach (array_slice($intervals, 1) as $interval) {
+        $currEnd = $current['end'];
+        $nextStart = $interval['start'];
+        $nextEnd = $interval['end'];
+
+        if (!$currEnd instanceof DateTimeImmutable || !$nextStart instanceof DateTimeImmutable || !$nextEnd instanceof DateTimeImmutable) {
+            continue;
+        }
+
+        // Unir quando encosta ou sobrepoe.
+        if ($nextStart <= $currEnd) {
+            if ($nextEnd > $currEnd) {
+                $current['end'] = $nextEnd;
+            }
+            continue;
+        }
+
+        $merged[] = $current;
+        $current = $interval;
+    }
+
+    $merged[] = $current;
+
+    return $merged;
+}
+
+function workingMinutesByShift(WorkCalendar $calendar, DateTimeImmutable $start, DateTimeImmutable $end): array
+{
+    $adm = 0;
+    $noite = 0;
+
+    $startTs = $start->getTimestamp();
+    $endTs = $end->getTimestamp();
+    $day = $start->setTime(0, 0)->modify('-1 day');
+    $endDay = $end->setTime(0, 0);
+    $endDayTs = $endDay->getTimestamp();
+
+    while ($day->getTimestamp() <= $endDayTs) {
+        $windows = [
+            ['bucket' => 'adm', 'start' => $day->setTime(7, 5, 0), 'end' => $day->setTime(11, 30, 0)],
+            ['bucket' => 'adm', 'start' => $day->setTime(13, 27, 0), 'end' => $day->setTime(17, 45, 0)],
+            ['bucket' => 'noite', 'start' => $day->setTime(17, 45, 0), 'end' => $day->setTime(22, 0, 0)],
+            ['bucket' => 'noite', 'start' => $day->setTime(23, 0, 0), 'end' => $day->modify('+1 day')->setTime(3, 0, 0)],
+        ];
+
+        foreach ($windows as $window) {
+            $winStart = $window['start'];
+            $winEnd = $window['end'];
+            if (!$winStart instanceof DateTimeImmutable || !$winEnd instanceof DateTimeImmutable) {
+                continue;
+            }
+
+            $segStart = ($startTs > $winStart->getTimestamp()) ? $start : $winStart;
+            $segEnd = ($endTs < $winEnd->getTimestamp()) ? $end : $winEnd;
+
+            if ($segEnd <= $segStart) {
+                continue;
+            }
+
+            $minutes = (int) $calendar->workingMinutesBetween($segStart, $segEnd);
+            if (($window['bucket'] ?? '') === 'adm') {
+                $adm += $minutes;
+            } else {
+                $noite += $minutes;
+            }
+        }
+
+        $day = $day->modify('+1 day');
+    }
+
+    // Garantir que nao retorne negativos em casos de intervalo vazio.
+    return [
+        'adm' => max(0, $adm),
+        'noite' => max(0, $noite),
+    ];
+}
+
 function formatDateDisplay(?string $value, string $empty = 'S/data'): string
 {
     $dt = parseDateValue($value);
@@ -153,6 +251,20 @@ function formatDateTimeDisplay(?string $value, string $empty = 'S/data'): string
     }
 
     return $dt->format('d/m/Y H:i');
+}
+
+function formatDateTimeShortDisplay(?string $value, string $empty = '--'): string
+{
+    $dt = parseDateValue($value);
+    if (!$dt instanceof DateTimeImmutable) {
+        return $empty;
+    }
+
+    if ($dt->format('H:i:s') === '00:00:00' && !preg_match('/\d{2}:\d{2}/', (string) $value)) {
+        return $dt->format('d/m');
+    }
+
+    return $dt->format('d/m H:i');
 }
 
 function lineFilterKey(?string $lineCode): string
@@ -278,6 +390,112 @@ function getRowSetupStatus(array $row): array
         'status_key' => 'sem_setup',
         'critical' => false,
     ];
+}
+
+function deviationIntensityLevel(float $absValue, float $t1, float $t2, float $t3): int
+{
+    if ($absValue >= $t3) {
+        return 3;
+    }
+    if ($absValue >= $t2) {
+        return 2;
+    }
+    if ($absValue >= $t1) {
+        return 1;
+    }
+    return 0;
+}
+
+function deviationIcon(float $value, float $epsilon = 0.0001): string
+{
+    if ($value > $epsilon) {
+        return '↑';
+    }
+    if ($value < -$epsilon) {
+        return '↓';
+    }
+    return '';
+}
+
+function heatClassFromDiff(float $diff, int $level, bool $goodWhenPositive): string
+{
+    if ($level <= 0) {
+        return '';
+    }
+
+    $isPositive = $diff > 0.0001;
+    $isNegative = $diff < -0.0001;
+    if (!$isPositive && !$isNegative) {
+        return '';
+    }
+
+    $isGood = ($isPositive && $goodWhenPositive) || ($isNegative && !$goodWhenPositive);
+    return sprintf('heat-%s-%d', $isGood ? 'good' : 'bad', $level);
+}
+
+function classifyAnalyticBadge(
+    float $prodPlan,
+    float $prodDiff,
+    float $tempoPrevMin,
+    float $tempoRealMin,
+    float $setupPlanMin,
+    int $setupEvents,
+    bool $setupCritical
+): array {
+    $prodRatio = ($prodPlan > 0.0001) ? ($prodDiff / $prodPlan) : 0.0;
+    $tempoDiff = $tempoRealMin - $tempoPrevMin;
+    $tempoRatio = ($tempoPrevMin > 0.0001) ? ($tempoDiff / $tempoPrevMin) : 0.0;
+
+    $isCritical = $setupCritical
+        || ($prodPlan > 0.0001 && $prodRatio <= -0.10)
+        || ($tempoPrevMin > 0.0001 && $tempoDiff >= 60.0 && $tempoRatio >= 0.25);
+
+    if ($isCritical) {
+        return ['label' => 'Crítico', 'class' => 'tag-danger'];
+    }
+
+    $isWarning = ($setupPlanMin > 0.01 && $setupEvents <= 0)
+        || ($prodPlan > 0.0001 && $prodRatio <= -0.03)
+        || ($tempoPrevMin > 0.0001 && $tempoDiff >= 20.0 && $tempoRatio >= 0.10);
+
+    if ($isWarning) {
+        return ['label' => 'Atenção', 'class' => 'tag-warning'];
+    }
+
+    return ['label' => 'OK', 'class' => 'tag-ok'];
+}
+
+function calcBarPct(float $value, float $denominator, float $capRatio = 1.0): array
+{
+    if ($denominator <= 0.0001 || $value <= 0.0001) {
+        return ['pct' => 0, 'exceed' => false];
+    }
+
+    $ratio = $value / $denominator;
+    $exceed = $ratio > 1.0001;
+    $clamped = min(max(0.0, $ratio), max(0.0, $capRatio));
+    $pct = (int) round($clamped * 100);
+
+    return ['pct' => max(0, min(100, $pct)), 'exceed' => $exceed];
+}
+
+function calcShiftComparePct(float $adm, float $noite, float $total): array
+{
+    if ($total <= 0.0001) {
+        return ['adm' => 0, 'noite' => 0];
+    }
+
+    $admPct = (int) round(max(0.0, ($adm / $total)) * 100);
+    $noitePct = (int) round(max(0.0, ($noite / $total)) * 100);
+    $admPct = max(0, min(100, $admPct));
+    $noitePct = max(0, min(100, $noitePct));
+
+    // Garantir que a barra nao "estoure" visualmente por arredondamento.
+    if (($admPct + $noitePct) > 100) {
+        $noitePct = max(0, 100 - $admPct);
+    }
+
+    return ['adm' => $admPct, 'noite' => $noitePct];
 }
 
 function isSetupTargetParada(?string $nomeParada): bool
@@ -818,6 +1036,10 @@ $summary = [
     'setup_realizado' => 0.0,
     'producao_prevista' => 0.0,
     'producao_realizada' => 0.0,
+    'producao_realizada_adm' => 0.0,
+    'producao_realizada_noite' => 0.0,
+    'tempo_previsto_min' => 0.0,
+    'tempo_realizado_min' => 0.0,
     'setup_pendente' => 0.0,
     'ops_com_setup_realizado' => 0,
     'setup_eventos_total' => 0,
@@ -849,6 +1071,7 @@ if ($selectedProgramId > 0) {
             pi.prg_sku,
             pi.prg_quantidade,
             pi.prg_sequencia,
+            pi.prg_inicio_planejado,
             pi.prg_itens_op,
             pp.prd_descricao
         FROM prg_itens pi
@@ -861,6 +1084,7 @@ if ($selectedProgramId > 0) {
     $itemsRows = $itemsStmt->fetchAll(PDO::FETCH_ASSOC);
 
     $itemsBySku = [];
+    $plannedStartByOp = [];
     foreach ($itemsRows as $item) {
         $sku = trim((string) ($item['prg_sku'] ?? ''));
         if ($sku === '') {
@@ -868,6 +1092,17 @@ if ($selectedProgramId > 0) {
         }
 
         $itemsBySku[$sku] ??= [];
+        $op = trim((string) ($item['prg_itens_op'] ?? ''));
+        $inicioPlanejado = trim((string) ($item['prg_inicio_planejado'] ?? ''));
+        if ($op !== '' && $inicioPlanejado !== '') {
+            $dt = parseDateValue($inicioPlanejado);
+            if ($dt instanceof DateTimeImmutable) {
+                $normalized = $dt->format('Y-m-d H:i:s');
+                if (!isset($plannedStartByOp[$op]) || $normalized < $plannedStartByOp[$op]) {
+                    $plannedStartByOp[$op] = $normalized;
+                }
+            }
+        }
         $itemsBySku[$sku][] = [
             'op' => (string) ($item['prg_itens_op'] ?? 'S/OP'),
             'quantidade' => (float) ($item['prg_quantidade'] ?? 0),
@@ -924,8 +1159,14 @@ if ($selectedProgramId > 0) {
                 'setup_realizado_min' => 0.0,
                 'producao_prevista' => 0.0,
                 'producao_realizada' => 0.0,
+                'producao_realizada_adm' => 0.0,
+                'producao_realizada_noite' => 0.0,
                 'tempo_previsto_min' => 0.0,
                 'tempo_realizado_min' => 0.0,
+                'inicio_planejado_item' => $plannedStartByOp[trim((string) $op)] ?? '',
+                'inicio_planejado_schedule' => '',
+                'inicio_real' => '',
+                'fim_real' => '',
                 'setup_eventos' => 0,
                 'setup_realizado_eventos' => 0,
                 'program_order' => $programSortIndex++,
@@ -942,21 +1183,22 @@ if ($selectedProgramId > 0) {
             $reportRows[$op]['descricao'] = trim((string) ($row['sch_descricao'] ?? '')) ?: $descFromSku ?: $sku;
         }
 
+        $inicioSchedule = trim((string) ($row['sch_inicio_producao'] ?? ''));
+        if ($inicioSchedule !== '') {
+            $dtInicioSchedule = parseDateValue($inicioSchedule);
+            if ($dtInicioSchedule instanceof DateTimeImmutable) {
+                $normalized = $dtInicioSchedule->format('Y-m-d H:i:s');
+                $current = (string) ($reportRows[$op]['inicio_planejado_schedule'] ?? '');
+                if ($current === '' || $normalized < $current) {
+                    $reportRows[$op]['inicio_planejado_schedule'] = $normalized;
+                }
+            }
+        }
+
         $reportRows[$op]['sku'] = $reportRows[$op]['sku'] !== '' ? $reportRows[$op]['sku'] : $sku;
         $reportRows[$op]['setup_previsto_min'] += $pendingSetupMinutes;
         $reportRows[$op]['producao_prevista'] += $plannedQty;
         $reportRows[$op]['tempo_previsto_min'] += $durationMinutes;
-        $tempoRealizadoMin = 0.0;
-        if ($workCalendar instanceof WorkCalendar) {
-            $inicioProducao = DateTimeHelper::fromLocalInput((string) ($row['sch_inicio_producao'] ?? ''));
-            $fimProducao = DateTimeHelper::fromLocalInput((string) ($row['sch_fim_producao'] ?? ''));
-
-            if ($inicioProducao instanceof DateTimeImmutable && $fimProducao instanceof DateTimeImmutable) {
-                $tempoRealizadoMin = (float) $workCalendar->workingMinutesBetween($inicioProducao, $fimProducao);
-            }
-        }
-
-        $reportRows[$op]['tempo_realizado_min'] += max(0.0, $tempoRealizadoMin);
         $reportRows[$op]['setup_eventos'] += $pendingSetupMinutes > 0 ? 1 : 0;
         $pendingSetupMinutes = 0.0;
     }
@@ -986,7 +1228,31 @@ if ($selectedProgramId > 0) {
                         THEN COALESCE(setup_eventos_count, 0)
                         ELSE 0
                     END
-                ) AS setup_realizado_eventos
+                ) AS setup_realizado_eventos,
+                SUM(
+                    CASE
+                        WHEN inicio_evento IS NOT NULL
+                             AND fim_evento IS NOT NULL
+                             AND LENGTH(TRIM(inicio_evento)) > 0
+                             AND LENGTH(TRIM(fim_evento)) > 0
+                        THEN GREATEST(0, TIMESTAMPDIFF(MINUTE, inicio_evento, fim_evento))
+                        ELSE 0
+                    END
+                ) AS tempo_realizado_min,
+                MIN(
+                    CASE
+                        WHEN inicio_evento IS NOT NULL AND LENGTH(TRIM(inicio_evento)) > 0
+                        THEN inicio_evento
+                        ELSE NULL
+                    END
+                ) AS inicio_real,
+                MAX(
+                    CASE
+                        WHEN fim_evento IS NOT NULL AND LENGTH(TRIM(fim_evento)) > 0
+                        THEN fim_evento
+                        ELSE NULL
+                    END
+                ) AS fim_real
             FROM realizado_2026_excel
             WHERE data_evento BETWEEN ? AND ?
               AND ordem_op IN ($placeholders)
@@ -1005,6 +1271,108 @@ if ($selectedProgramId > 0) {
             $reportRows[$op]['producao_realizada'] = (float) ($row['total_realizado'] ?? 0);
             $reportRows[$op]['setup_realizado_min'] = (float) ($row['setup_realizado_min'] ?? 0);
             $reportRows[$op]['setup_realizado_eventos'] = (int) ($row['setup_realizado_eventos'] ?? 0);
+            $reportRows[$op]['tempo_realizado_min'] = (float) ($row['tempo_realizado_min'] ?? 0);
+            $reportRows[$op]['inicio_real'] = (string) ($row['inicio_real'] ?? '');
+            $reportRows[$op]['fim_real'] = (string) ($row['fim_real'] ?? '');
+        }
+
+        // Recalcular tempo realizado aplicando calendario produtivo (turnos) sobre os intervalos reais do CODI,
+        // com consolidacao de intervalos sem sobreposicao.
+        if ($workCalendar instanceof WorkCalendar) {
+            $intervalStmt = $pdo->prepare(
+                "
+                SELECT
+                    ordem_op,
+                    inicio_evento,
+                    fim_evento,
+                    quantidade
+                FROM realizado_2026_excel
+                WHERE data_evento BETWEEN ? AND ?
+                  AND ordem_op IN ($placeholders)
+                  AND inicio_evento IS NOT NULL
+                  AND fim_evento IS NOT NULL
+                  AND LENGTH(TRIM(inicio_evento)) > 0
+                  AND LENGTH(TRIM(fim_evento)) > 0
+                ORDER BY ordem_op ASC, inicio_evento ASC, fim_evento ASC
+                "
+            );
+            $intervalStmt->execute(array_merge([$reportPeriodStart, $reportPeriodEnd], $ops));
+            $intervalRows = $intervalStmt->fetchAll(PDO::FETCH_ASSOC);
+
+            $intervalsByOp = [];
+            $eventsByOp = [];
+            foreach ($intervalRows as $evt) {
+                $op = trim((string) ($evt['ordem_op'] ?? ''));
+                if ($op === '' || !isset($reportRows[$op])) {
+                    continue;
+                }
+
+                $start = parseDateValue($evt['inicio_evento'] ?? null);
+                $end = parseDateValue($evt['fim_evento'] ?? null);
+                if (!$start instanceof DateTimeImmutable || !$end instanceof DateTimeImmutable) {
+                    continue;
+                }
+                if ($end <= $start) {
+                    continue;
+                }
+
+                $intervalsByOp[$op] ??= [];
+                $intervalsByOp[$op][] = ['start' => $start, 'end' => $end];
+
+                $eventsByOp[$op] ??= [];
+                $eventsByOp[$op][] = [
+                    'start' => $start,
+                    'end' => $end,
+                    'qty' => (float) ($evt['quantidade'] ?? 0),
+                ];
+            }
+
+            foreach ($intervalsByOp as $op => $intervals) {
+                $merged = consolidateIntervals($intervals);
+                $minutes = 0;
+                foreach ($merged as $segment) {
+                    $segStart = $segment['start'] ?? null;
+                    $segEnd = $segment['end'] ?? null;
+                    if ($segStart instanceof DateTimeImmutable && $segEnd instanceof DateTimeImmutable && $segEnd > $segStart) {
+                        $minutes += (int) $workCalendar->workingMinutesBetween($segStart, $segEnd);
+                    }
+                }
+
+                $reportRows[$op]['tempo_realizado_min'] = (float) max(0, $minutes);
+            }
+
+            // Classificar a producao realizada por turno usando o mesmo calendario produtivo.
+            foreach ($eventsByOp as $op => $events) {
+                $admQty = 0.0;
+                $noiteQty = 0.0;
+
+                foreach ($events as $event) {
+                    $segStart = $event['start'] ?? null;
+                    $segEnd = $event['end'] ?? null;
+                    $qty = (float) ($event['qty'] ?? 0);
+                    if ($qty <= 0) {
+                        continue;
+                    }
+
+                    if (!$segStart instanceof DateTimeImmutable || !$segEnd instanceof DateTimeImmutable || $segEnd <= $segStart) {
+                        continue;
+                    }
+
+                    $shiftMinutes = workingMinutesByShift($workCalendar, $segStart, $segEnd);
+                    $admMinutes = (int) ($shiftMinutes['adm'] ?? 0);
+                    $noiteMinutes = (int) ($shiftMinutes['noite'] ?? 0);
+                    $denom = $admMinutes + $noiteMinutes;
+                    if ($denom <= 0) {
+                        continue;
+                    }
+
+                    $admQty += $qty * ($admMinutes / $denom);
+                    $noiteQty += $qty * ($noiteMinutes / $denom);
+                }
+
+                $reportRows[$op]['producao_realizada_adm'] = $admQty;
+                $reportRows[$op]['producao_realizada_noite'] = $noiteQty;
+            }
         }
 
         $diagStmt = $pdo->prepare(
@@ -1039,6 +1407,10 @@ if ($selectedProgramId > 0) {
         $summary['setup_realizado'] += (float) $row['setup_realizado_min'];
         $summary['producao_prevista'] += (float) $row['producao_prevista'];
         $summary['producao_realizada'] += (float) $row['producao_realizada'];
+        $summary['producao_realizada_adm'] += (float) ($row['producao_realizada_adm'] ?? 0);
+        $summary['producao_realizada_noite'] += (float) ($row['producao_realizada_noite'] ?? 0);
+        $summary['tempo_previsto_min'] += (float) ($row['tempo_previsto_min'] ?? 0);
+        $summary['tempo_realizado_min'] += (float) ($row['tempo_realizado_min'] ?? 0);
         $summary['setup_eventos_total'] += (int) $row['setup_realizado_eventos'];
 
         if ((float) $row['setup_realizado_min'] > 0.01) {
@@ -1304,6 +1676,12 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
             letter-spacing: 0.06em;
         }
 
+        /* Oculta somente visualmente, mantendo o espaço e o submit do form. */
+        .filtros-hidden {
+            visibility: hidden;
+            pointer-events: none;
+        }
+
         select,
         input[type="date"] {
             width: 100%;
@@ -1334,11 +1712,32 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
             margin-bottom: 18px;
         }
 
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 14px;
+            padding: 18px 20px;
+            border-bottom: 1px solid var(--border);
+            background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+        }
+
+        .kpi-card {
+            padding: 14px 16px;
+        }
+
+        .kpi-card .value {
+            font-size: 24px;
+        }
+
         .status-grid {
             display: grid;
             grid-template-columns: repeat(5, minmax(0, 1fr));
             gap: 14px;
             margin: 0 0 18px;
+        }
+
+        .top-kpis--hidden {
+            display: none;
         }
 
         .summary-card {
@@ -1446,10 +1845,169 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
             background: #fbfdff;
         }
 
+        tbody tr.row-expandable {
+            cursor: pointer;
+        }
+
+        tbody tr.row-expand-content {
+            display: none;
+        }
+
+        tbody tr.row-expand-content.is-open {
+            display: table-row;
+        }
+
+        tbody tr.row-expand-content td {
+            padding: 0;
+            border-bottom: 1px solid #e2e8f0;
+            background: #f8fafc;
+        }
+
+        .inline-detail {
+            padding: 14px 16px 18px;
+        }
+
+        .inline-detail__grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 14px;
+            align-items: start;
+        }
+
+        .inline-detail__panel {
+            background: #fff;
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 10px 20px rgba(15, 23, 42, 0.05);
+        }
+
+        .inline-detail__panel--spaced {
+            margin-bottom: 14px;
+        }
+
+        .inline-detail__panel h4 {
+            margin: 0;
+            padding: 10px 12px;
+            font-size: 11px;
+            font-weight: 800;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            background: #fbfdff;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .inline-detail__panel .body {
+            padding: 10px 12px 12px;
+        }
+
+        .inline-detail__loading,
+        .inline-detail__error {
+            color: var(--muted);
+            font-size: 13px;
+            padding: 10px 12px;
+        }
+
+        .inline-table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 0;
+        }
+
+        .inline-table th,
+        .inline-table td {
+            padding: 8px 10px;
+            border-bottom: 1px solid #edf2f7;
+            font-size: 13px;
+            vertical-align: top;
+        }
+
+        .inline-table th {
+            background: #f8fbff;
+            color: var(--muted);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        .inline-table tr:last-child td {
+            border-bottom: none;
+        }
+
         .op-cell {
             font-weight: 800;
             color: var(--accent-2);
             white-space: nowrap;
+        }
+
+        .cell-sub {
+            display: block;
+            margin-top: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--muted);
+            white-space: nowrap;
+        }
+
+        td.cell-bar {
+            position: relative;
+            overflow: hidden;
+        }
+
+        td.cell-bar::before {
+            content: "";
+            position: absolute;
+            left: 8px;
+            top: 8px;
+            bottom: 8px;
+            width: var(--bar-pct, 0%);
+            max-width: calc(100% - 16px);
+            border-radius: 12px;
+            background: rgba(148, 163, 184, 0.14);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        td.cell-bar .cell-bar__value {
+            position: relative;
+            z-index: 1;
+            display: inline-block;
+        }
+
+        td.cell-bar--prod::before {
+            background: rgba(5, 150, 105, 0.10);
+        }
+
+        td.cell-bar--shift::before {
+            background: rgba(99, 102, 241, 0.10);
+        }
+
+        td.cell-bar.is-exceed::before {
+            background: rgba(5, 150, 105, 0.16);
+        }
+
+        td.cell-bar.is-exceed {
+            box-shadow: inset 0 0 0 1px rgba(5, 150, 105, 0.22);
+            border-radius: 10px;
+        }
+
+        .shift-compare {
+            margin-top: 8px;
+            height: 8px;
+            background: rgba(148, 163, 184, 0.18);
+            border-radius: 999px;
+            overflow: hidden;
+            display: flex;
+            gap: 0;
+        }
+
+        .shift-compare__adm {
+            background: rgba(59, 130, 246, 0.65);
+        }
+
+        .shift-compare__noite {
+            background: rgba(168, 85, 247, 0.65);
         }
 
         .desc-cell {
@@ -1484,10 +2042,35 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
             color: #92400e;
         }
 
+        .tag-danger {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
         .tag-muted {
             background: #e2e8f0;
             color: #475569;
         }
+
+        .tag-ok {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .diff-icon {
+            display: inline-block;
+            width: 16px;
+            text-align: center;
+            font-weight: 900;
+            opacity: 0.9;
+        }
+
+        td.heat-good-1 { background: rgba(5, 150, 105, 0.05); }
+        td.heat-good-2 { background: rgba(5, 150, 105, 0.08); }
+        td.heat-good-3 { background: rgba(5, 150, 105, 0.12); }
+        td.heat-bad-1 { background: rgba(220, 38, 38, 0.05); }
+        td.heat-bad-2 { background: rgba(220, 38, 38, 0.085); }
+        td.heat-bad-3 { background: rgba(220, 38, 38, 0.13); }
 
         .detail-btn {
             display: inline-flex;
@@ -1559,6 +2142,15 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
 
         tbody tr.row-critical td:first-child {
             box-shadow: inset 4px 0 0 var(--danger);
+        }
+
+        /* Mantem destaque mesmo em linhas com gradiente de status. */
+        tbody tr.row-expandable.is-expanded {
+            background: #eef2ff;
+        }
+
+        tbody tr.row-expandable.is-expanded:hover {
+            background: #e0e7ff;
         }
 
         .empty-state {
@@ -1808,6 +2400,18 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
             max-width: 320px;
         }
 
+        .detail-summary-check {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .detail-summary-check input {
+            width: 16px;
+            height: 16px;
+            accent-color: var(--accent);
+        }
+
         .detail-group-total {
             background: #eef2ff;
             font-weight: 700;
@@ -1849,6 +2453,10 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
                 grid-template-columns: repeat(3, minmax(0, 1fr));
             }
 
+            .kpi-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
             .detail-kpis {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
             }
@@ -1868,6 +2476,10 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
             }
 
             .status-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .kpi-grid {
                 grid-template-columns: 1fr;
             }
 
@@ -1934,15 +2546,15 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
                         <?php endforeach; ?>
                 </select>
             </div>
-            <div class="filter-group">
+            <div class="filter-group filtros-hidden">
                 <label for="data_inicio">Período inicial</label>
                 <input id="data_inicio" name="data_inicio" type="date" value="<?= h($selectedPeriodStartInput) ?>">
             </div>
-            <div class="filter-group">
+            <div class="filter-group filtros-hidden">
                 <label for="data_fim">Período final</label>
                 <input id="data_fim" name="data_fim" type="date" value="<?= h($selectedPeriodEndInput) ?>">
             </div>
-            <div class="filter-group">
+            <div class="filter-group filtros-hidden">
                 <label for="status">Leitura</label>
                 <select id="status" name="status" onchange="this.form.submit()">
                     <option value="all" <?= $selectedStatus === 'all' ? 'selected' : '' ?>>Todas as OPs</option>
@@ -1952,7 +2564,7 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
                     <option value="sem_evento" <?= $selectedStatus === 'sem_evento' ? 'selected' : '' ?>>Somente sem evento</option>
                 </select>
             </div>
-            <button class="btn btn-primary" type="submit">Aplicar filtros</button>
+            <button class="btn btn-primary filtros-hidden" type="submit">Aplicar filtros</button>
         </form>
 
         <div class="meta-line">
@@ -1976,6 +2588,7 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
         </div>
     </div>
 
+    <div class="top-kpis top-kpis--hidden">
     <div class="summary-grid">
         <div class="summary-card">
             <div class="label">OPs analisadas</div>
@@ -2051,14 +2664,55 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
             <div class="sub">Fora do recorte de setup</div>
         </div>
     </div>
+    </div>
 
     <div class="report-card">
         <div class="report-head">
             <div>
-                <h2>Detalhe por OP</h2>
+                <h2>Detalhe por Linha</h2>
                 <p>Ordenado pela sequência da programação/histórico. O setup previsto vem de <code>sch_linhas.sch_duracao_minutos</code> e o realizado de <code>setup_duracao_minutos</code> para as paradas alvo.</p>
             </div>
             <div class="tag"><?= h($setupRuleLabel) ?></div>
+        </div>
+
+        <?php
+            $kpiProdPlan = (float) ($summary['producao_prevista'] ?? 0);
+            $kpiProdReal = (float) ($summary['producao_realizada'] ?? 0);
+            $kpiProdDiff = $kpiProdReal - $kpiProdPlan;
+            $kpiTempoPrev = (float) ($summary['tempo_previsto_min'] ?? 0);
+            $kpiTempoReal = (float) ($summary['tempo_realizado_min'] ?? 0);
+            $kpiProdAdm = (float) ($summary['producao_realizada_adm'] ?? 0);
+            $kpiProdNoite = (float) ($summary['producao_realizada_noite'] ?? 0);
+            $kpiProdDenom = $kpiProdReal > 0.0001 ? $kpiProdReal : 0.0;
+            $kpiAdmPct = $kpiProdDenom > 0 ? (int) round(($kpiProdAdm / $kpiProdDenom) * 100) : 0;
+            $kpiNoitePct = $kpiProdDenom > 0 ? (int) round(($kpiProdNoite / $kpiProdDenom) * 100) : 0;
+            $kpiDiffClass = $kpiProdDiff >= 0 ? 'is-positive' : 'is-danger';
+        ?>
+        <div class="kpi-grid">
+            <div class="summary-card kpi-card">
+                <div class="label">Produção prevista</div>
+                <div class="value"><?= h(formatQtyRounded($kpiProdPlan)) ?></div>
+            </div>
+            <div class="summary-card kpi-card">
+                <div class="label">Produção realizada</div>
+                <div class="value"><?= h(formatQtyRounded($kpiProdReal)) ?></div>
+            </div>
+            <div class="summary-card kpi-card <?= $kpiDiffClass ?>">
+                <div class="label">Diferença de produção</div>
+                <div class="value"><?= h(sprintf('%s%s', $kpiProdDiff >= 0 ? '+' : '-', formatQtyRounded(abs($kpiProdDiff)))) ?></div>
+            </div>
+            <div class="summary-card kpi-card">
+                <div class="label">Tempo previsto</div>
+                <div class="value"><?= h(formatDurationClock(max(0.0, $kpiTempoPrev))) ?></div>
+            </div>
+            <div class="summary-card kpi-card">
+                <div class="label">Tempo realizado</div>
+                <div class="value"><?= h(formatDurationClock(max(0.0, $kpiTempoReal))) ?></div>
+            </div>
+            <div class="summary-card kpi-card">
+                <div class="label">Participação turno</div>
+                <div class="value"><?= h(sprintf('ADM %d%% | Noite %d%%', $kpiAdmPct, $kpiNoitePct)) ?></div>
+            </div>
         </div>
 
         <div class="table-wrap">
@@ -2073,6 +2727,8 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
                         <th>Diferença</th>
                         <th>Prod. previsto</th>
                         <th>Prod. realizado</th>
+                        <th>Turno ADM</th>
+                        <th>Turno noite</th>
                         <th>Diferença</th>
                         <th>Tempo previsto</th>
                         <th>Tempo realizado</th>
@@ -2088,6 +2744,8 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
                                 $setupRowDiff = $setupReal - $setupPlan;
                                 $prodPlan = (float) $row['producao_prevista'];
                                 $prodReal = (float) $row['producao_realizada'];
+                                $prodRealAdm = (float) ($row['producao_realizada_adm'] ?? 0);
+                                $prodRealNoite = (float) ($row['producao_realizada_noite'] ?? 0);
                                 $prodRowDiff = $prodReal - $prodPlan;
                                 $tempoPrevisto = (float) ($row['tempo_previsto_min'] ?? 0);
                                 $tempoRealizado = (float) ($row['tempo_realizado_min'] ?? 0);
@@ -2100,6 +2758,30 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
                                     $setupClass .= ' cell-critical';
                                 }
                                 $prodClass = $prodRowDiff > 0.01 ? 'cell-positive' : ($prodRowDiff < -0.01 ? 'cell-danger' : 'cell-neutral');
+                                $setupDiffIcon = deviationIcon((float) $setupDiffDisplay);
+                                $prodDiffIcon = deviationIcon((float) $prodRowDiff);
+                                $setupHeatLevel = deviationIntensityLevel(abs((float) $setupDiffDisplay), 1.0, 10.0, 30.0);
+                                $setupHeatClass = heatClassFromDiff((float) $setupDiffDisplay, $setupHeatLevel, false);
+                                $prodHeatLevel = 0;
+                                if ($prodPlan > 0.0001) {
+                                    $prodHeatLevel = deviationIntensityLevel(abs((float) $prodRowDiff) / $prodPlan, 0.02, 0.05, 0.10);
+                                } else {
+                                    $prodHeatLevel = deviationIntensityLevel(abs((float) $prodRowDiff), 5.0, 20.0, 50.0);
+                                }
+                                $prodHeatClass = heatClassFromDiff((float) $prodRowDiff, $prodHeatLevel, true);
+                                $analyticBadge = classifyAnalyticBadge(
+                                    $prodPlan,
+                                    (float) $prodRowDiff,
+                                    $tempoPrevisto,
+                                    $tempoRealizado,
+                                    $setupPlan,
+                                    (int) ($row['setup_realizado_eventos'] ?? 0),
+                                    !empty($row['is_critical'])
+                                );
+                                $barProdReal = calcBarPct($prodReal, $prodPlan);
+                                $barProdAdm = calcBarPct($prodRealAdm, $prodReal);
+                                $barProdNoite = calcBarPct($prodRealNoite, $prodReal);
+                                $shiftCompare = calcShiftComparePct($prodRealAdm, $prodRealNoite, $prodReal);
                                 $setupStatus = getRowSetupStatus($row);
                                 $setupRealClass = ((int) $row['setup_realizado_eventos'] > 0)
                                     ? 'cell-success'
@@ -2111,22 +2793,71 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
                                     $desc = 'Sem descrição';
                                 }
                             ?>
-                            <tr class="<?= h((string) ($row['row_class'] ?? $setupStatus['row_class'])) ?>">
+                            <tr
+                                class="<?= h((string) ($row['row_class'] ?? $setupStatus['row_class'])) ?> row-expandable"
+                                data-op="<?= h((string) $row['op']) ?>"
+                                data-period-start="<?= h($reportPeriodStart) ?>"
+                                data-period-end="<?= h($reportPeriodEnd) ?>"
+                                data-setup-plan-min="<?= h((string) $setupPlan) ?>"
+                                data-prod-adm-label="<?= h(formatQtyRounded($prodRealAdm)) ?>"
+                                data-prod-noite-label="<?= h(formatQtyRounded($prodRealNoite)) ?>"
+                            >
                                 <td class="op-cell">OP <?= h((string) $row['op']) ?></td>
                                 <td class="desc-cell"><?= h($desc) ?></td>
                                 <td class="sku-cell"><?= h((string) ($row['sku'] ?? '')) ?></td>
                                 <td><?= h(formatMinutes($setupPlan)) ?></td>
                                 <td class="<?= h($setupRealClassDisplay) ?>"><?= h(formatMinutes($setupRealDisplay)) ?></td>
-                                <td class="<?= $setupClassDisplay ?>"><?= h(formatSignedMinutes($setupDiffDisplay)) ?></td>
+                                <td class="<?= h(trim($setupClassDisplay . ' ' . $setupHeatClass)) ?>">
+                                    <span class="diff-icon"><?= h($setupDiffIcon) ?></span><?= h(formatSignedMinutes($setupDiffDisplay)) ?>
+                                </td>
                                 <td><?= h(formatQtyRounded($prodPlan)) ?></td>
-                                <td><?= h(formatQtyRounded($prodReal)) ?></td>
-                                <td class="<?= $prodClass ?>"><?= h(sprintf('%s%s', $prodRowDiff >= 0 ? '+' : '-', formatQtyRounded(abs($prodRowDiff)))) ?></td>
-                                <td><?= h(formatDurationClock(max(0.0, $tempoPrevisto))) ?></td>
-                                <td><?= h(formatDurationClock(max(0.0, $tempoRealizado))) ?></td>
+                                <td
+                                    class="<?= h(trim('cell-bar cell-bar--prod ' . (!empty($barProdReal['exceed']) ? 'is-exceed' : ''))) ?>"
+                                    style="--bar-pct: <?= (int) ($barProdReal['pct'] ?? 0) ?>%;"
+                                >
+                                    <span class="cell-bar__value"><?= h(formatQtyRounded($prodReal)) ?></span>
+                                </td>
+                                <td class="cell-bar cell-bar--shift" style="--bar-pct: <?= (int) ($barProdAdm['pct'] ?? 0) ?>%;">
+                                    <span class="cell-bar__value"><?= h(formatQtyRounded($prodRealAdm)) ?></span>
+                                </td>
+                                <td class="cell-bar cell-bar--shift" style="--bar-pct: <?= (int) ($barProdNoite['pct'] ?? 0) ?>%;">
+                                    <span class="cell-bar__value"><?= h(formatQtyRounded($prodRealNoite)) ?></span>
+                                </td>
+                                <td class="<?= h(trim($prodClass . ' ' . $prodHeatClass)) ?>">
+                                    <span class="diff-icon"><?= h($prodDiffIcon) ?></span><?= h(sprintf('%s%s', $prodRowDiff >= 0 ? '+' : '-', formatQtyRounded(abs($prodRowDiff)))) ?>
+                                </td>
+                                <td>
+                                    <?= h(formatDurationClock(max(0.0, $tempoPrevisto))) ?>
+                                    <?php
+                                        $inicioRealLabel = formatDateTimeShortDisplay((string) ($row['inicio_real'] ?? ''), '');
+                                    ?>
+                                    <?php if ($inicioRealLabel !== ''): ?>
+                                        <span class="cell-sub"><?= h($inicioRealLabel) ?></span>
+                                    <?php endif; ?>
+                                </td>
+                                <td>
+                                    <?= h(formatDurationClock(max(0.0, $tempoRealizado))) ?>
+                                    <?php
+                                        $fimRealLabel = formatDateTimeShortDisplay((string) ($row['fim_real'] ?? ''), '');
+                                    ?>
+                                    <?php if ($fimRealLabel !== ''): ?>
+                                        <span class="cell-sub"><?= h($fimRealLabel) ?></span>
+                                    <?php endif; ?>
+                                </td>
                                 <td>
                                     <span class="tag <?= h((string) ($row['tag_class'] ?? $setupStatus['tag_class'])) ?>" title="<?= h((string) ($row['tag_title'] ?? $setupStatus['title'])) ?>">
                                         <?= h((string) ($row['tag_label'] ?? $setupStatus['label'])) ?>
                                     </span>
+                                    <span class="tag <?= h((string) ($analyticBadge['class'] ?? 'tag-muted')) ?>">
+                                        <?= h((string) ($analyticBadge['label'] ?? 'OK')) ?>
+                                    </span>
+                                    <div
+                                        class="shift-compare"
+                                        title="<?= h(sprintf('ADM %d%% | Noite %d%%', (int) ($shiftCompare['adm'] ?? 0), (int) ($shiftCompare['noite'] ?? 0))) ?>"
+                                    >
+                                        <span class="shift-compare__adm" style="width: <?= (int) ($shiftCompare['adm'] ?? 0) ?>%;"></span>
+                                        <span class="shift-compare__noite" style="width: <?= (int) ($shiftCompare['noite'] ?? 0) ?>%;"></span>
+                                    </div>
                                     <button
                                         class="detail-btn"
                                         type="button"
@@ -2142,10 +2873,17 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
                                     </button>
                                 </td>
                             </tr>
+                            <tr class="row-expand-content" data-op="<?= h((string) $row['op']) ?>">
+                                <td colspan="14">
+                                    <div class="inline-detail">
+                                        <div class="inline-detail__loading">Clique na linha para carregar o detalhe desta OP.</div>
+                                    </div>
+                                </td>
+                            </tr>
                         <?php endforeach; ?>
                     <?php else: ?>
                         <tr>
-                            <td colspan="12">
+                            <td colspan="14">
                                 <div class="empty-state">
                                     Nenhuma OP encontrada para a programação selecionada.
                                 </div>
@@ -2287,6 +3025,12 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
                                     <td colspan="2" class="empty-state">Selecione uma OP para ver o resumo.</td>
                                 </tr>
                             </tbody>
+                            <tfoot>
+                                <tr class="detail-group-total">
+                                    <td>Total selecionado</td>
+                                    <td id="detail-grouped-total">00:00</td>
+                                </tr>
+                            </tfoot>
                         </table>
                     </div>
                 </div>
@@ -2309,6 +3053,7 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
     const subtitleEl = document.getElementById('op-detail-subtitle');
     const kpisEl = document.getElementById('op-detail-kpis');
     const groupedBody = document.getElementById('detail-grouped-body');
+    const groupedTotalEl = document.getElementById('detail-grouped-total');
     const principalBody = document.getElementById('detail-principal-body');
     const apoioBody = document.getElementById('detail-apoio-body');
     const noteEl = document.getElementById('op-detail-note');
@@ -2464,6 +3209,38 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
         return ((minutes / totalMinutes) * 100).toFixed(1).replace('.', ',');
     }
 
+    function updateGroupedTotalLabel(minutes) {
+        if (!groupedTotalEl) {
+            return;
+        }
+
+        groupedTotalEl.textContent = formatMinutesLabel(Number(minutes) || 0);
+    }
+
+    function syncGroupedTotalLabel(fallbackMinutes) {
+        if (!groupedBody) {
+            updateGroupedTotalLabel(fallbackMinutes);
+            return;
+        }
+
+        const checkboxes = groupedBody.querySelectorAll('input.detail-summary-checkbox');
+        if (!checkboxes.length) {
+            updateGroupedTotalLabel(fallbackMinutes);
+            return;
+        }
+
+        let sum = 0;
+        checkboxes.forEach((checkbox) => {
+            if (!checkbox.checked) {
+                return;
+            }
+
+            sum += Number(checkbox.getAttribute('data-minutes') || 0);
+        });
+
+        updateGroupedTotalLabel(sum);
+    }
+
     function renderRows(target, rows, emptyText, badgeClass, mainOnly, showReference = true) {
         const filteredRows = filterVisibleComplementaryRows(rows).filter((row) => matchesMainOnly(row, mainOnly));
 
@@ -2480,6 +3257,7 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
 
         if (!filteredRows.length) {
             target.innerHTML = `<tr><td colspan="2" class="empty-state">${escapeHtml(emptyText)}</td></tr>`;
+            syncGroupedTotalLabel(0);
             return;
         }
 
@@ -2499,7 +3277,10 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
             return `
                 <tr class="${rowClass}">
                     <td>
-                        <span class="tag ${badgeClass}">${escapeHtml(label)}</span>
+                        <label class="detail-summary-check">
+                            <input type="checkbox" class="detail-summary-checkbox" checked data-minutes="${escapeHtml(String(minutes))}">
+                            <span class="tag ${badgeClass}">${escapeHtml(label)}</span>
+                        </label>
                     </td>
             <td>${escapeHtml(duration)}</td>
         </tr>
@@ -2507,6 +3288,7 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
         }).join('');
 
         target.innerHTML = summaryRows;
+        syncGroupedTotalLabel(Number(totalMinutes) || visibleTotalMinutes || 0);
     }
 
     function getGroupedLabel(rows) {
@@ -2625,6 +3407,7 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
             mainOnlyToggle.checked = true;
         }
         detailState.mainOnly = true;
+        updateGroupedTotalLabel(0);
         kpisEl.innerHTML = `
             <div class="detail-kpi">
                 <div class="label">OP</div>
@@ -2679,6 +3462,15 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
         button.addEventListener('click', () => loadDetail(button));
     });
 
+    if (groupedBody) {
+        groupedBody.addEventListener('change', (event) => {
+            const target = event.target;
+            if (target && target.matches && target.matches('input.detail-summary-checkbox')) {
+                syncGroupedTotalLabel(0);
+            }
+        });
+    }
+
     if (mainOnlyToggle) {
         mainOnlyToggle.addEventListener('change', () => {
             setMainOnly(mainOnlyToggle.checked);
@@ -2693,6 +3485,311 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
         if (event.key === 'Escape' && modal.classList.contains('is-open')) {
             closeModal();
         }
+    });
+})();
+</script>
+<script>
+(function () {
+    const table = document.querySelector('.report-card .table-wrap table');
+    if (!table) {
+        return;
+    }
+
+    const cache = new Map();
+    let openRow = null;
+    let openContentRow = null;
+
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function parseDateParts(value) {
+        if (!value) {
+            return null;
+        }
+
+        const input = String(value).trim();
+        if (!input) {
+            return null;
+        }
+
+        const normalized = input.replace('T', ' ');
+        const match = normalized.match(/^(\d{4})-(\d{2})-(\d{2})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?/);
+        if (!match) {
+            return null;
+        }
+
+        return {
+            year: match[1],
+            month: match[2],
+            day: match[3],
+            hour: match[4] || '',
+            minute: match[5] || '',
+        };
+    }
+
+    function formatDateTimeCompact(value) {
+        const parts = parseDateParts(value);
+        if (!parts) {
+            return String(value ?? '--') || '--';
+        }
+
+        if (!parts.hour || !parts.minute) {
+            return `${parts.day}/${parts.month}`;
+        }
+
+        return `${parts.day}/${parts.month} ${parts.hour}:${parts.minute}`;
+    }
+
+    function formatMinutesLabel(minutes) {
+        const rounded = Math.round(Number(minutes) || 0);
+        const clamped = rounded < 0 ? 0 : rounded;
+        const hours = Math.floor(clamped / 60);
+        const mins = clamped % 60;
+        return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+    }
+
+    function isVisibleComplementaryParadaVisible(value) {
+        const label = String(value ?? '').trim();
+        if (!label) {
+            return false;
+        }
+
+        const upperLabel = label.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+        if (upperLabel === 'DESCONEXAO') {
+            return false;
+        }
+
+        return upperLabel !== 'SEM CLASSIFICACAO';
+    }
+
+    function filterTimelineRows(rows) {
+        return (rows || []).filter((row) => {
+            if (row && row.tipo_bloco === 'setup_principal') {
+                return true;
+            }
+
+            return isVisibleComplementaryParadaVisible(row && row.parada_nomeParada);
+        });
+    }
+
+    function getContentRowFor(row) {
+        const next = row.nextElementSibling;
+        if (next && next.classList && next.classList.contains('row-expand-content')) {
+            return next;
+        }
+
+        const op = row.getAttribute('data-op') || '';
+        if (!op) {
+            return null;
+        }
+
+        return table.querySelector(`tr.row-expand-content[data-op="${CSS.escape(op)}"]`);
+    }
+
+    function setContentHtml(contentRow, html) {
+        const container = contentRow.querySelector('.inline-detail');
+        if (!container) {
+            contentRow.innerHTML = `<td colspan="14"><div class="inline-detail">${html}</div></td>`;
+            return;
+        }
+
+        container.innerHTML = html;
+    }
+
+    function buildInlineHtml(row, data) {
+        const prodAdmLabel = row.getAttribute('data-prod-adm-label') || '0';
+        const prodNoiteLabel = row.getAttribute('data-prod-noite-label') || '0';
+
+        const timelineRows = filterTimelineRows([...(data.principal || []), ...(data.apoio || [])]);
+        const groupedRows = (data.paradas_agrupadas || []).filter((groupRow) => {
+            if (groupRow && groupRow.is_principal) {
+                return true;
+            }
+
+            return isVisibleComplementaryParadaVisible(groupRow && groupRow.parada_nomeParada);
+        });
+
+        const timelineHtml = timelineRows.length
+            ? `
+                <table class="inline-table">
+                    <thead>
+                        <tr>
+                            <th>Início</th>
+                            <th>Fim</th>
+                            <th>Duração</th>
+                            <th>Tipo</th>
+                            <th>Evento</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${timelineRows.map((evt) => {
+                            const inicio = formatDateTimeCompact(evt.inicio_evento || '--');
+                            const fim = formatDateTimeCompact(evt.fim_evento || '--');
+                            const minutes = Number(evt.duracao_evento_minutos ?? evt.setup_duracao_minutos ?? 0);
+                            const duration = formatMinutesLabel(minutes);
+                            const tipo = String(evt.parada_tipo_nome || (evt.tipo_bloco === 'setup_principal' ? 'Setup principal' : 'Parada')).trim();
+                            const label = String(evt.parada_nomeParada || 'Sem classificação').trim();
+                            return `
+                                <tr>
+                                    <td>${escapeHtml(inicio)}</td>
+                                    <td>${escapeHtml(fim)}</td>
+                                    <td>${escapeHtml(duration)}</td>
+                                    <td>${escapeHtml(tipo)}</td>
+                                    <td>${escapeHtml(label)}</td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            `
+            : '<div class="inline-detail__loading">Nenhum evento encontrado para esta OP/período.</div>';
+
+        const paradasHtml = groupedRows.length
+            ? `
+                <table class="inline-table">
+                    <thead>
+                        <tr>
+                            <th>Parada</th>
+                            <th>Duração</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${groupedRows.map((groupRow) => {
+                            const minutes = Number(groupRow.duracao_total_minutos || 0);
+                            const duration = formatMinutesLabel(minutes);
+                            const badgeClass = groupRow.is_principal ? 'badge-main' : 'badge-secondary';
+                            const label = String(groupRow.parada_nomeParada || 'Sem classificação').trim();
+                            return `
+                                <tr>
+                                    <td><span class="tag ${badgeClass}">${escapeHtml(label)}</span></td>
+                                    <td>${escapeHtml(duration)}</td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            `
+            : '<div class="inline-detail__loading">Nenhuma parada encontrada para esta OP/período.</div>';
+
+        return `
+            <div class="inline-detail__grid">
+                <div class="inline-detail__panel">
+                    <h4>Timeline dos eventos (CODI)</h4>
+                    <div class="body">${timelineHtml}</div>
+                </div>
+                <div>
+                    <div class="inline-detail__panel inline-detail__panel--spaced">
+                        <h4>Distribuição por turno</h4>
+                        <div class="body">
+                            <table class="inline-table">
+                                <thead>
+                                    <tr><th>Turno</th><th>Produção</th></tr>
+                                </thead>
+                                <tbody>
+                                    <tr><td>ADM</td><td>${escapeHtml(prodAdmLabel)}</td></tr>
+                                    <tr><td>Noite</td><td>${escapeHtml(prodNoiteLabel)}</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="inline-detail__panel">
+                        <h4>Paradas da OP</h4>
+                        <div class="body">${paradasHtml}</div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    async function fetchOpDetailFromRow(row) {
+        const op = row.getAttribute('data-op') || '';
+        if (!op) {
+            throw new Error('OP inválida para o detalhe.');
+        }
+
+        if (cache.has(op)) {
+            return cache.get(op);
+        }
+
+        const periodStart = row.getAttribute('data-period-start') || '';
+        const periodEnd = row.getAttribute('data-period-end') || '';
+        const setupPlanMin = row.getAttribute('data-setup-plan-min') || '';
+
+        const url = new URL(window.location.href);
+        url.searchParams.set('action', 'op_detail');
+        url.searchParams.set('op', op);
+        url.searchParams.set('period_start', periodStart);
+        url.searchParams.set('period_end', periodEnd);
+        url.searchParams.set('setup_plan_min', setupPlanMin);
+
+        const response = await fetch(url.toString(), { headers: { 'Accept': 'application/json' } });
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || 'Não foi possível carregar o detalhe.');
+        }
+
+        cache.set(op, data);
+        return data;
+    }
+
+    function closeExpandedRow() {
+        if (openRow) {
+            openRow.classList.remove('is-expanded');
+        }
+        if (openContentRow) {
+            openContentRow.classList.remove('is-open');
+        }
+        openRow = null;
+        openContentRow = null;
+    }
+
+    function openExpandedRow(row, contentRow) {
+        openRow = row;
+        openContentRow = contentRow;
+        row.classList.add('is-expanded');
+        contentRow.classList.add('is-open');
+    }
+
+    table.addEventListener('click', (event) => {
+        const target = event.target;
+        const row = target && target.closest ? target.closest('tr.row-expandable[data-op]') : null;
+        if (!row) {
+            return;
+        }
+
+        // Mantem interacoes existentes (ex.: botao "Ver detalhe") como fallback.
+        if (target && target.closest && target.closest('button, a, input, select, textarea, label')) {
+            return;
+        }
+
+        const contentRow = getContentRowFor(row);
+        if (!contentRow) {
+            return;
+        }
+
+        if (openRow === row) {
+            closeExpandedRow();
+            return;
+        }
+
+        closeExpandedRow();
+        openExpandedRow(row, contentRow);
+        setContentHtml(contentRow, '<div class="inline-detail__loading">Carregando detalhe da OP...</div>');
+
+        (async () => {
+            try {
+                const data = await fetchOpDetailFromRow(row);
+                setContentHtml(contentRow, buildInlineHtml(row, data));
+            } catch (error) {
+                setContentHtml(contentRow, `<div class="inline-detail__error">${escapeHtml(error.message || 'Erro ao carregar')}</div>`);
+            }
+        })();
     });
 })();
 </script>

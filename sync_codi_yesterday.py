@@ -1,13 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Script de Sincronizacao CODI - Via API REST - Ultimos 150 Dias
+Script de Sincronizacao CODI - Via API REST - Ultimos 35 Dias
 Pulla dados diretamente da API do CODI e alimenta realizado_2026_excel
 """
 
 import os
 import sys
 import json
+import argparse
 import mysql.connector
 import requests
 from datetime import datetime, timedelta
@@ -174,9 +175,10 @@ def set_sync_status(conn, stage_code, stage_label, stage_detail='', stage_index=
     conn.commit()
     cursor.close()
 
-def get_codi_data_from_api(status_callback=None):
+def get_codi_data_from_api(status_callback=None, start_date=None, end_date=None):
     """
-    Pulla dados da API REST do CODI dos ultimos 150 dias
+    Pulla dados da API REST do CODI para um intervalo de datas.
+    Por padrão: últimos 35 dias até ontem.
     """
     # Configuracoes CODI
     api_url = "http://192.168.8.246:8080/action/ger/webservice/rest/relatorioEventoConsolidado"
@@ -184,9 +186,14 @@ def get_codi_data_from_api(status_callback=None):
     senha = "Eb035611!"
     operacao = 20
     
+    def parse_ymd(value):
+        return datetime.strptime(value, '%Y-%m-%d')
+
     # Calcular intervalo de datas
-    data_final = datetime.now() - timedelta(days=1)
-    data_inicial = data_final - timedelta(days=150)
+    data_final = parse_ymd(end_date) if end_date else (datetime.now() - timedelta(days=1))
+    data_inicial = parse_ymd(start_date) if start_date else (data_final - timedelta(days=35))
+    if data_inicial > data_final:
+        data_inicial, data_final = data_final, data_inicial
     
     log(f"Consultando API CODI de {data_inicial.date()} ate {data_final.date()}")
     
@@ -306,7 +313,7 @@ def get_codi_data_from_api(status_callback=None):
         if contador % 20 == 0:
             log(f"Processadas {contador} datas ({len(todos_os_dados)} registros principais | {len(todos_os_detalhes)} registros brutos)", 'info')
     
-    log(f"Recuperados {len(todos_os_dados)} registros principais e {len(todos_os_detalhes)} registros brutos dos ultimos 150 dias", 'success')
+    log(f"Recuperados {len(todos_os_dados)} registros principais e {len(todos_os_detalhes)} registros brutos dos ultimos 35 dias", 'success')
     if status_callback:
         status_callback(
             'processing_data',
@@ -476,7 +483,12 @@ def insert_realizado_data(conn, data):
 def main():
     """Fluxo principal"""
     try:
-        log("Iniciando sincronizacao CODI via API (ultimos 150 dias)")
+        parser = argparse.ArgumentParser(add_help=False)
+        parser.add_argument('--start', default=None)
+        parser.add_argument('--end', default=None)
+        args, _ = parser.parse_known_args()
+
+        log("Iniciando sincronizacao CODI via API (ultimos 35 dias)")
         
         # Conectar banco
         conn = connect_db()
@@ -504,7 +516,7 @@ def main():
                 log(f"Falha ao atualizar status: {stage_error}", 'warning')
         
         # Puxar dados da API
-        codi_data = get_codi_data_from_api(report_stage)
+        codi_data = get_codi_data_from_api(report_stage, start_date=args.start, end_date=args.end)
         
         realizado_data = codi_data.get('realizado', []) if isinstance(codi_data, dict) else []
         detalhes_data = codi_data.get('detalhes', []) if isinstance(codi_data, dict) else []
@@ -544,7 +556,7 @@ def main():
         # Retornar JSON com resultado
         result = {
             'success': True,
-            'message': f'Sincronizacao concluida: {inserted} registros principais e {detalhe_inserted} registros brutos dos ultimos 150 dias via API CODI',
+            'message': f'Sincronizacao concluida: {inserted} registros principais e {detalhe_inserted} registros brutos dos ultimos 35 dias via API CODI',
             'inserted': inserted,
             'detailInserted': detalhe_inserted,
             'errors': errors

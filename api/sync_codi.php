@@ -139,7 +139,8 @@ try {
         exit;
     }
     
-    if ($action === 'sync_yesterday') {
+    if ($action === 'sync_yesterday' || $action === 'sync_today') {
+        $includeToday = ($action === 'sync_today');
         // Verificar se é sincronização forçada (manual do botão)
         $force = isset($input['force']) && $input['force'] === true;
         
@@ -147,21 +148,39 @@ try {
         $today = date('Y-m-d');
         
         if (!$force) {
-            $checkStmt = $pdo->prepare(
-                'SELECT COUNT(*) FROM realizado_2026_excel WHERE DATE(imported_at) = ?'
-            );
-            $checkStmt->execute([$today]);
-            $countToday = (int)$checkStmt->fetchColumn();
-            
-            // Se já tem sincronizações de hoje, avisar (exceto se force=true)
-            if ($countToday > 0) {
-                echo json_encode([
-                    'success' => false,
-                    'message' => "Já foi sincronizado hoje ($countToday registros inseridos). Próxima sincronização disponível amanhã.",
-                    'alreadySynced' => true,
-                    'recordsToday' => $countToday
-                ]);
-                exit;
+            if (!$includeToday) {
+                $checkStmt = $pdo->prepare(
+                    'SELECT COUNT(*) FROM realizado_2026_excel WHERE DATE(imported_at) = ?'
+                );
+                $checkStmt->execute([$today]);
+                $countToday = (int)$checkStmt->fetchColumn();
+                
+                // Se já tem sincronizações de hoje, avisar (exceto se force=true)
+                if ($countToday > 0) {
+                    echo json_encode([
+                        'success' => false,
+                        'message' => "Já foi sincronizado hoje ($countToday registros inseridos). Próxima sincronização disponível amanhã.",
+                        'alreadySynced' => true,
+                        'recordsToday' => $countToday
+                    ]);
+                    exit;
+                }
+            } else {
+                $checkStmt = $pdo->prepare(
+                    'SELECT COUNT(*) FROM realizado_2026_excel WHERE data_evento = ?'
+                );
+                $checkStmt->execute([$today]);
+                $countForToday = (int) $checkStmt->fetchColumn();
+                
+                if ($countForToday > 0) {
+                    echo json_encode([
+                        'success' => false,
+                        'message' => "Já existe realizado para hoje ($today). Use force=true para re-sincronizar o dia atual.",
+                        'alreadySynced' => true,
+                        'recordsToday' => $countForToday
+                    ]);
+                    exit;
+                }
             }
         }
 
@@ -172,7 +191,7 @@ try {
             'is_running' => 1,
             'stage_code' => 'starting',
             'stage_label' => 'Iniciando',
-            'stage_detail' => 'Preparando sincronização CODI.',
+            'stage_detail' => $includeToday ? 'Preparando sincronização CODI (incluindo hoje).' : 'Preparando sincronização CODI.',
             'stage_index' => 1,
             'stage_total' => 6,
             'backend' => 'php-api',
@@ -186,6 +205,10 @@ try {
         $outputText = '';
         $returnCode = 0;
         $usedBackend = 'python';
+        $start = (new DateTimeImmutable('today'))->modify('-35 days')->format('Y-m-d');
+        $end = $includeToday
+            ? (new DateTimeImmutable('today'))->format('Y-m-d')
+            : (new DateTimeImmutable('today'))->modify('-1 day')->format('Y-m-d');
 
         // Tenta o script Python primeiro. Se o ambiente não tiver o interpretador
         // ou os pacotes, faz fallback para o sincronizador PHP do sandbox.
@@ -195,6 +218,9 @@ try {
         if (file_exists($pythonScript) && file_exists($venvPython)) {
             $output = [];
             $command = escapeshellarg($venvPython) . ' ' . escapeshellarg($pythonScript);
+            if ($includeToday) {
+                $command .= ' --start=' . escapeshellarg($start) . ' --end=' . escapeshellarg($end);
+            }
             exec($command . ' 2>&1', $output, $returnCode);
             $outputText = implode("\n", $output);
         } else {
@@ -209,9 +235,13 @@ try {
                 throw new Exception("Script PHP de fallback não encontrado: $fallbackScript");
             }
 
-            $start = (new DateTimeImmutable('today'))->modify('-150 days')->format('Y-m-d');
-            $end = (new DateTimeImmutable('today'))->modify('-1 day')->format('Y-m-d');
-            $phpBinary = defined('PHP_BINARY') && PHP_BINARY ? PHP_BINARY : 'php';
+            $phpBinary = defined('PHP_BINARY') && PHP_BINARY ? (string) PHP_BINARY : '';
+            // Em runtime HTTP no Windows/Apache, PHP_BINARY pode apontar para o processo errado (ex.: httpd.exe).
+            // Para o fallback funcionar via HTTP, garantimos que o executável seja realmente o php.exe.
+            if ($phpBinary === '' || !preg_match('/\\\\php\\.exe$/i', $phpBinary) || !is_file($phpBinary)) {
+                $xamppPhp = 'C:\\xampp\\php\\php.exe';
+                $phpBinary = is_file($xamppPhp) ? $xamppPhp : 'php';
+            }
             $output = [];
             $command = escapeshellarg($phpBinary) . ' ' . escapeshellarg($fallbackScript)
                 . ' --start=' . escapeshellarg($start)
@@ -223,6 +253,54 @@ try {
             if ($returnCode !== 0) {
                 throw new Exception("Erro ao executar fallback PHP (código: $returnCode):\n$outputText");
             }
+        }
+
+        // Reconstruir realizado_2026_excel sempre a partir do bruto (realizado_2026_eventos)
+        // da janela atual, garantindo que o agregado reflita somente a carga mais recente.
+        try {
+            $pdo->beginTransaction();
+            $hasRawStmt = $pdo->prepare(
+                'SELECT COUNT(*) FROM realizado_2026_eventos WHERE data_evento BETWEEN ? AND ? AND (COALESCE(setup_eventos_count, 0) > 0 OR COALESCE(quantidade, 0) > 0)'
+            );
+            $hasRawStmt->execute([$start, $end]);
+            $rawCount = (int) $hasRawStmt->fetchColumn();
+            if ($rawCount <= 0) {
+                throw new Exception("Nenhum evento bruto encontrado em realizado_2026_eventos para {$start} a {$end}.");
+            }
+            $pdo->exec('DELETE FROM realizado_2026_excel');
+            $stmtRebuild = $pdo->prepare(
+                "
+                INSERT INTO realizado_2026_excel
+                    (data_evento, ordem_op, quantidade, inicio_evento, fim_evento, parada_nomeParada, setup_duracao_minutos, setup_eventos_count)
+                SELECT
+                    data_evento,
+                    ordem_op,
+                    SUM(COALESCE(quantidade, 0)) AS quantidade,
+                    MIN(inicio_evento) AS inicio_evento,
+                    MAX(fim_evento) AS fim_evento,
+                    CASE
+                        WHEN SUM(CASE WHEN UPPER(TRIM(COALESCE(parada_nomeParada, ''))) = 'TROCA DE KIT' THEN 1 ELSE 0 END) > 0 THEN 'TROCA DE KIT'
+                        WHEN SUM(CASE WHEN UPPER(TRIM(COALESCE(parada_nomeParada, ''))) = 'TROCA DE LIQUIDO' THEN 1 ELSE 0 END) > 0 THEN 'TROCA DE LIQUIDO'
+                        ELSE NULLIF(MAX(NULLIF(TRIM(COALESCE(parada_nomeParada, '')), '')), '')
+                    END AS parada_nomeParada,
+                    SUM(COALESCE(setup_duracao_minutos, 0)) AS setup_duracao_minutos,
+                    SUM(COALESCE(setup_eventos_count, 0)) AS setup_eventos_count
+                FROM realizado_2026_eventos
+                WHERE data_evento BETWEEN :start AND :end
+                  AND (COALESCE(setup_eventos_count, 0) > 0 OR COALESCE(quantidade, 0) > 0)
+                GROUP BY data_evento, ordem_op
+                "
+            );
+            $stmtRebuild->execute([
+                'start' => $start,
+                'end' => $end,
+            ]);
+            $pdo->commit();
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw new Exception('Falha ao reconstruir realizado_2026_excel a partir de realizado_2026_eventos: ' . $e->getMessage(), 0, $e);
         }
         
         // Contar registros inseridos

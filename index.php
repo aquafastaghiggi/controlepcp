@@ -8,10 +8,18 @@ use App\Data\DatabaseData;
 Auth::startSession();
 Auth::requireLogin();
 
+// Força UTF-8 nesta página para evitar interpretação ISO-8859-1/Windows-1252 pelo servidor/navegador.
+header('Content-Type: text/html; charset=UTF-8');
+
 $databaseData = new DatabaseData();
 $datasets = $databaseData->all();
 
-$isSandbox = (getenv('APP_ENV') ?: '') === 'sandbox';
+$appEnv = (string) (getenv('APP_ENV') ?: '');
+$isSandbox = $appEnv === 'sandbox';
+// Fallback apenas para o sandbox local quando APP_ENV não está configurado (ex.: XAMPP).
+if (!$isSandbox && $appEnv === '' && stripos(__DIR__, 'controlepcp_sandbox') !== false) {
+    $isSandbox = true;
+}
 $showReleaseCenter = $isSandbox && Auth::isAdmin();
 $releaseCenterState = null;
 

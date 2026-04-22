@@ -147,40 +147,40 @@ try {
         // Verificar se já sincronizou hoje (apenas se não for forçado)
         $today = date('Y-m-d');
         
-        if (!$force) {
-            if (!$includeToday) {
-                $checkStmt = $pdo->prepare(
-                    'SELECT COUNT(*) FROM realizado_2026_excel WHERE DATE(imported_at) = ?'
-                );
-                $checkStmt->execute([$today]);
-                $countToday = (int)$checkStmt->fetchColumn();
-                
-                // Se já tem sincronizações de hoje, avisar (exceto se force=true)
-                if ($countToday > 0) {
-                    echo json_encode([
-                        'success' => false,
-                        'message' => "Já foi sincronizado hoje ($countToday registros inseridos). Próxima sincronização disponível amanhã.",
-                        'alreadySynced' => true,
-                        'recordsToday' => $countToday
-                    ]);
-                    exit;
-                }
-            } else {
-                $checkStmt = $pdo->prepare(
-                    'SELECT COUNT(*) FROM realizado_2026_excel WHERE data_evento = ?'
-                );
-                $checkStmt->execute([$today]);
-                $countForToday = (int) $checkStmt->fetchColumn();
-                
-                if ($countForToday > 0) {
-                    echo json_encode([
-                        'success' => false,
-                        'message' => "Já existe realizado para hoje ($today). Use force=true para re-sincronizar o dia atual.",
-                        'alreadySynced' => true,
-                        'recordsToday' => $countForToday
-                    ]);
-                    exit;
-                }
+        if (!$force && !$includeToday) {
+            $checkStmt = $pdo->prepare(
+                'SELECT COUNT(*) FROM realizado_2026_excel WHERE DATE(imported_at) = ?'
+            );
+            $checkStmt->execute([$today]);
+            $countToday = (int)$checkStmt->fetchColumn();
+
+            // Se já tem sincronizações de hoje, avisar (exceto se force=true)
+            if ($countToday > 0) {
+                echo json_encode([
+                    'success' => false,
+                    'message' => "Já foi sincronizado hoje ($countToday registros inseridos). Próxima sincronização disponível amanhã.",
+                    'alreadySynced' => true,
+                    'recordsToday' => $countToday
+                ]);
+                exit;
+            }
+        }
+
+        if (!$force && $includeToday) {
+            $checkStmt = $pdo->prepare(
+                'SELECT COUNT(*) FROM realizado_2026_excel WHERE data_evento = ?'
+            );
+            $checkStmt->execute([$today]);
+            $countForToday = (int) $checkStmt->fetchColumn();
+
+            if ($countForToday > 0) {
+                echo json_encode([
+                    'success' => false,
+                    'message' => "JÃ¡ existe realizado para hoje ($today). Use force=true para re-sincronizar o dia atual.",
+                    'alreadySynced' => true,
+                    'recordsToday' => $countForToday
+                ]);
+                exit;
             }
         }
 
@@ -267,7 +267,12 @@ try {
             if ($rawCount <= 0) {
                 throw new Exception("Nenhum evento bruto encontrado em realizado_2026_eventos para {$start} a {$end}.");
             }
-            $pdo->exec('DELETE FROM realizado_2026_excel');
+            // Não apagar o histórico inteiro: limpa somente a janela reprocessada.
+            $stmtDelExcel = $pdo->prepare('DELETE FROM realizado_2026_excel WHERE data_evento BETWEEN :start AND :end');
+            $stmtDelExcel->execute([
+                'start' => $start,
+                'end' => $end,
+            ]);
             $stmtRebuild = $pdo->prepare(
                 "
                 INSERT INTO realizado_2026_excel

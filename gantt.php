@@ -1698,7 +1698,7 @@ if (!empty($schedule)) {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                action: 'sync_yesterday',
+                action: 'sync_today',
                 force: true
             })
         })
@@ -1960,7 +1960,7 @@ if (!empty($schedule)) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                action: 'sync_yesterday',
+                action: 'sync_today',
                 force: !!forceSync
             }),
             signal: syncRequestController.signal

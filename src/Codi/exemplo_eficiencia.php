@@ -6,7 +6,7 @@
  * para cruzar dados de programações com performance real do CODI
  */
 
-require_once __DIR__ . '/../../bootstrap.php';
+require_once __DIR__ . '/../bootstrap.php';
 
 use Codi\EficienciaCalculator;
 use Codi\CodiSyncService;

@@ -11,7 +11,7 @@
  * - FASE 6: Dashboard
  */
 
-require_once __DIR__ . '/../../bootstrap.php';
+require_once __DIR__ . '/../bootstrap.php';
 
 use Src\Database\Connection;
 use Codi\CodiClient;

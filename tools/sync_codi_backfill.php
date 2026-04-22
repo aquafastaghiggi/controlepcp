@@ -319,6 +319,7 @@ $mainRows = [];
 $detailRows = [];
 $apiDays = 0;
 $apiEvents = 0;
+$fetchedDays = [];
 
 foreach ($days as $index => $dateStr) {
     set_sync_status($pdo, [
@@ -343,6 +344,10 @@ foreach ($days as $index => $dateStr) {
         log_line($dateStr . ' fetch error: ' . $e->getMessage());
         continue;
     }
+
+    // Mark this day as successfully fetched, even if CODI returned an empty dataset,
+    // so we can reconcile (delete + reinsert) the brute/aggregate for this day.
+    $fetchedDays[$dateStr] = true;
 
     $items = $json['data'] ?? [];
     if (!is_array($items) || empty($items)) {
@@ -468,6 +473,11 @@ foreach ($mainRows as $row) {
 log_line('Grouped rows=' . count($grouped));
 
 if (!$dryRun) {
+    $reconcileDays = array_keys($fetchedDays);
+    if (!empty($reconcileDays)) {
+        $placeholders = implode(',', array_fill(0, count($reconcileDays), '?'));
+    }
+
     set_sync_status($pdo, [
         'sync_key' => 'codi',
         'sync_date' => date('Y-m-d'),
@@ -484,57 +494,62 @@ if (!$dryRun) {
         'records_today' => 0,
         'last_sync_at' => null,
     ]);
-    $sql = "
-        INSERT INTO realizado_2026_excel
-            (data_evento, ordem_op, quantidade, inicio_evento, fim_evento, parada_nomeParada, setup_duracao_minutos, setup_eventos_count)
-        VALUES
-            (?, ?, ?, ?, ?, ?, ?, ?)
-        ON DUPLICATE KEY UPDATE
-            quantidade = VALUES(quantidade),
-            inicio_evento = VALUES(inicio_evento),
-            fim_evento = VALUES(fim_evento),
-            parada_nomeParada = COALESCE(NULLIF(VALUES(parada_nomeParada), ''), parada_nomeParada),
-            setup_duracao_minutos = VALUES(setup_duracao_minutos),
-            setup_eventos_count = VALUES(setup_eventos_count),
-            imported_at = NOW()
-    ";
 
-    $stmt = $pdo->prepare($sql);
-    $affected = 0;
-    foreach ($grouped as $row) {
-        $stmt->execute([
-            $row['data_evento'],
-            $row['ordem_op'],
-            $row['quantidade'],
-            $row['inicio_evento'],
-            $row['fim_evento'],
-            $row['parada_nomeParada'] !== '' ? $row['parada_nomeParada'] : null,
-            $row['setup_duracao_minutos'],
-            $row['setup_eventos_count'],
-        ]);
-        $affected++;
+    try {
+        $pdo->beginTransaction();
+
+        // Reconcile per reprocessed day: remove any stale rows for the days we fetched from CODI,
+        // then insert only the current payload. This prevents old events from lingering when CODI changes.
+        if (!empty($reconcileDays)) {
+            $stmtDelEvents = $pdo->prepare("DELETE FROM realizado_2026_eventos WHERE data_evento IN ($placeholders)");
+            $stmtDelEvents->execute($reconcileDays);
+
+            $stmtDelExcel = $pdo->prepare("DELETE FROM realizado_2026_excel WHERE data_evento IN ($placeholders)");
+            $stmtDelExcel->execute($reconcileDays);
+        }
+
+        $sql = "
+            INSERT INTO realizado_2026_excel
+                (data_evento, ordem_op, quantidade, inicio_evento, fim_evento, parada_nomeParada, setup_duracao_minutos, setup_eventos_count)
+            VALUES
+                (?, ?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+                quantidade = VALUES(quantidade),
+                inicio_evento = VALUES(inicio_evento),
+                fim_evento = VALUES(fim_evento),
+                parada_nomeParada = COALESCE(NULLIF(VALUES(parada_nomeParada), ''), parada_nomeParada),
+                setup_duracao_minutos = VALUES(setup_duracao_minutos),
+                setup_eventos_count = VALUES(setup_eventos_count),
+                imported_at = NOW()
+        ";
+
+        $stmt = $pdo->prepare($sql);
+        $affected = 0;
+        foreach ($grouped as $row) {
+            $stmt->execute([
+                $row['data_evento'],
+                $row['ordem_op'],
+                $row['quantidade'],
+                $row['inicio_evento'],
+                $row['fim_evento'],
+                $row['parada_nomeParada'] !== '' ? $row['parada_nomeParada'] : null,
+                $row['setup_duracao_minutos'],
+                $row['setup_eventos_count'],
+            ]);
+            $affected++;
+        }
+
+        log_line('Upserted rows=' . $affected);
+        [$detailInserted, $detailErrors] = insert_eventos_detalhe($pdo, $detailRows);
+        log_line('Detail rows inserted=' . $detailInserted . ' | errors=' . $detailErrors);
+
+        $pdo->commit();
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $e;
     }
-
-    log_line('Upserted rows=' . $affected);
-
-    set_sync_status($pdo, [
-        'sync_key' => 'codi',
-        'sync_date' => date('Y-m-d'),
-        'is_running' => 1,
-        'stage_code' => 'saving_events',
-        'stage_label' => 'Gravando eventos brutos',
-        'stage_detail' => 'Persistindo realizado_2026_eventos.',
-        'stage_index' => 5,
-        'stage_total' => $stageTotal,
-        'backend' => 'php',
-        'started_at' => $startedAt,
-        'finished_at' => null,
-        'last_error' => null,
-        'records_today' => 0,
-        'last_sync_at' => null,
-    ]);
-    [$detailInserted, $detailErrors] = insert_eventos_detalhe($pdo, $detailRows);
-    log_line('Detail rows inserted=' . $detailInserted . ' | errors=' . $detailErrors);
 }
 
 set_sync_status($pdo, [

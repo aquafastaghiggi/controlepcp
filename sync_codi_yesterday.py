@@ -200,6 +200,7 @@ def get_codi_data_from_api(status_callback=None, start_date=None, end_date=None)
     lista_datas = [data_inicial + timedelta(days=x) for x in range((data_final - data_inicial).days + 1)]
     todos_os_dados = []
     todos_os_detalhes = []
+    dias_ok = []
     
     contador = 0
     for data in lista_datas:
@@ -221,6 +222,7 @@ def get_codi_data_from_api(status_callback=None, start_date=None, end_date=None)
             
             if resposta.status_code == 200:
                 json_data = resposta.json()
+                dias_ok.append(data_str)
                 if "data" in json_data and json_data["data"]:
                     for item in json_data["data"]:
                         codigo_evento = item.get('codigoEvento')
@@ -376,6 +378,7 @@ def get_codi_data_from_api(status_callback=None, start_date=None, end_date=None)
     return {
         'realizado': dados_consolidados,
         'detalhes': todos_os_detalhes,
+        'dias_ok': dias_ok,
     }
 
 def insert_eventos_detalhe(conn, data):
@@ -428,7 +431,6 @@ def insert_eventos_detalhe(conn, data):
             log(f"Erro ao gravar detalhe bruto da OP {row.get('ordem_op', 'UNKNOWN')}: {e}", 'warning')
             errors += 1
 
-    conn.commit()
     cursor.close()
 
     log(f"Detalhes brutos inseridos: {inserted} | Erros: {errors}", 'success' if errors == 0 else 'warning')
@@ -474,7 +476,6 @@ def insert_realizado_data(conn, data):
             log(f"Erro ao inserir OP {row.get('ordem_op', 'UNKNOWN')}: {e}", 'warning')
             errors += 1
     
-    conn.commit()
     cursor.close()
     
     log(f"Inseridos: {inserted} | Erros: {errors}", 'success' if errors == 0 else 'warning')
@@ -520,6 +521,7 @@ def main():
         
         realizado_data = codi_data.get('realizado', []) if isinstance(codi_data, dict) else []
         detalhes_data = codi_data.get('detalhes', []) if isinstance(codi_data, dict) else []
+        dias_ok = codi_data.get('dias_ok', []) if isinstance(codi_data, dict) else []
 
         if not realizado_data and not detalhes_data:
             log("Nenhum dado encontrado na API", 'warning')
@@ -527,6 +529,15 @@ def main():
             conn.close()
             sys.exit(0)
         
+        # Reconcilia os dias reprocessados: remove eventos/linhas antigas desses dias
+        # antes de inserir novamente apenas o payload atual do CODI.
+        if dias_ok:
+            cursor = conn.cursor()
+            placeholders = ",".join(["%s"] * len(dias_ok))
+            cursor.execute(f"DELETE FROM realizado_2026_eventos WHERE data_evento IN ({placeholders})", tuple(dias_ok))
+            cursor.execute(f"DELETE FROM realizado_2026_excel WHERE data_evento IN ({placeholders})", tuple(dias_ok))
+            cursor.close()
+
         # Inserir dados
         report_stage('saving_aggregate', 'Gravando agregado', 'Persistindo tabela realizada_2026_excel.', 4, 6, True)
         inserted, errors = insert_realizado_data(conn, realizado_data)
@@ -535,6 +546,8 @@ def main():
         if detalhes_data:
             report_stage('saving_events', 'Gravando eventos brutos', 'Persistindo realizado_2026_eventos.', 5, 6, True)
             detalhe_inserted, detalhe_errors = insert_eventos_detalhe(conn, detalhes_data)
+
+        conn.commit()
 
         final_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         report_stage(
@@ -569,6 +582,10 @@ def main():
         log(f"Erro fatal: {e}", 'error')
         try:
             if 'conn' in locals() and conn:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
                 set_sync_status(
                     conn,
                     'error',

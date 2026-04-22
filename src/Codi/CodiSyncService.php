@@ -10,7 +10,7 @@
 
 namespace Codi;
 
-require_once __DIR__ . '/../../bootstrap.php';
+require_once __DIR__ . '/../bootstrap.php';
 
 class CodiSyncService
 {
@@ -171,20 +171,63 @@ class CodiSyncService
     {
         $this->log("Syncing performance", 'INFO');
         
+        $inserted = 0;
+        $startPage = max(0, (int)($options['pageNumber'] ?? 0));
+        $pageSize = max(1, (int)($options['pageSize'] ?? 200));
+        $maxPages = max(1, (int)($options['maxPages'] ?? 100));
+        $currentPage = $startPage;
+        $processedPages = 0;
+
         try {
-            // Buscar performance do CODI
-            $performance = $this->client->getPerformance($options);
-            
-            if (!$performance) {
-                $this->log("No performance data returned from CODI", 'WARNING');
-                return 0;
+            while (true) {
+                $filters = $options;
+                unset($filters['maxPages']);
+                $filters['pageNumber'] = $currentPage;
+                $filters['pageSize'] = $pageSize;
+
+                $performance = $this->client->getPerformance($filters);
+
+                if (!$performance || !isset($performance['data']) || !is_array($performance['data'])) {
+                    if ($processedPages === 0) {
+                        $this->log("No performance data returned from CODI", 'WARNING');
+                    }
+                    break;
+                }
+
+                $pageItems = $performance['data'];
+                if (empty($pageItems)) {
+                    $this->log("Performance page {$currentPage} returned no records", 'INFO');
+                    break;
+                }
+
+                $batch = [];
+                foreach ($pageItems as $item) {
+                    if (!is_array($item)) {
+                        continue;
+                    }
+
+                    $normalized = $this->transformPerformance($item);
+                    if ($normalized !== null) {
+                        $batch[] = $normalized;
+                    }
+                }
+
+                if (!empty($batch)) {
+                    $inserted += $this->persistPerformance($batch);
+                }
+
+                $processedPages++;
+                $totalPages = isset($performance['totalPages']) ? (int)$performance['totalPages'] : null;
+                $hasMore = $totalPages !== null
+                    ? ($currentPage + 1 < $totalPages)
+                    : (count($pageItems) >= $pageSize);
+
+                if (!$hasMore || $processedPages >= $maxPages) {
+                    break;
+                }
+
+                $currentPage++;
             }
-            
-            // Transformar dados
-            $perfData = $this->transformPerformance($performance);
-            
-            // Persistir
-            $inserted = $this->persistPerformance($perfData);
             
             $this->log("Performance synced: $inserted records", 'SUCCESS');
             
@@ -262,22 +305,62 @@ class CodiSyncService
      * 
      * @return array
      */
-    private function transformPerformance(array $performance): array
+    private function transformPerformance(array $performance): ?array
     {
-        $timestamp = $performance['timestamp'] ?? date('Y-m-d H:i:s');
+        $codigoPerformance = $this->extractPerformanceValue($performance, [
+            'codigoPerformance',
+            'codigo_performance',
+            'codigo',
+            'id',
+        ]);
+
+        if ($codigoPerformance === null || $codigoPerformance === '') {
+            return null;
+        }
+
+        $timestamp = $this->extractPerformanceValue($performance, [
+            'ultimaAlteracao',
+            'timestamp',
+            'dataColeta',
+            'data_coleta',
+            'data',
+        ]) ?? date('Y-m-d H:i:s');
+
+        $recursoId = $this->extractPerformanceValue($performance, [
+            'recursoItem.codigoRecurso',
+            'recursoItem.codigo',
+            'grandeza.recurso.codigoRecurso',
+            'grandeza.recurso.codigo',
+            'recurso.codigoRecurso',
+            'recurso.codigo',
+            'codigoRecurso',
+            'recurso_id',
+            'recursoId',
+        ]);
+
+        $itemId = $this->extractPerformanceValue($performance, [
+            'item.codigoItem',
+            'item.codigo',
+            'item.id',
+            'codigoItem',
+            'item_id',
+            'itemId',
+        ]);
+
+        $ordemProducao = $this->extractPerformanceValue($performance, [
+            'ordemProducao',
+            'ordem_producao',
+            'ordem',
+            'op',
+        ]);
         
         return [
-            'cdi_data_performance' => substr($timestamp, 0, 10),
-            'cdi_hora_performance' => substr($timestamp, 11, 8),
-            'cdi_timestamp_performance' => $timestamp,
-            'cdi_oee' => (float)($performance['oee'] ?? 0),
-            'cdi_availability' => (float)($performance['availability'] ?? 0),
-            'cdi_performance_pct' => (float)($performance['performance'] ?? 0),
-            'cdi_quality' => (float)($performance['quality'] ?? 0),
-            'cdi_recurso_id_atual' => $performance['currentResource'] ?? null,
-            'cdi_operacao_id_atual' => $performance['currentOrder'] ?? null,
-            'cdi_status_atual' => $performance['status'] ?? 'ATIVO',
-            'cdi_data_sincronizacao' => date('Y-m-d H:i:s'),
+            'perf_codigo_codi' => (int)$codigoPerformance,
+            'perf_recurso_codi_id' => $recursoId !== null && $recursoId !== '' ? (int)$recursoId : null,
+            'perf_item_codi' => $itemId !== null && $itemId !== '' ? (int)$itemId : null,
+            'perf_ordem_producao' => $ordemProducao !== null ? (string)$ordemProducao : null,
+            'perf_dados_json' => json_encode($performance, JSON_UNESCAPED_UNICODE),
+            'perf_sincronizado_em' => date('Y-m-d H:i:s'),
         ];
     }
     
@@ -364,49 +447,97 @@ class CodiSyncService
         }
         
         try {
-            $sql = "INSERT INTO cdi_performance (
-                cdi_data_performance,
-                cdi_hora_performance,
-                cdi_timestamp_performance,
-                cdi_oee,
-                cdi_availability,
-                cdi_performance_pct,
-                cdi_quality,
-                cdi_recurso_id_atual,
-                cdi_operacao_id_atual,
-                cdi_status_atual,
-                cdi_data_sincronizacao
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            $sql = "INSERT INTO codi_performance (
+                perf_codigo_codi,
+                perf_recurso_codi_id,
+                perf_item_codi,
+                perf_ordem_producao,
+                perf_dados_json,
+                perf_sincronizado_em
+            ) VALUES (?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
-                cdi_oee = VALUES(cdi_oee),
-                cdi_availability = VALUES(cdi_availability),
-                cdi_performance_pct = VALUES(cdi_performance_pct),
-                cdi_quality = VALUES(cdi_quality),
-                cdi_status_atual = VALUES(cdi_status_atual),
-                cdi_data_sincronizacao = VALUES(cdi_data_sincronizacao)";
+                perf_recurso_codi_id = VALUES(perf_recurso_codi_id),
+                perf_item_codi = VALUES(perf_item_codi),
+                perf_ordem_producao = VALUES(perf_ordem_producao),
+                perf_dados_json = VALUES(perf_dados_json),
+                perf_sincronizado_em = VALUES(perf_sincronizado_em)";
             
             $stmt = $this->pdo->prepare($sql);
-            
-            $result = $stmt->execute([
-                $perfData['cdi_data_performance'],
-                $perfData['cdi_hora_performance'],
-                $perfData['cdi_timestamp_performance'],
-                $perfData['cdi_oee'],
-                $perfData['cdi_availability'],
-                $perfData['cdi_performance_pct'],
-                $perfData['cdi_quality'],
-                $perfData['cdi_recurso_id_atual'],
-                $perfData['cdi_operacao_id_atual'],
-                $perfData['cdi_status_atual'],
-                $perfData['cdi_data_sincronizacao'],
-            ]);
-            
-            return $result ? 1 : 0;
+            $inserted = 0;
+
+            $this->pdo->beginTransaction();
+
+            foreach ($perfData as $perf) {
+                if (!is_array($perf) || !isset($perf['perf_codigo_codi']) || $perf['perf_codigo_codi'] === null || $perf['perf_codigo_codi'] === '') {
+                    continue;
+                }
+
+                $result = $stmt->execute([
+                    $perf['perf_codigo_codi'],
+                    $perf['perf_recurso_codi_id'],
+                    $perf['perf_item_codi'],
+                    $perf['perf_ordem_producao'],
+                    $perf['perf_dados_json'],
+                    $perf['perf_sincronizado_em'],
+                ]);
+
+                if ($result) {
+                    $inserted++;
+                }
+            }
+
+            $this->pdo->commit();
+            return $inserted;
             
         } catch (\Exception $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
             $this->log("Error persisting performance: {$e->getMessage()}", 'ERROR');
             return 0;
         }
+    }
+
+    /**
+     * Extrair valor de um array, suportando notação com ponto
+     *
+     * @param array $source
+     * @param array $paths
+     * @return mixed|null
+     */
+    private function extractPerformanceValue(array $source, array $paths)
+    {
+        foreach ($paths as $path) {
+            $value = $this->arrayGetByPath($source, $path);
+            if ($value !== null && $value !== '') {
+                return $value;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Buscar valor por caminho com notação "a.b.c"
+     *
+     * @param array $source
+     * @param string $path
+     * @return mixed|null
+     */
+    private function arrayGetByPath(array $source, string $path)
+    {
+        $segments = explode('.', $path);
+        $current = $source;
+
+        foreach ($segments as $segment) {
+            if (!is_array($current) || !array_key_exists($segment, $current)) {
+                return null;
+            }
+
+            $current = $current[$segment];
+        }
+
+        return $current;
     }
     
     /**

@@ -102,6 +102,7 @@ try {
         $recurso_id = (int)($_GET['recurso'] ?? 0);
         $limit = min((int)($_GET['limit'] ?? 100), 500);
         $offset = (int)($_GET['offset'] ?? 0);
+        $full = filter_var($_GET['full'] ?? false, FILTER_VALIDATE_BOOLEAN);
         
         $where = '';
         $params = [];
@@ -112,7 +113,8 @@ try {
         }
         
         $stmt = $pdo->prepare(
-            "SELECT perf_codigo_codi, perf_recurso_codi_id, perf_item_codi, perf_ordem_producao
+            "SELECT perf_codigo_codi, perf_recurso_codi_id, perf_item_codi, perf_ordem_producao" .
+            ($full ? ", perf_dados_json" : "") . "
              FROM codi_performance 
              $where
              ORDER BY perf_codigo_codi DESC
@@ -122,12 +124,27 @@ try {
         
         $dados = [];
         foreach ($stmt->fetchAll(\PDO::FETCH_ASSOC) as $perf) {
+            $payload = null;
+            if ($full && isset($perf['perf_dados_json'])) {
+                $payload = json_decode($perf['perf_dados_json'], true);
+                if (json_last_error() !== JSON_ERROR_NONE) {
+                    $payload = $perf['perf_dados_json'];
+                }
+            }
+            
             $dados[] = [
                 'codigo' => (int)$perf['perf_codigo_codi'],
                 'recurso_id' => $perf['perf_recurso_codi_id'] ? (int)$perf['perf_recurso_codi_id'] : null,
                 'item_id' => $perf['perf_item_codi'] ? (int)$perf['perf_item_codi'] : null,
-                'ordem_producao' => $perf['perf_ordem_producao']
+                'ordem_producao' => $perf['perf_ordem_producao'],
             ];
+
+            if ($full) {
+                $dados[] = array_merge($row, ['payload' => $payload]);
+                continue;
+            }
+
+            $dados[] = $row;
         }
         
         // Total count

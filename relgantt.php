@@ -55,6 +55,139 @@ function formatQtyRounded(float $value): string
     return number_format((float) round($value), 0, ',', '.');
 }
 
+function formatPercentDisplay(float $value): string
+{
+    $formatted = number_format($value, 2, ',', '.');
+    $formatted = rtrim(rtrim($formatted, '0'), ',');
+    return $formatted . '%';
+}
+
+function normalizePerformanceResourceKey(?string $value): string
+{
+    $value = strtoupper(trim((string) $value));
+    if ($value === '') {
+        return '';
+    }
+
+    if (preg_match('/\d+/', $value, $match)) {
+        $digits = (string) ((int) $match[0]);
+        $prefix = preg_replace('/\d+/', '', $value);
+        $prefix = preg_replace('/\s+/', '', (string) $prefix);
+        return $prefix . $digits;
+    }
+
+    return lineFilterKey($value);
+}
+
+function performanceLineKeyAliases(?string $value): array
+{
+    $value = trim((string) $value);
+    if ($value === '') {
+        return [];
+    }
+
+    $aliases = [
+        normalizePerformanceResourceKey($value),
+        normalizePerformanceResourceKey(lineLabel($value)),
+        lineFilterKey($value),
+    ];
+
+    if (preg_match('/(\d+)/', $value, $match)) {
+        $lineNumber = (int) $match[1];
+        $aliases[] = (string) $lineNumber;
+        $aliases[] = sprintf('%02d', $lineNumber);
+        $aliases[] = 'LINHA' . $lineNumber;
+        $aliases[] = 'LINHA' . sprintf('%02d', $lineNumber);
+    }
+
+    return array_values(array_unique(array_filter($aliases, static fn(string $alias): bool => $alias !== '')));
+}
+
+function loadCodiPerformanceCatalog(): array
+{
+    static $catalog = null;
+    if (is_array($catalog)) {
+        return $catalog;
+    }
+
+    $catalog = [
+        'by_key' => [],
+        'by_sku' => [],
+    ];
+    if (!class_exists(\Codi\CodiClient::class)) {
+        require_once __DIR__ . '/src/Codi/CodiClient.php';
+    }
+
+    $baseUrl = getenv('CODI_URL') ?: 'http://192.168.8.246:8080';
+    $username = getenv('CODI_USER') ?: 'Aghiggi';
+    $password = getenv('CODI_PASS') ?: '@Ag0351@';
+    $companyCode = getenv('CODI_COMPANY') ?: 'matriz';
+
+    try {
+        $client = new \Codi\CodiClient($baseUrl, $username, $password, $companyCode);
+        $performance = $client->getPerformance(['pageSize' => 1000]);
+    } catch (Throwable $e) {
+        return $catalog;
+    }
+
+    $rows = $performance['data'] ?? [];
+    if (!is_array($rows)) {
+        return $catalog;
+    }
+
+    foreach ($rows as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+
+        $sku = trim((string) ($row['item']['codItem'] ?? ''));
+        $resourceAliases = performanceLineKeyAliases((string) ($row['grandeza']['recurso']['nomeRecurso'] ?? ''));
+        $resourceCode = trim((string) ($row['grandeza']['recurso']['codigoRecurso'] ?? $row['grandeza']['recurso']['codigo'] ?? ''));
+        if ($resourceCode !== '') {
+            $resourceAliases[] = $resourceCode;
+        }
+        $performanceValue = isset($row['performance']) ? (float) $row['performance'] : null;
+
+        if ($sku === '' || empty($resourceAliases) || $performanceValue === null) {
+            continue;
+        }
+
+        foreach (array_unique($resourceAliases) as $resourceAlias) {
+            $catalog['by_key'][$resourceAlias . '|' . $sku] = $performanceValue;
+        }
+
+        $catalog['by_sku'][$sku] ??= [];
+        $catalog['by_sku'][$sku][] = $performanceValue;
+    }
+
+    return $catalog;
+}
+
+function resolveCodiNominalPerformance(array $catalog, string $resourceKey, string $sku): ?float
+{
+    $sku = trim($sku);
+    if ($sku === '') {
+        return null;
+    }
+
+    $resourceKey = trim($resourceKey);
+    if ($resourceKey !== '' && isset($catalog['by_key'][$resourceKey . '|' . $sku])) {
+        return (float) $catalog['by_key'][$resourceKey . '|' . $sku];
+    }
+
+    $skuValues = $catalog['by_sku'][$sku] ?? [];
+    if (!is_array($skuValues) || $skuValues === []) {
+        return null;
+    }
+
+    $uniqueValues = array_values(array_unique(array_map(static fn($value): string => (string) $value, $skuValues)));
+    if (count($uniqueValues) === 1) {
+        return (float) $uniqueValues[0];
+    }
+
+    return null;
+}
+
 function formatDurationClock(float $minutes): string
 {
     return formatMinutesClock(max(0.0, $minutes), false);
@@ -1259,11 +1392,11 @@ if ($selectedProgramId > 0) {
             GROUP BY ordem_op
             "
         );
-        $realizadoStmt->execute(array_merge([$reportPeriodStart, $reportPeriodEnd], $ops));
-        $realizadoRows = $realizadoStmt->fetchAll(PDO::FETCH_ASSOC);
+    $realizadoStmt->execute(array_merge([$reportPeriodStart, $reportPeriodEnd], $ops));
+    $realizadoRows = $realizadoStmt->fetchAll(PDO::FETCH_ASSOC);
 
-        foreach ($realizadoRows as $row) {
-            $op = trim((string) ($row['ordem_op'] ?? ''));
+    foreach ($realizadoRows as $row) {
+        $op = trim((string) ($row['ordem_op'] ?? ''));
             if ($op === '' || !isset($reportRows[$op])) {
                 continue;
             }
@@ -1272,14 +1405,108 @@ if ($selectedProgramId > 0) {
             $reportRows[$op]['setup_realizado_min'] = (float) ($row['setup_realizado_min'] ?? 0);
             $reportRows[$op]['setup_realizado_eventos'] = (int) ($row['setup_realizado_eventos'] ?? 0);
             $reportRows[$op]['tempo_realizado_min'] = (float) ($row['tempo_realizado_min'] ?? 0);
-            $reportRows[$op]['inicio_real'] = (string) ($row['inicio_real'] ?? '');
-            $reportRows[$op]['fim_real'] = (string) ($row['fim_real'] ?? '');
-        }
+        $reportRows[$op]['inicio_real'] = (string) ($row['inicio_real'] ?? '');
+        $reportRows[$op]['fim_real'] = (string) ($row['fim_real'] ?? '');
+    }
 
-        // Recalcular tempo realizado aplicando calendario produtivo (turnos) sobre os intervalos reais do CODI,
-        // com consolidacao de intervalos sem sobreposicao.
-        if ($workCalendar instanceof WorkCalendar) {
-            $intervalStmt = $pdo->prepare(
+    $tempoProducaoByOp = [];
+    if (tableExists($pdo, 'realizado_2026_eventos')) {
+        $tempoProdStmt = $pdo->prepare(
+            "
+            SELECT
+                ordem_op,
+                SUM(
+                    CASE
+                        WHEN estado_evento = 'PRODUCAO'
+                        THEN quantidade
+                        ELSE 0
+                    END
+                ) AS producao_eventos,
+                SUM(
+                    CASE
+                        WHEN estado_evento = 'PRODUCAO'
+                        THEN duracao_evento_minutos
+                        ELSE 0
+                    END
+                ) AS tempo_producao_min
+            FROM realizado_2026_eventos
+            WHERE data_evento BETWEEN ? AND ?
+              AND ordem_op IN ($placeholders)
+            GROUP BY ordem_op
+            "
+        );
+        $tempoProdStmt->execute(array_merge([$reportPeriodStart, $reportPeriodEnd], $ops));
+        foreach ($tempoProdStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $op = trim((string) ($row['ordem_op'] ?? ''));
+            if ($op === '') {
+                continue;
+            }
+
+            $tempoProducaoByOp[$op] = [
+                'producao_eventos' => (float) ($row['producao_eventos'] ?? 0),
+                'tempo_producao_min' => (float) ($row['tempo_producao_min'] ?? 0),
+            ];
+        }
+    }
+
+    $selectedLinePerformanceKey = normalizePerformanceResourceKey(lineLabel((string) ($selectedLine ?? ($selectedProgram['lin_codigo'] ?? ''))));
+    $codiPerformanceCatalog = loadCodiPerformanceCatalog();
+
+    $codiEfficiencyByOp = [];
+    if (tableExists($pdo, 'realizado_2026_eventos')) {
+        $codiPerfStmt = $pdo->prepare(
+            "
+            SELECT
+                ordem_op,
+                CASE
+                    WHEN SUM(
+                        CASE
+                            WHEN estado_evento = 'PRODUCAO'
+                                 AND JSON_EXTRACT(payload_json, '$.performancePeriodo') IS NOT NULL
+                            THEN duracao_evento_minutos
+                            ELSE 0
+                        END
+                    ) > 0
+                    THEN (
+                        SUM(
+                            CASE
+                                WHEN estado_evento = 'PRODUCAO'
+                                     AND JSON_EXTRACT(payload_json, '$.performancePeriodo') IS NOT NULL
+                                THEN JSON_EXTRACT(payload_json, '$.performancePeriodo') * duracao_evento_minutos
+                                ELSE 0
+                            END
+                        ) /
+                        SUM(
+                            CASE
+                                WHEN estado_evento = 'PRODUCAO'
+                                     AND JSON_EXTRACT(payload_json, '$.performancePeriodo') IS NOT NULL
+                                THEN duracao_evento_minutos
+                                ELSE 0
+                            END
+                        )
+                    ) * 100
+                    ELSE NULL
+                END AS eficiencia_codi_pct
+            FROM realizado_2026_eventos
+            WHERE data_evento BETWEEN ? AND ?
+              AND ordem_op IN ($placeholders)
+            GROUP BY ordem_op
+            "
+        );
+        $codiPerfStmt->execute(array_merge([$reportPeriodStart, $reportPeriodEnd], $ops));
+        foreach ($codiPerfStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $op = trim((string) ($row['ordem_op'] ?? ''));
+            if ($op === '') {
+                continue;
+            }
+            $codiEfficiencyByOp[$op] = isset($row['eficiencia_codi_pct']) ? (float) $row['eficiencia_codi_pct'] : null;
+        }
+    }
+
+    // Recalcular tempo realizado aplicando calendario produtivo (turnos) sobre os intervalos reais do CODI,
+    // com consolidacao de intervalos sem sobreposicao.
+    if ($workCalendar instanceof WorkCalendar) {
+        $intervalStmt = $pdo->prepare(
                 "
                 SELECT
                     ordem_op,
@@ -1438,6 +1665,21 @@ if ($selectedProgramId > 0) {
         $prodRowDiff = (float) ($row['producao_realizada'] ?? 0) - (float) ($row['producao_prevista'] ?? 0);
         $setupStatus = getRowSetupStatus($row);
         $statusBucket = (string) ($setupStatus['status_key'] ?? 'sem_setup');
+        $op = trim((string) ($row['op'] ?? ''));
+        $sku = trim((string) ($row['sku'] ?? ''));
+        $eficienciaCodiPct = $op !== '' && isset($codiEfficiencyByOp[$op]) ? (float) $codiEfficiencyByOp[$op] : null;
+
+        if ($op !== '' && $sku !== '') {
+            $nominalPerformance = resolveCodiNominalPerformance($codiPerformanceCatalog, $selectedLinePerformanceKey, $sku);
+            if ($nominalPerformance !== null) {
+                $tempoProducao = (float) ($tempoProducaoByOp[$op]['tempo_producao_min'] ?? 0);
+                $producaoEventos = (float) ($tempoProducaoByOp[$op]['producao_eventos'] ?? ($row['producao_realizada'] ?? 0));
+
+                if ($nominalPerformance > 0.0001 && $tempoProducao > 0.0001) {
+                    $eficienciaCodiPct = ($producaoEventos / $tempoProducao / $nominalPerformance) * 100;
+                }
+            }
+        }
 
         if ($setupPlan > 0.01) {
             if ($setupEvents <= 0) {
@@ -1462,6 +1704,8 @@ if ($selectedProgramId > 0) {
             'tag_label' => $setupStatus['label'] ?? 'Sem setup',
             'tag_title' => $setupStatus['title'] ?? '',
             'is_critical' => !empty($setupStatus['critical']),
+            'eficiencia_proj_pct' => (float) ($selectedProgram['prg_eficiencia'] ?? 0),
+            'eficiencia_codi_pct' => $eficienciaCodiPct,
         ]);
     }
 
@@ -1786,7 +2030,7 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
         .status-card.is-neutral .value { color: var(--accent-2); }
 
         .report-card {
-            overflow: hidden;
+            overflow: visible;
         }
 
         .report-head {
@@ -1811,7 +2055,7 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
         }
 
         .table-wrap {
-            overflow: auto;
+            overflow: visible;
         }
 
         table {
@@ -2867,6 +3111,8 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
                                         data-setup-plan-min="<?= h((string) $setupPlan) ?>"
                                         data-setup-plan="<?= h(formatMinutes($setupPlan)) ?>"
                                         data-setup-real="<?= h(formatMinutes($setupReal)) ?>"
+                                        data-eff-proj="<?= h(formatPercentDisplay((float) ($row['eficiencia_proj_pct'] ?? 0))) ?>"
+                                        data-eff-codi="<?= h(isset($row['eficiencia_codi_pct']) ? formatPercentDisplay((float) $row['eficiencia_codi_pct']) : '--') ?>"
                                         title="Abrir detalhe complementar da OP"
                                     >
                                         Ver detalhe
@@ -3062,7 +3308,8 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
     const detailButtons = document.querySelectorAll('.detail-btn[data-op]');
     const detailState = {
         mainOnly: true,
-        data: null
+        data: null,
+        meta: null
     };
 
     function escapeHtml(value) {
@@ -3318,10 +3565,21 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
         const namedCounts = data.support_named_paradas || {};
         const visibleTotalMinutes = filteredGroupedRows.reduce((sum, row) => sum + Number(row.duracao_total_minutos || 0), 0);
         const periodLabel = `${formatDateDisplay(data.period_start)} a ${formatDateDisplay(data.period_end)}`;
+        const meta = detailState.meta || {};
+        const effProjLabel = meta.effProj || '--';
+        const effCodiLabel = meta.effCodi || '--';
 
         titleEl.textContent = `OP ${data.op} - detalhe complementar`;
         subtitleEl.innerHTML = `Cálculo principal preservado: somente <strong><?= h($setupRuleLabel) ?></strong>. Período: <strong>${escapeHtml(periodLabel)}</strong>.`;
         kpisEl.innerHTML = `
+            <div class="detail-kpi">
+                <div class="label">Eficiência projetada</div>
+                <div class="value">${escapeHtml(effProjLabel)}</div>
+            </div>
+            <div class="detail-kpi">
+                <div class="label">Eficiência CODI</div>
+                <div class="value">${escapeHtml(effCodiLabel)}</div>
+            </div>
             <div class="detail-kpi">
                 <div class="label">Registros</div>
                 <div class="value">${escapeHtml(summary.rows_total || 0)}</div>
@@ -3399,10 +3657,13 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
         const setupPlanMin = button.getAttribute('data-setup-plan-min') || '';
         const setupPlan = button.getAttribute('data-setup-plan') || '';
         const setupReal = button.getAttribute('data-setup-real') || '';
+        const effProj = button.getAttribute('data-eff-proj') || '--';
+        const effCodi = button.getAttribute('data-eff-codi') || '--';
 
         titleEl.textContent = `OP ${op} - detalhe complementar`;
         subtitleEl.innerHTML = `Cálculo principal preservado: somente <strong><?= h($setupRuleLabel) ?></strong>. Período: <strong>${escapeHtml(formatDateDisplay(periodStart))} a ${escapeHtml(formatDateDisplay(periodEnd))}</strong>.`;
         detailState.data = null;
+        detailState.meta = { effProj, effCodi };
         if (mainOnlyToggle) {
             mainOnlyToggle.checked = true;
         }
@@ -3412,6 +3673,14 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
             <div class="detail-kpi">
                 <div class="label">OP</div>
                 <div class="value">${escapeHtml(op)}</div>
+            </div>
+            <div class="detail-kpi">
+                <div class="label">Eficiência projetada</div>
+                <div class="value">${escapeHtml(effProj)}</div>
+            </div>
+            <div class="detail-kpi">
+                <div class="label">Eficiência CODI</div>
+                <div class="value">${escapeHtml(effCodi)}</div>
             </div>
             <div class="detail-kpi">
                 <div class="label">Setup previsto</div>
@@ -3595,7 +3864,7 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
     function setContentHtml(contentRow, html) {
         const container = contentRow.querySelector('.inline-detail');
         if (!container) {
-            contentRow.innerHTML = `<td colspan="14"><div class="inline-detail">${html}</div></td>`;
+                    contentRow.innerHTML = `<td colspan="14"><div class="inline-detail">${html}</div></td>`;
             return;
         }
 

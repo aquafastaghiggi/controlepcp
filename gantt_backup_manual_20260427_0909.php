@@ -296,30 +296,24 @@ if (!empty($schedule)) {
 
     // Coletar todos os periodos e OPs nao-setup de uma vez, respeitando a janela da tela
     $opsPeriodos = [];
-    $screenStartTs = strtotime($screenPeriodStart . ' 00:00:00');
-    $screenEndTs = strtotime($screenPeriodEnd . ' 23:59:59');
     foreach ($schedule as $schRow) {
         if (strtolower(trim($schRow['sch_tipo'] ?? '')) === 'setup') continue;
         if (empty($schRow['sch_sku']) || empty($schRow['sch_inicio_producao'])) continue;
         $opItem = $assignedOps[(int)($schRow['sch_id'] ?? 0)] ?? 'S/OP';
         if ($opItem === 'S/OP') continue;
 
-        // Importante: limitar o realizado ao periodo do item planejado para evitar "vazamento"
-        // quando a mesma OP tiver eventos em outros periodos.
-        $itemStartTs = strtotime((string) $schRow['sch_inicio_producao']);
-        $itemEndTs = strtotime((string) $schRow['sch_fim_producao']);
-        if (!$itemStartTs || !$itemEndTs) continue;
-
-        $queryStartTs = max($screenStartTs, $itemStartTs);
-        $queryEndTs = min($screenEndTs, $itemEndTs);
-        if ($queryStartTs > $queryEndTs) {
+        $itemStart = date('Y-m-d', strtotime((string) $schRow['sch_inicio_producao']));
+        $itemEnd = date('Y-m-d', strtotime((string) $schRow['sch_fim_producao']));
+        $queryStart = max($screenPeriodStart, $itemStart);
+        $queryEnd = $screenPeriodEnd;
+        if ($queryStart > $queryEnd) {
             continue;
         }
 
         $opsPeriodos[] = [
             'op'     => $opItem,
-            'inicio' => date('Y-m-d H:i:s', $queryStartTs),
-            'fim'    => date('Y-m-d H:i:s', $queryEndTs),
+            'inicio' => $queryStart,
+            'fim'    => $queryEnd,
             'chave'  => $opItem . '|' . $schRow['sch_inicio_producao'],
         ];
     }
@@ -463,10 +457,6 @@ if (!empty($schedule)) {
             --pcp-timeline-rowline: rgba(226, 232, 240, 0.68);
             --pcp-timeline-dayline: rgba(148, 163, 184, 0.95);
             --pcp-timeline-header-zebra-6h: rgba(15, 23, 42, 0.012);
-
-            /* Dimensoes principais (derivadas do gantt.config.row_height via JS) */
-            --pcp-row-height: 29px;
-            --pcp-bar-height: 13px;
 
             --setup-color: var(--pcp-color-setup);
             --prod-color: var(--pcp-color-prod);
@@ -654,8 +644,8 @@ if (!empty($schedule)) {
         .gantt_task_line { border-radius: 4px; border: none; padding: 0; }
         /* Barra principal: altura mais fina, texto centralizado e elegante */
         .gantt_task_bar {
-            height: var(--pcp-bar-height) !important;
-            min-height: var(--pcp-bar-height) !important;
+            height: 13px !important;
+            min-height: 13px !important;
             border-radius: 7px !important;
             padding: 0 8px !important;
             margin: 0 !important;
@@ -798,7 +788,7 @@ if (!empty($schedule)) {
             padding-right: 10px;
             font-weight: 900;
             color: #0f172a;
-            line-height: var(--pcp-row-height); /* alinha no meio da linha ajustada */
+            line-height: 29px; /* alinha no meio da linha ajustada */
         }
 
         .pcp-grid-prod {
@@ -858,13 +848,13 @@ if (!empty($schedule)) {
             border-radius: 4px !important;
             display: flex !important;
             align-items: center !important;
-            height: var(--pcp-row-height) !important;
-            min-height: var(--pcp-row-height) !important; /* respeita a altura da raia */
+            height: 29px !important;
+            min-height: 29px !important; /* respeita a altura da raia */
         }
         .gantt_task_line.pcp-task-realizado .gantt_task_bar {
             /* herdar visual da barra principal, apenas trocar a cor */
-            height: var(--pcp-bar-height) !important;
-            min-height: var(--pcp-bar-height) !important;
+            height: 10px !important;
+            min-height: 10px !important;
             border-radius: 4px !important;
             padding: 0 8px !important;
             box-shadow: none !important;
@@ -876,7 +866,7 @@ if (!empty($schedule)) {
             border: 1px solid var(--pcp-color-realizado-neutral-border) !important;
             color: inherit !important;
             overflow: visible !important;
-            transform: none !important;
+            transform: translateY(-1px) !important;
         }
         .gantt_task_line.pcp-task-realizado .gantt_task_content {
             display: none !important;
@@ -894,15 +884,6 @@ if (!empty($schedule)) {
             color: transparent !important;
             border: none !important;
             box-shadow: none !important;
-        }
-
-        /* Destaque do dia atual na escala e na grade */
-        .gantt_scale_cell.pcp-scale-today {
-            background: rgba(16, 185, 129, 0.10) !important;
-            box-shadow: inset 0 -2px 0 rgba(16, 185, 129, 0.55);
-        }
-        .gantt_task_cell.pcp-timeline-today {
-            background: rgba(16, 185, 129, 0.05) !important;
         }
 
         /* Centralizar verticalmente os badges Previsto/Realizado dentro da linha */
@@ -1150,11 +1131,6 @@ if (!empty($schedule)) {
     gantt.config.autosize = false; 
     gantt.config.scroll_size = 24; // Barra de scroll mais larga e fácil de clicar
     gantt.config.enable_scroll = true;
-
-    // Remover domingo da timeline (sem remover horas do dia)
-    gantt.config.work_time = true;
-    gantt.config.skip_off_time = true;
-    gantt.setWorkTime({ days: [1, 2, 3, 4, 5, 6], hours: [0, 24] });
     
     // Configuração de Layout para garantir scrolls
     gantt.config.layout = {
@@ -1369,32 +1345,19 @@ if (!empty($schedule)) {
     };
 
     // CABE?ALHO HIER?RQUICO (Semanas, Dias e marca??es de 6h)
-    var pcpToday = new Date();
-    pcpToday.setHours(0, 0, 0, 0);
-    function pcpIsToday(date) {
-        var d = (date instanceof Date) ? new Date(date.getTime()) : new Date(date);
-        d.setHours(0, 0, 0, 0);
-        return d.getTime() === pcpToday.getTime();
-    }
     gantt.config.scales = [
         {unit: "week", step: 1, format: function(date){
             var dateToStr = gantt.date.date_to_str("Semana %W");
             return dateToStr(date);
-        }, css: function(date) {
-            return pcpIsToday(date) ? "pcp-scale-today" : "";
         }},
-        {unit: "day", step: 1, format: "%D, %d %M", css: function(date) {
-            return pcpIsToday(date) ? "pcp-scale-today" : "";
-        }},
+        {unit: "day", step: 1, format: "%D, %d %M"},
         {unit: "hour", step: 6, format: function(date){
             var hourToStr = gantt.date.date_to_str("%Hh");
             return hourToStr(date);
         }, css: function(date){
             var isDayStart = date.getHours() === 0;
             var isAlt = Math.floor(date.getHours() / 6) % 2 === 1;
-            var isToday = pcpIsToday(date);
             return "pcp-scale-6h"
-                + (isToday ? " pcp-scale-today" : "")
                 + (isAlt ? " pcp-scale-6h--alt" : "")
                 + (isDayStart ? " pcp-scale-6h--day-start" : "");
         }}
@@ -1406,26 +1369,14 @@ if (!empty($schedule)) {
     gantt.config.scale_height = 44;
     // raia reduzida (manter legibilidade) — ajustado para recuperar respiro
     gantt.config.row_height = 29;
-    gantt.config.bar_height = 13;
     gantt.config.min_column_width = 50;
     gantt.config.show_task_cells = true;
     gantt.templates.timeline_cell_class = function(task, date){
         var isDayStart = date.getHours() === 0;
         var isAlt = Math.floor(date.getHours() / 6) % 2 === 1;
-        var isToday = pcpIsToday(date);
         return "pcp-timeline-6h"
-            + (isToday ? " pcp-timeline-today" : "")
             + (isAlt ? " pcp-timeline-6h--alt" : "")
             + (isDayStart ? " pcp-timeline-6h--day-start" : "");
-    };
-
-    // Labels mais claros e previsiveis dentro da barra (sem depender do texto bruto do task.text)
-    gantt.templates.task_text = function(start, end, task) {
-        var tipo = String(task.tipo || "").toLowerCase();
-        if (tipo === "realizado") return "";
-        if (tipo === "setup") return "SETUP";
-        if (task.op && task.op !== "S/OP") return "OP " + String(task.op);
-        return "";
     };
 
     // Inicializa??o com os dados
@@ -1435,12 +1386,6 @@ if (!empty($schedule)) {
 
     gantt.init("gantt_here");
     gantt.parse(tasksData);
-
-    // Derivar variaveis CSS a partir das configs do Gantt para manter alturas uniformes
-    try {
-        document.documentElement.style.setProperty("--pcp-row-height", String(gantt.config.row_height || 29) + "px");
-        document.documentElement.style.setProperty("--pcp-bar-height", String(gantt.config.bar_height || 13) + "px");
-    } catch (e) {}
 
     // ===== SCROLL/ZOOM VIA WHEEL (mouse/trackpad) dentro do Gantt =====
     // Regras:

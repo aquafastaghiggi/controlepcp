@@ -1,8 +1,8 @@
 <?php
 // encoding: UTF-8
 /**
- * Gráfico de Gantt PCP - Versão Final (DHTMLX Gantt com Scroll Persistente)
- * Foco em: Cabeçalho Hierárquico, Scroll Vertical/Horizontal Sempre Visíveis.
+ * Gantt PCP - Modelo visual por Semana / Dia / Hora
+ * Tela experimental: não substitui o gantt.php principal.
  */
 
 declare(strict_types=1);
@@ -14,202 +14,235 @@ use App\Repository\ProgramacaoRepository;
 use App\Database\Connection;
 
 Auth::startSession();
+
 $repo = new ProgramacaoRepository();
 $pdo = Connection::get();
 
-// Paleta visual centralizada do Gantt (fonte de verdade para PHP/CSS/JS)
-$pcpPalette = [
-    'prod' => '#3498db',
-    'setup' => '#e67e22',
-    'realizado' => '#ef4444',
-    'realizado_neutral' => '#64748b',
-    'status_ok' => '#10b981',
-    'status_warn' => '#f59e0b',
-    'status_bad' => '#ef4444',
-    'status_none' => '#6b7280',
-    'neutral_light' => '#d1d5db',
-    'realizado_border' => 'rgba(185,28,28,0.7)',
-    'realizado_neutral_border' => 'rgba(51,65,85,0.55)',
-    'setup_border' => 'rgba(154, 52, 18, 0.35)',
-    'overlay_text' => 'rgba(255,255,255,0.92)',
-    'overlay_muted' => 'rgba(255,255,255,0.75)',
-    'overlay_divider' => 'rgba(255,255,255,0.55)',
-];
+function e(?string $value): string
+{
+    return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
+}
 
-// Buscar lista de programa??es para o seletor
-$programacoes = $repo->getAllProgramacoes(100, 0);
+function brDateTime(?string $value): string
+{
+    if (!$value || strtotime($value) === false) {
+        return '-';
+    }
+    return date('d/m H:i', strtotime($value));
+}
 
-$ganttNormalizeLineLabel = static function (?string $value): string {
+function brDate(?DateTimeInterface $date): string
+{
+    return $date ? $date->format('d/m/Y') : '-';
+}
+
+function weekLabel(DateTimeInterface $date): string
+{
+    return 'SEMANA ' . $date->format('W');
+}
+
+function dayLabel(DateTimeInterface $date): string
+{
+    $dias = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
+    return $dias[(int) $date->format('w')] . '<br><small>' . $date->format('d/m') . '</small>';
+}
+
+function isSunday(DateTimeInterface $date): bool
+{
+    return (int) $date->format('w') === 0;
+}
+
+function tableExists(PDO $pdo, string $tableName): bool
+{
+    static $cache = [];
+    if (array_key_exists($tableName, $cache)) {
+        return $cache[$tableName];
+    }
+
+    try {
+        $stmt = $pdo->prepare(
+            "SELECT 1
+             FROM information_schema.tables
+             WHERE table_schema = DATABASE()
+               AND table_name = ?
+             LIMIT 1"
+        );
+        $stmt->execute([$tableName]);
+        $cache[$tableName] = (bool) $stmt->fetchColumn();
+    } catch (Throwable) {
+        $cache[$tableName] = false;
+    }
+
+    return $cache[$tableName];
+}
+
+function isSetupTargetParada(?string $nomeParada): bool
+{
+    $nomeParada = strtoupper(trim((string) $nomeParada));
+    return in_array($nomeParada, ['TROCA DE KIT', 'TROCA DE LIQUIDO'], true);
+}
+
+function normalizeLineLabel(?string $value): string
+{
     $raw = trim((string) $value);
     if ($raw === '') {
         return 'S/Linha';
     }
-
-    if (preg_match('/^(?:linha|ln)\s*0*(\d+)$/iu', $raw, $match) === 1) {
-        return 'Linha ' . str_pad((string) (int) $match[1], 2, '0', STR_PAD_LEFT);
+    if (preg_match('/^(?:linha|ln)\s*0*(\d+)$/iu', $raw, $m) === 1 || preg_match('/^0*(\d+)$/u', $raw, $m) === 1) {
+        return 'Linha ' . str_pad((string) (int) $m[1], 2, '0', STR_PAD_LEFT);
     }
-
-    if (preg_match('/^0*(\d+)$/u', $raw, $match) === 1) {
-        return 'Linha ' . str_pad((string) (int) $match[1], 2, '0', STR_PAD_LEFT);
-    }
-
     return $raw;
-};
+}
 
-$ganttExtractLineSortInfo = static function (array $prg) use ($ganttNormalizeLineLabel): array {
-    $candidates = [
-        (string) ($prg['linha_excel_dominante'] ?? ''),
-        (string) ($prg['lin_codigo'] ?? ''),
-    ];
+function minutesInVisibleAxis(DateTimeInterface $date, array $dayOffsets, int $visibleStartHour, int $visibleEndHour): ?int
+{
+    $key = $date->format('Y-m-d');
+    if (!array_key_exists($key, $dayOffsets)) {
+        return null;
+    }
 
-    foreach ($candidates as $candidate) {
-        $raw = trim($candidate);
-        if ($raw === '') {
-            continue;
+    $hour = (int) $date->format('H');
+    $minute = (int) $date->format('i');
+    $rawMinutes = ($hour * 60) + $minute;
+    $start = $visibleStartHour * 60;
+    $end = $visibleEndHour * 60;
+    $clamped = max($start, min($end, $rawMinutes));
+
+    return ($dayOffsets[$key] * (($visibleEndHour - $visibleStartHour) * 60)) + ($clamped - $start);
+}
+
+function buildVisibleSegments(string $startValue, string $endValue, array $dayOffsets, int $visibleStartHour, int $visibleEndHour): array
+{
+    $startTs = strtotime($startValue);
+    $endTs = strtotime($endValue);
+    if ($startTs === false || $endTs === false || $endTs <= $startTs) {
+        return [];
+    }
+
+    $start = new DateTimeImmutable(date('Y-m-d H:i:s', $startTs));
+    $end = new DateTimeImmutable(date('Y-m-d H:i:s', $endTs));
+
+    $visibleDates = array_keys($dayOffsets);
+    if (empty($visibleDates)) {
+        return [];
+    }
+
+    $firstVisible = new DateTimeImmutable($visibleDates[0] . ' ' . str_pad((string) $visibleStartHour, 2, '0', STR_PAD_LEFT) . ':00:00');
+    $lastVisible = new DateTimeImmutable(end($visibleDates) . ' ' . str_pad((string) $visibleEndHour, 2, '0', STR_PAD_LEFT) . ':00:00');
+
+    if ($end <= $firstVisible || $start >= $lastVisible) {
+        return [];
+    }
+
+    if ($start < $firstVisible) {
+        $start = $firstVisible;
+    }
+    if ($end > $lastVisible) {
+        $end = $lastVisible;
+    }
+
+    $moveStartToVisible = static function (DateTimeImmutable $dt) use ($dayOffsets, $visibleStartHour, $visibleEndHour): ?DateTimeImmutable {
+        for ($i = 0; $i < 14; $i++) {
+            $dateKey = $dt->format('Y-m-d');
+            if (isset($dayOffsets[$dateKey])) {
+                $dayStart = $dt->setTime($visibleStartHour, 0);
+                $dayEnd = $dt->setTime($visibleEndHour, 0);
+                if ($dt < $dayStart) {
+                    return $dayStart;
+                }
+                if ($dt >= $dayEnd) {
+                    $dt = $dt->modify('+1 day')->setTime($visibleStartHour, 0);
+                    continue;
+                }
+                return $dt;
+            }
+            $dt = $dt->modify('+1 day')->setTime($visibleStartHour, 0);
         }
+        return null;
+    };
 
-        if (preg_match('/^(?:linha|ln)\s*0*(\d+)$/iu', $raw, $match) === 1 || preg_match('/^0*(\d+)$/u', $raw, $match) === 1) {
-            return [
-                'group' => 0,
-                'numeric' => (int) $match[1],
-                'label' => $ganttNormalizeLineLabel($raw),
-                'raw' => $raw,
-            ];
+    $moveEndToVisible = static function (DateTimeImmutable $dt) use ($dayOffsets, $visibleStartHour, $visibleEndHour): ?DateTimeImmutable {
+        for ($i = 0; $i < 14; $i++) {
+            $dateKey = $dt->format('Y-m-d');
+            if (isset($dayOffsets[$dateKey])) {
+                $dayStart = $dt->setTime($visibleStartHour, 0);
+                $dayEnd = $dt->setTime($visibleEndHour, 0);
+                if ($dt > $dayEnd) {
+                    return $dayEnd;
+                }
+                if ($dt <= $dayStart) {
+                    $dt = $dt->modify('-1 day')->setTime($visibleEndHour, 0);
+                    continue;
+                }
+                return $dt;
+            }
+            $dt = $dt->modify('-1 day')->setTime($visibleEndHour, 0);
         }
+        return null;
+    };
 
-        return [
-            'group' => 1,
-            'numeric' => null,
-            'label' => $ganttNormalizeLineLabel($raw),
-            'raw' => $raw,
-        ];
+    $start = $moveStartToVisible($start);
+    $end = $moveEndToVisible($end);
+    if (!$start || !$end || $end <= $start) {
+        return [];
     }
 
-    return [
-        'group' => 2,
-        'numeric' => null,
-        'label' => 'S/Linha',
-        'raw' => 'S/Linha',
-    ];
-};
+    $left = minutesInVisibleAxis($start, $dayOffsets, $visibleStartHour, $visibleEndHour);
+    $right = minutesInVisibleAxis($end, $dayOffsets, $visibleStartHour, $visibleEndHour);
 
-usort($programacoes, static function (array $a, array $b) use ($ganttExtractLineSortInfo): int {
-    $lineA = $ganttExtractLineSortInfo($a);
-    $lineB = $ganttExtractLineSortInfo($b);
-
-    if ($lineA['group'] !== $lineB['group']) {
-        return $lineA['group'] <=> $lineB['group'];
+    if ($left === null || $right === null || $right <= $left) {
+        return [];
     }
 
-    if ($lineA['group'] === 0 && $lineA['numeric'] !== $lineB['numeric']) {
-        return $lineA['numeric'] <=> $lineB['numeric'];
-    }
+    // Um único segmento contínuo na escala comprimida.
+    // Assim, quando um item atravessa dias intermediários, a barra não "some" no miolo.
+    // Domingos continuam removidos porque eles não existem em $dayOffsets.
+    return [['left' => $left, 'width' => $right - $left]];
+}
 
-    if ($lineA['label'] !== $lineB['label']) {
-        return strcasecmp($lineA['label'], $lineB['label']);
-    }
+$palette = [
+    'prod' => '#2f78c4',
+    'setup' => '#f57c00',
+    'setupReal' => '#7c3aed',
+    'setupMissing' => '#f97316',
+    'ok' => '#1fa34a',
+    'real' => '#d71920',
+    'header' => '#082344',
+    'grid' => '#dbe4ee',
+    'gridStrong' => '#aebdcb',
+    'muted' => '#5b6775',
+];
 
-    $inicioA = (string) ($a['inicio_base_cronograma'] ?? '');
-    $inicioB = (string) ($b['inicio_base_cronograma'] ?? '');
-    if ($inicioA !== $inicioB) {
-        return strcmp($inicioA, $inicioB);
-    }
-
-    $progA = (string) ($a['programacao_criada_em'] ?? '');
-    $progB = (string) ($b['programacao_criada_em'] ?? '');
-    if ($progA !== $progB) {
-        return strcmp($progA, $progB);
-    }
-
-    return ((int) ($a['prg_id'] ?? 0)) <=> ((int) ($b['prg_id'] ?? 0));
-});
-
-// Se uma programacao especifica foi selecionada
+$programacoes = $repo->getAllProgramacoes(100, 0);
 $selectedProgramId = (int) ($_GET['programacao_id'] ?? $_GET['id'] ?? 0);
-$periodStartInput = isset($_GET['data_inicio']) ? trim((string)$_GET['data_inicio']) : '';
-$periodEndInput = isset($_GET['data_fim']) ? trim((string)$_GET['data_fim']) : '';
-$hasValidPeriodFilter = preg_match('/^\d{4}-\d{2}-\d{2}$/', $periodStartInput) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $periodEndInput);
-$schedule = [];
-$programacaoInfo = null;
-
 if ($selectedProgramId <= 0 && !empty($programacoes)) {
     $selectedProgramId = (int) $programacoes[0]['prg_id'];
 }
 
+$programacaoInfo = $selectedProgramId > 0 ? $repo->getProgramacaoById($selectedProgramId) : null;
+
+$schedule = [];
 if ($selectedProgramId > 0) {
-    $programacaoInfo = $repo->getProgramacaoById($selectedProgramId);
-    if ($programacaoInfo === null && !empty($programacoes)) {
-        $selectedProgramId = (int) $programacoes[0]['prg_id'];
-        $programacaoInfo = $programacoes[0];
-    }
+    $stmt = $pdo->prepare("SELECT * FROM sch_linhas WHERE sch_programa_id = :id ORDER BY sch_inicio_producao ASC, sch_sequencia ASC, sch_id ASC");
+    $stmt->execute(['id' => $selectedProgramId]);
+    $schedule = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
-if ($selectedProgramId > 0) {
-    $stmtSchedule = $pdo->prepare("
-        SELECT s.*
-        FROM sch_linhas s
-        WHERE s.sch_programa_id = :programId
-        ORDER BY s.sch_data_inicio ASC, s.sch_sequencia ASC, s.sch_id ASC
-    ");
-    $stmtSchedule->execute(['programId' => $selectedProgramId]);
-    $schedule = $stmtSchedule->fetchAll(PDO::FETCH_ASSOC);
-}
-
-if ($hasValidPeriodFilter && strtotime($periodStartInput) !== false && strtotime($periodEndInput) !== false) {
-    if (strtotime($periodStartInput) > strtotime($periodEndInput)) {
-        [$periodStartInput, $periodEndInput] = [$periodEndInput, $periodStartInput];
-    }
-}
-
-$screenPeriodStart = '';
-$screenPeriodEnd = '';
-if ($hasValidPeriodFilter) {
-    $screenPeriodStart = $periodStartInput;
-    $screenPeriodEnd = $periodEndInput;
-} else {
-    $screenStartCandidates = [];
-    $screenEndCandidates = [];
-    foreach ($schedule as $schRow) {
-        $screenStartCandidate = trim((string) ($schRow['sch_inicio_producao'] ?? ''));
-        $screenEndCandidate = trim((string) ($schRow['sch_fim_producao'] ?? ''));
-        if ($screenStartCandidate !== '') {
-            $screenStartCandidates[] = date('Y-m-d', strtotime($screenStartCandidate));
-        }
-        if ($screenEndCandidate !== '') {
-            $screenEndCandidates[] = date('Y-m-d', strtotime($screenEndCandidate));
-        }
-    }
-
-    $screenPeriodStart = !empty($screenStartCandidates) ? min($screenStartCandidates) : date('Y-m-d');
-    $screenPeriodEnd = !empty($screenEndCandidates) ? max($screenEndCandidates) : date('Y-m-d');
-}
-
-if ($screenPeriodStart > $screenPeriodEnd) {
-    [$screenPeriodStart, $screenPeriodEnd] = [$screenPeriodEnd, $screenPeriodStart];
-}
-
-// Carregar buckets programa+SKU => itens/OPs em uma unica query
+// Buscar OPs por programa + SKU, mesma estratégia do gantt.php atual.
 $opBuckets = [];
 if (!empty($schedule)) {
-    $programIds = array_values(array_unique(array_map(static fn(array $row): int => (int)($row['sch_programa_id'] ?? 0), $schedule)));
+    $programIds = array_values(array_unique(array_map(static fn(array $row): int => (int) ($row['sch_programa_id'] ?? 0), $schedule)));
     $programIds = array_values(array_filter($programIds, static fn(int $id): bool => $id > 0));
     if (!empty($programIds)) {
         $placeholders = implode(',', array_fill(0, count($programIds), '?'));
-        $stmtOp = $pdo->prepare(
-            "SELECT prg_programa_id, prg_sku, prg_quantidade, prg_sequencia, prg_id_item, prg_itens_op
-             FROM prg_itens
-             WHERE prg_programa_id IN ($placeholders)
-             ORDER BY prg_programa_id ASC, prg_sequencia ASC, prg_id_item ASC"
-        );
+        $stmtOp = $pdo->prepare("SELECT prg_programa_id, prg_sku, prg_quantidade, prg_sequencia, prg_id_item, prg_itens_op FROM prg_itens WHERE prg_programa_id IN ($placeholders) ORDER BY prg_programa_id ASC, prg_sequencia ASC, prg_id_item ASC");
         $stmtOp->execute($programIds);
         foreach ($stmtOp->fetchAll(PDO::FETCH_ASSOC) as $opRow) {
-            $bucketKey = $opRow['prg_programa_id'] . '|' . $opRow['prg_sku'];
-            if (!isset($opBuckets[$bucketKey])) {
-                $opBuckets[$bucketKey] = [];
-            }
-            $opBuckets[$bucketKey][] = [
-                'op' => (string)($opRow['prg_itens_op'] ?? 'S/OP'),
-                'quantidade' => (float)($opRow['prg_quantidade'] ?? 0),
+            $key = $opRow['prg_programa_id'] . '|' . $opRow['prg_sku'];
+            $opBuckets[$key] ??= [];
+            $opBuckets[$key][] = [
+                'op' => (string) ($opRow['prg_itens_op'] ?? 'S/OP'),
+                'quantidade' => (float) ($opRow['prg_quantidade'] ?? 0),
                 'used' => false,
             ];
         }
@@ -217,1896 +250,1596 @@ if (!empty($schedule)) {
 }
 
 $assignedOps = [];
-if (!empty($schedule)) {
-    foreach ($schedule as $schRow) {
-        $scheduleId = (int)($schRow['sch_id'] ?? 0);
-        $isSetup = strtolower(trim($schRow['sch_tipo'] ?? '')) === 'setup';
-        $assignedOps[$scheduleId] = 'S/OP';
-        if ($isSetup || empty($schRow['sch_sku'])) {
-            continue;
+foreach ($schedule as $row) {
+    $schId = (int) ($row['sch_id'] ?? 0);
+    $isSetup = strtolower(trim((string) ($row['sch_tipo'] ?? ''))) === 'setup';
+    $assignedOps[$schId] = 'S/OP';
+    if ($isSetup || empty($row['sch_sku'])) {
+        continue;
+    }
+
+    $key = ((int) ($row['sch_programa_id'] ?? 0)) . '|' . $row['sch_sku'];
+    if (empty($opBuckets[$key])) {
+        continue;
+    }
+
+    $qtd = (float) ($row['sch_quantidade'] ?? 0);
+    $picked = null;
+    foreach ($opBuckets[$key] as $idx => $item) {
+        if (!$item['used'] && abs($item['quantidade'] - $qtd) < 0.0001) {
+            $picked = $idx;
+            break;
         }
-
-        $bucketKey = ((int)($schRow['sch_programa_id'] ?? 0)) . '|' . $schRow['sch_sku'];
-        if (empty($opBuckets[$bucketKey])) {
-            continue;
-        }
-
-        $quantidadePrevista = (float)($schRow['sch_quantidade'] ?? 0);
-        $pickedIdx = null;
-
-        foreach ($opBuckets[$bucketKey] as $idx => $item) {
-            if ($item['used']) {
-                continue;
-            }
-            if (abs($item['quantidade'] - $quantidadePrevista) < 0.0001) {
-                $pickedIdx = $idx;
+    }
+    if ($picked === null) {
+        foreach ($opBuckets[$key] as $idx => $item) {
+            if (!$item['used']) {
+                $picked = $idx;
                 break;
             }
         }
-
-        if ($pickedIdx === null) {
-            foreach ($opBuckets[$bucketKey] as $idx => $item) {
-                if (!$item['used']) {
-                    $pickedIdx = $idx;
-                    break;
-                }
-            }
-        }
-
-        if ($pickedIdx !== null) {
-            $assignedOps[$scheduleId] = $opBuckets[$bucketKey][$pickedIdx]['op'];
-            $opBuckets[$bucketKey][$pickedIdx]['used'] = true;
-        }
+    }
+    if ($picked !== null) {
+        $assignedOps[$schId] = $opBuckets[$key][$picked]['op'];
+        $opBuckets[$key][$picked]['used'] = true;
     }
 }
 
-// Preparar dados para o DHTMLX Gantt
-$tasks = [];
+// Base unificada conforme relgantt.php:
+// A leitura de previsto x realizado deve ser por OP, não por janela individual da linha do Gantt.
+// - Produção prevista: soma de sch_linhas.sch_quantidade por OP resolvida
+// - Produção realizada: realizado_2026_excel.quantidade agrupado por ordem_op
+// - Setup previsto: sch_linhas.sch_duracao_minutos acumulado até a próxima OP
+// - Setup realizado: realizado_2026_excel.setup_duracao_minutos para TROCA DE KIT / TROCA DE LIQUIDO
+$programPeriodStart = null;
+$programPeriodEnd = null;
+foreach ($schedule as $schedRow) {
+    $schedStart = trim((string) ($schedRow['sch_inicio_producao'] ?? ''));
+    $schedEnd = trim((string) ($schedRow['sch_fim_producao'] ?? ''));
 
-// ===== BUSCAR DADOS REALIZADO (por OP + periodo de cada item) =====
-// Estrategia: buscar o realizado por OP dentro da janela da tela, sem estender o fim.
-// Chave do mapa: op . '|' . sch_inicio_producao (distingue lotes da mesma OP)
-$realizadoMap = [];
-if (!empty($schedule)) {
-    $realTable = 'realizado_2026_excel';
+    if ($schedStart !== '' && strtotime($schedStart) !== false) {
+        $day = date('Y-m-d', strtotime($schedStart));
+        $programPeriodStart = $programPeriodStart === null ? $day : min($programPeriodStart, $day);
+    }
+    if ($schedEnd !== '' && strtotime($schedEnd) !== false) {
+        $day = date('Y-m-d', strtotime($schedEnd));
+        $programPeriodEnd = $programPeriodEnd === null ? $day : max($programPeriodEnd, $day);
+    }
+}
+if ($programPeriodStart !== null) {
+    $programPeriodStart = (new DateTimeImmutable($programPeriodStart))->modify('-1 day')->format('Y-m-d');
+}
+if ($programPeriodEnd !== null) {
+    $programPeriodEnd = (new DateTimeImmutable($programPeriodEnd))->modify('+1 day')->format('Y-m-d');
+}
 
-    $pickFirstExisting = function(array $cols, array $candidates): ?string {
-        $set = array_fill_keys($cols, true);
-        foreach ($candidates as $c) {
-            if (isset($set[$c])) return $c;
+$prodPlanByOp = [];
+$setupRowPlanMinutes = [];
+$setupRowNextOp = [];
+$setupPlanTotalByOp = [];
+$pendingSetupIds = [];
+
+foreach ($schedule as $schedRow) {
+    $schedId = (int) ($schedRow['sch_id'] ?? 0);
+    $schedType = strtolower(trim((string) ($schedRow['sch_tipo'] ?? '')));
+
+    if ($schedType === 'setup') {
+        $setupStart = (string) ($schedRow['sch_inicio_producao'] ?? '');
+        $setupEnd = (string) ($schedRow['sch_fim_producao'] ?? '');
+        $duration = (float) ($schedRow['sch_duracao_minutos'] ?? 0);
+        if ($duration <= 0 && $setupStart !== '' && $setupEnd !== '' && strtotime($setupStart) !== false && strtotime($setupEnd) !== false) {
+            $duration = max(0.0, (strtotime($setupEnd) - strtotime($setupStart)) / 60);
         }
-        return null;
-    };
 
-    // Compatibilidade entre ambientes: algumas colunas podem não existir (ex.: inicio_evento/fim_evento).
-    // Descobrir colunas disponíveis uma vez e montar SQL seguro (sem alterar dados/cálculos).
-    $realCols = [];
+        $setupRowPlanMinutes[$schedId] = $duration;
+        $pendingSetupIds[] = $schedId;
+        continue;
+    }
+
+    $op = $assignedOps[$schedId] ?? 'S/OP';
+    if ($op !== 'S/OP') {
+        $prodPlanByOp[$op] = ($prodPlanByOp[$op] ?? 0.0) + (float) ($schedRow['sch_quantidade'] ?? 0);
+    }
+
+    // Igual ao relgantt.php: o setup pendente é atribuído à próxima OP de produção.
+    if ($op !== 'S/OP' && !empty($pendingSetupIds)) {
+        foreach ($pendingSetupIds as $setupId) {
+            $setupRowNextOp[$setupId] = $op;
+            $setupPlanTotalByOp[$op] = ($setupPlanTotalByOp[$op] ?? 0.0) + (float) ($setupRowPlanMinutes[$setupId] ?? 0.0);
+        }
+        $pendingSetupIds = [];
+    } elseif ($op === 'S/OP') {
+        $pendingSetupIds = [];
+    }
+}
+
+$realizadoByOp = [];
+$opsToRead = array_values(array_unique(array_filter(array_keys($prodPlanByOp + $setupPlanTotalByOp), static fn(string $op): bool => $op !== '' && $op !== 'S/OP')));
+
+if (!empty($opsToRead) && $programPeriodStart !== null && $programPeriodEnd !== null && tableExists($pdo, 'realizado_2026_excel')) {
+    $placeholders = implode(',', array_fill(0, count($opsToRead), '?'));
     try {
-        $realCols = $pdo->query("SHOW COLUMNS FROM `{$realTable}`")->fetchAll(PDO::FETCH_COLUMN, 0);
-    } catch (Throwable $e) {
-        $realCols = [];
-    }
-
-    $colQty = $pickFirstExisting($realCols, ['quantidade', 'qtd', 'qtde', 'quantidade_produzida']);
-    $colOp = $pickFirstExisting($realCols, ['ordem_op', 'op', 'ordem']);
-    $colDate = $pickFirstExisting($realCols, ['data_evento', 'data', 'data_apontamento', 'data_hora']);
-
-    $colInicio = $pickFirstExisting($realCols, ['inicio_evento', 'inicio', 'data_inicio', 'inicio_apontamento', 'dt_inicio', 'inicio_real']);
-    $colFim = $pickFirstExisting($realCols, ['fim_evento', 'fim', 'data_fim', 'fim_apontamento', 'dt_fim', 'fim_real']);
-
-    // Coletar todos os periodos e OPs nao-setup de uma vez, respeitando a janela da tela
-    $opsPeriodos = [];
-    foreach ($schedule as $schRow) {
-        if (strtolower(trim($schRow['sch_tipo'] ?? '')) === 'setup') continue;
-        if (empty($schRow['sch_sku']) || empty($schRow['sch_inicio_producao'])) continue;
-        $opItem = $assignedOps[(int)($schRow['sch_id'] ?? 0)] ?? 'S/OP';
-        if ($opItem === 'S/OP') continue;
-
-        $itemStart = date('Y-m-d', strtotime((string) $schRow['sch_inicio_producao']));
-        $itemEnd = date('Y-m-d', strtotime((string) $schRow['sch_fim_producao']));
-        $queryStart = max($screenPeriodStart, $itemStart);
-        $queryEnd = $screenPeriodEnd;
-        if ($queryStart > $queryEnd) {
-            continue;
-        }
-
-        $opsPeriodos[] = [
-            'op'     => $opItem,
-            'inicio' => $queryStart,
-            'fim'    => $queryEnd,
-            'chave'  => $opItem . '|' . $schRow['sch_inicio_producao'],
-        ];
-    }
-
-    // Buscar realizado para cada item individualmente
-    if ($colQty && $colOp && $colDate) {
-        $exprInicio = $colInicio ? "MIN(`{$colInicio}`)" : "MIN(`{$colDate}`)";
-        $exprFim = $colFim ? "MAX(`{$colFim}`)" : "MAX(`{$colDate}`)";
-
-        $stmtReal = $pdo->prepare("
+        $stmtReal = $pdo->prepare(
+            "
             SELECT
-                SUM(`{$colQty}`) as total,
-                {$exprInicio} as inicio_real,
-                {$exprFim} as fim_real
-            FROM `{$realTable}`
-            WHERE `{$colOp}` = ? AND `{$colDate}` >= ? AND `{$colDate}` <= ?
-        ");
-        foreach ($opsPeriodos as $item) {
-            $stmtReal->execute([$item['op'], $item['inicio'], $item['fim']]);
-            $res = $stmtReal->fetch(PDO::FETCH_ASSOC);
-            $realizadoMap[$item['chave']] = [
-                'total' => (float)($res['total'] ?? 0),
-                'inicio_real' => $res['inicio_real'] ?? null,
-                'fim_real' => $res['fim_real'] ?? null,
+                ordem_op,
+                SUM(quantidade) AS total_realizado,
+                SUM(
+                    CASE
+                        WHEN parada_nomeParada IN ('TROCA DE KIT', 'TROCA DE LIQUIDO')
+                        THEN COALESCE(setup_duracao_minutos, 0)
+                        ELSE 0
+                    END
+                ) AS setup_realizado_min,
+                SUM(
+                    CASE
+                        WHEN parada_nomeParada IN ('TROCA DE KIT', 'TROCA DE LIQUIDO')
+                        THEN COALESCE(setup_eventos_count, 0)
+                        ELSE 0
+                    END
+                ) AS setup_realizado_eventos,
+                MIN(
+                    CASE
+                        WHEN inicio_evento IS NOT NULL
+                             AND LENGTH(TRIM(inicio_evento)) > 0
+                        THEN inicio_evento
+                        ELSE NULL
+                    END
+                ) AS inicio_real,
+                MAX(
+                    CASE
+                        WHEN fim_evento IS NOT NULL
+                             AND LENGTH(TRIM(fim_evento)) > 0
+                        THEN fim_evento
+                        ELSE NULL
+                    END
+                ) AS fim_real,
+                MIN(
+                    CASE
+                        WHEN parada_nomeParada IN ('TROCA DE KIT', 'TROCA DE LIQUIDO')
+                             AND inicio_evento IS NOT NULL
+                             AND LENGTH(TRIM(inicio_evento)) > 0
+                        THEN inicio_evento
+                        ELSE NULL
+                    END
+                ) AS setup_inicio_real,
+                MAX(
+                    CASE
+                        WHEN parada_nomeParada IN ('TROCA DE KIT', 'TROCA DE LIQUIDO')
+                             AND fim_evento IS NOT NULL
+                             AND LENGTH(TRIM(fim_evento)) > 0
+                        THEN fim_evento
+                        ELSE NULL
+                    END
+                ) AS setup_fim_real
+            FROM realizado_2026_excel
+            WHERE data_evento BETWEEN ? AND ?
+              AND ordem_op IN ($placeholders)
+            GROUP BY ordem_op
+            "
+        );
+        $stmtReal->execute(array_merge([$programPeriodStart, $programPeriodEnd], $opsToRead));
+
+        foreach ($stmtReal->fetchAll(PDO::FETCH_ASSOC) as $realRow) {
+            $op = trim((string) ($realRow['ordem_op'] ?? ''));
+            if ($op === '') {
+                continue;
+            }
+
+            $realizadoByOp[$op] = [
+                'total' => (float) ($realRow['total_realizado'] ?? 0),
+                'inicio' => $realRow['inicio_real'] ?? null,
+                'fim' => $realRow['fim_real'] ?? null,
+                'setup_minutes' => (float) ($realRow['setup_realizado_min'] ?? 0),
+                'setup_events' => (int) ($realRow['setup_realizado_eventos'] ?? 0),
+                'setup_inicio' => $realRow['setup_inicio_real'] ?? null,
+                'setup_fim' => $realRow['setup_fim_real'] ?? null,
             ];
+        }
+    } catch (Throwable $e) {
+        $realizadoByOp = [];
+    }
+}
+
+$rows = [];
+$minTs = null;
+$maxTs = null;
+foreach ($schedule as $rowIdx => $row) {
+    $start = (string) ($row['sch_inicio_producao'] ?? '');
+    $end = (string) ($row['sch_fim_producao'] ?? '');
+    if ($start === '' || $end === '' || strtotime($start) === false || strtotime($end) === false) {
+        continue;
+    }
+    $isSetup = strtolower(trim((string) ($row['sch_tipo'] ?? ''))) === 'setup';
+    $schId = (int) ($row['sch_id'] ?? 0);
+    $op = $isSetup ? 'S/OP' : ($assignedOps[$schId] ?? 'S/OP');
+    $real = (!$isSetup && $op !== 'S/OP')
+        ? ($realizadoByOp[$op] ?? ['total' => 0, 'inicio' => null, 'fim' => null])
+        : ['total' => 0, 'inicio' => null, 'fim' => null];
+
+    $setupNextOp = $isSetup ? (string) ($setupRowNextOp[$schId] ?? 'S/OP') : '';
+    $setupReal = ($isSetup && $setupNextOp !== 'S/OP')
+        ? ($realizadoByOp[$setupNextOp] ?? ['setup_minutes' => 0, 'setup_events' => 0, 'setup_inicio' => null, 'setup_fim' => null])
+        : ['setup_minutes' => 0, 'setup_events' => 0, 'setup_inicio' => null, 'setup_fim' => null];
+
+    // Datas da OP conforme relgantt.php:
+    // para produção, quando existir CODI, usar MIN(inicio_evento) e MAX(fim_evento)
+    // vindos de realizado_2026_excel. Isso evita mostrar a OP na data errada do envelope
+    // do sch_linhas quando o relatório analítico já tem a janela real correta.
+    $visualStart = $start;
+    $visualEnd = $end;
+    if (!$isSetup) {
+        if (!empty($real['inicio']) && strtotime((string) $real['inicio']) !== false) {
+            $visualStart = (string) $real['inicio'];
+        }
+        if (!empty($real['fim']) && strtotime((string) $real['fim']) !== false) {
+            $visualEnd = (string) $real['fim'];
+        }
+    }
+
+    $rows[] = [
+        'id' => $schId,
+        'is_setup' => $isSetup,
+        'op' => $op,
+        'sku' => (string) ($row['sch_sku'] ?? ''),
+        'descricao' => trim((string) ($row['sch_descricao'] ?? ($isSetup ? 'Setup' : '-'))),
+        // Mantém o visual do Gantt por LINHA do cronograma.
+        // A fonte do realizado continua sendo a mesma do relgantt.php, porém distribuída proporcionalmente
+        // quando uma mesma OP aparece em mais de uma linha do cronograma.
+        'qtd_prev' => (float) ($row['sch_quantidade'] ?? 0),
+        'qtd_prev_op' => !$isSetup && $op !== 'S/OP' ? (float) ($prodPlanByOp[$op] ?? (float) ($row['sch_quantidade'] ?? 0)) : (float) ($row['sch_quantidade'] ?? 0),
+        'qtd_real_op' => (float) ($real['total'] ?? 0),
+        'qtd_real' => (!$isSetup && $op !== 'S/OP' && (float) ($prodPlanByOp[$op] ?? 0) > 0)
+            ? ((float) ($real['total'] ?? 0) * ((float) ($row['sch_quantidade'] ?? 0) / (float) ($prodPlanByOp[$op] ?? 1)))
+            : (float) ($real['total'] ?? 0),
+        'start' => $visualStart,
+        'end' => $visualEnd,
+        'schedule_start' => $start,
+        'schedule_end' => $end,
+        'real_start' => $real['inicio'] ?? null,
+        'real_end' => $real['fim'] ?? null,
+        'setup_next_op' => $setupNextOp,
+        'setup_prev_min' => $isSetup ? (float) ($setupRowPlanMinutes[$schId] ?? (float) ($row['sch_duracao_minutos'] ?? 0)) : 0.0,
+        'setup_real_min' => $isSetup ? (float) ($setupReal['setup_minutes'] ?? 0) : 0.0,
+        'setup_real_events' => $isSetup ? (int) ($setupReal['setup_events'] ?? 0) : 0,
+        'setup_real_start' => $setupReal['setup_inicio'] ?? null,
+        'setup_real_end' => $setupReal['setup_fim'] ?? null,
+    ];
+    $minTs = $minTs === null ? strtotime($start) : min($minTs, strtotime($start));
+    $maxTs = $maxTs === null ? strtotime($end) : max($maxTs, strtotime($end));
+    if (!empty($real['inicio']) && strtotime((string) $real['inicio']) !== false) {
+        $minTs = min($minTs, strtotime((string) $real['inicio']));
+    }
+    if (!empty($real['fim']) && strtotime((string) $real['fim']) !== false) {
+        $maxTs = max($maxTs, strtotime((string) $real['fim']));
+    }
+}
+
+$visibleStartHour = (int) ($_GET['hora_inicio'] ?? 0);
+$visibleEndHour = (int) ($_GET['hora_fim'] ?? 24);
+$visibleStartHour = max(0, min(23, $visibleStartHour));
+$visibleEndHour = max($visibleStartHour + 1, min(24, $visibleEndHour));
+
+$days = [];
+if ($minTs !== null && $maxTs !== null) {
+    $startDay = (new DateTimeImmutable(date('Y-m-d 00:00:00', $minTs)))->modify('-1 day');
+    $endDay = new DateTimeImmutable(date('Y-m-d 00:00:00', $maxTs));
+    for ($d = $startDay; $d <= $endDay; $d = $d->modify('+1 day')) {
+        if (!isSunday($d)) {
+            $days[] = $d;
         }
     }
 }
 
-if (!empty($schedule)) {
-    foreach ($schedule as $row) {
-        $start = $row['sch_inicio_producao'];
-        $end = $row['sch_fim_producao'];
-        
-        if ($start && $end) {
-            $isSetup = strtolower(trim($row['sch_tipo'] ?? '')) === 'setup';
-            
-            // Pegar a OP do item correspondente em prg_itens
-            $op = $isSetup ? 'S/OP' : ($assignedOps[(int)($row['sch_id'] ?? 0)] ?? 'S/OP');
-            
-            // Buscar realizado para esta OP
-            $chaveRealizado = $op . '|' . $row['sch_inicio_producao'];
-            $realizadoData = $realizadoMap[$chaveRealizado] ?? [
-                'total' => 0.0,
-                'inicio_real' => null,
-                'fim_real' => null,
-            ];
-            $quantidadeRealizada = (float)($realizadoData['total'] ?? 0.0);
-            $inicioRealizado = $realizadoData['inicio_real'] ?? null;
-            $fimRealizado = $realizadoData['fim_real'] ?? null;
-            $quantidadePrevista = (float)($row['sch_quantidade'] ?? 0);
-            $percentualCumprimento = $quantidadePrevista > 0 ? ($quantidadeRealizada / $quantidadePrevista) * 100 : 0;
-            
-            // Cor base por tipo (status por percentual é mostrado no overlay/subbarra).
-            $cor = $isSetup ? $pcpPalette['setup'] : $pcpPalette['prod'];
-            
-            $taskId = (int)$row['sch_id'];
-            $tasks[] = [
-                'id' => $taskId,
-                'text' => ($isSetup ? "• SETUP" : "OP " . $op . "\n" . trim($row['sch_descricao'] ?? '-')),
-                'descricao_produto' => trim($row['sch_descricao'] ?? '-'),
-                'start_date' => date('d-m-Y H:i', strtotime($start)),
-                'end_date' => date('d-m-Y H:i', strtotime($end)),
-                'color' => $cor,
-                'progress' => 1,
-                'open' => true,
-                'sku' => $row['sch_sku'] ?: '-',
-                'tipo' => $row['sch_tipo'],
-                'op' => $op,
-                'memoria_calculo' => (string)($row['sch_memoria_calculo'] ?? ''),
-                'quantidade_prevista' => $quantidadePrevista,
-                'quantidade_realizada' => $quantidadeRealizada,
-                'realizado_inicio' => $inicioRealizado,
-                'realizado_fim' => $fimRealizado,
-                'percentual_cumprimento' => $percentualCumprimento
-            ];
+$dayOffsets = [];
+foreach ($days as $idx => $day) {
+    $dayOffsets[$day->format('Y-m-d')] = $idx;
+}
 
-            if (!$isSetup) {
-                // Criar a task de realizado somente quando existir início e fim reais válidos.
-                if (!empty($inicioRealizado) && !empty($fimRealizado)) {
-                    $realStart = $inicioRealizado;
-                    $realEnd = $fimRealizado;
-                    $tasks[] = [
-                        'id' => 'real-' . $taskId,
-                        'text' => 'Realizado',
-                        'descricao_produto' => trim($row['sch_descricao'] ?? '-'),
-                        'start_date' => date('d-m-Y H:i', strtotime($realStart)),
-                        'end_date' => date('d-m-Y H:i', strtotime($realEnd)),
-                        'color' => $pcpPalette['realizado'],
-                        'progress' => 1,
-                        'open' => true,
-                        'sku' => $row['sch_sku'] ?: '-',
-                        'tipo' => 'realizado',
-                        'op' => $op,
-                        'memoria_calculo' => (string)($row['sch_memoria_calculo'] ?? ''),
-                        'quantidade_prevista' => $quantidadePrevista,
-                        'quantidade_realizada' => $quantidadeRealizada,
-                        'realizado_inicio' => $inicioRealizado,
-                        'realizado_fim' => $fimRealizado,
-                        'percentual_cumprimento' => $percentualCumprimento,
-                        'hide_real_bar' => false
-                    ];
-                }
-            }
-        }
+$minutesPerDay = ($visibleEndHour - $visibleStartHour) * 60;
+$totalMinutes = max(1, count($days) * $minutesPerDay);
+$timelineWidth = max(1200, count($days) * 190);
+$pxPerMinute = $timelineWidth / $totalMinutes;
+
+$weekGroups = [];
+foreach ($days as $idx => $day) {
+    $key = $day->format('o-W');
+    if (!isset($weekGroups[$key])) {
+        $weekGroups[$key] = ['label' => weekLabel($day), 'start' => $idx, 'count' => 0, 'start_date' => $day, 'end_date' => $day];
     }
+    $weekGroups[$key]['count']++;
+    $weekGroups[$key]['end_date'] = $day;
+}
+
+$lineLabel = 'Linha';
+if ($programacaoInfo) {
+    $lineLabel = normalizeLineLabel((string) ($programacaoInfo['linha_excel_dominante'] ?? $programacaoInfo['lin_codigo'] ?? 'Linha'));
 }
 ?>
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Gantt PCP - Visualização de Cronograma</title>
-    <link rel="stylesheet" href="assets/css/app.css">
-    <link rel="stylesheet" href="assets/css/theme.css">
-    <!-- DHTMLX Gantt 9.0.6 - versão fixada para evitar quebras por atualização automática -->
-    <link rel="stylesheet" href="https://cdn.dhtmlx.com/gantt/9.0/dhtmlxgantt.css">
+    <title>Gantt PCP - Modelo Hora</title>
     <style>
         :root {
-            --primary-dark: #2c3e50;
-            --pcp-color-prod: <?= htmlspecialchars($pcpPalette['prod'], ENT_QUOTES) ?>;
-            --pcp-color-setup: <?= htmlspecialchars($pcpPalette['setup'], ENT_QUOTES) ?>;
-            --pcp-color-realizado: <?= htmlspecialchars($pcpPalette['realizado'], ENT_QUOTES) ?>;
-            --pcp-color-realizado-neutral: <?= htmlspecialchars($pcpPalette['realizado_neutral'], ENT_QUOTES) ?>;
-            --pcp-status-ok: <?= htmlspecialchars($pcpPalette['status_ok'], ENT_QUOTES) ?>;
-            --pcp-status-warn: <?= htmlspecialchars($pcpPalette['status_warn'], ENT_QUOTES) ?>;
-            --pcp-status-bad: <?= htmlspecialchars($pcpPalette['status_bad'], ENT_QUOTES) ?>;
-            --pcp-status-none: <?= htmlspecialchars($pcpPalette['status_none'], ENT_QUOTES) ?>;
-            --pcp-neutral-light: <?= htmlspecialchars($pcpPalette['neutral_light'], ENT_QUOTES) ?>;
-            --pcp-color-realizado-border: <?= htmlspecialchars($pcpPalette['realizado_border'], ENT_QUOTES) ?>;
-            --pcp-color-realizado-neutral-border: <?= htmlspecialchars($pcpPalette['realizado_neutral_border'], ENT_QUOTES) ?>;
-            --pcp-color-setup-border: <?= htmlspecialchars($pcpPalette['setup_border'], ENT_QUOTES) ?>;
-            --pcp-overlay-text: <?= htmlspecialchars($pcpPalette['overlay_text'], ENT_QUOTES) ?>;
-            --pcp-overlay-muted: <?= htmlspecialchars($pcpPalette['overlay_muted'], ENT_QUOTES) ?>;
-            --pcp-overlay-divider: <?= htmlspecialchars($pcpPalette['overlay_divider'], ENT_QUOTES) ?>;
+            --prod: <?= e($palette['prod']) ?>;
+            --setup: <?= e($palette['setup']) ?>;
+            --setup-real: <?= e($palette['setupReal']) ?>;
+            --setup-real-good: #16a34a;
+            --setup-real-bad: #dc2626;
+            --setup-real-equal: #2563eb;
+            --setup-missing: <?= e($palette['setupMissing']) ?>;
+            --ok: <?= e($palette['ok']) ?>;
+            --real: <?= e($palette['real']) ?>;
+            --header: <?= e($palette['header']) ?>;
+            --grid: <?= e($palette['grid']) ?>;
+            --grid-strong: <?= e($palette['gridStrong']) ?>;
+            --muted: <?= e($palette['muted']) ?>;
+            --left-width: 475px;
+            --timeline-width: <?= (int) $timelineWidth ?>px;
+            --row-height: 108px;
+            --hour-header-height: 30px;
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; padding: 18px; font-family: Arial, Helvetica, sans-serif; background: #f3f6fa; color: #102033; }
+        .page { background: #fff; border: 1px solid #d8e0ea; box-shadow: 0 4px 18px rgba(15, 35, 60, .10); overflow: hidden; }
+        .top { padding: 18px 22px 14px; display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; }
+        .title h1 { margin: 0; color: var(--header); font-size: 28px; letter-spacing: -.4px; }
+        .title .sub { margin-top: 8px; font-size: 16px; color: #16395f; letter-spacing: .2px; }
+        .actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+        select, input { border: 1px solid #c6d2df; border-radius: 8px; padding: 8px 10px; background: #fff; }
+.btn { background: var(--header); color: white; text-decoration: none; border: 0; border-radius: 8px; padding: 9px 12px; font-weight: 700; cursor: pointer; }
+.btn.btn-sync {
+    background: #16a34a;
+}
+.btn.btn-sync:hover {
+    background: #15803d;
+}
+.btn.btn-analitico,
+.btn.btn-voltar {
+    background: #0f2d59;
+}
+.btn.btn-analitico:hover,
+.btn.btn-voltar:hover {
+    background: #0b2346;
+}
+.header-nav-buttons {
+    display: inline-flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+body.sync-modal-open {
+    overflow: hidden;
+}
+.sync-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(7, 18, 38, 0.60);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    backdrop-filter: blur(2px);
+}
+.sync-modal-overlay.is-open {
+    display: flex;
+}
+.sync-modal {
+    width: min(520px, calc(100vw - 24px));
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 22px 56px rgba(15, 23, 42, 0.28);
+    overflow: hidden;
+}
+.sync-modal__head {
+    padding: 18px 20px 12px;
+    border-bottom: 1px solid #e5e7eb;
+}
+.sync-modal__title {
+    margin: 0;
+    font-size: 18px;
+    color: #10294b;
+}
+.sync-modal__body {
+    padding: 18px 20px 14px;
+}
+.sync-modal__message {
+    margin: 0 0 12px;
+    color: #334155;
+    font-weight: 700;
+}
+.sync-modal__status {
+    margin-top: 10px;
+    color: #64748b;
+    font-size: 13px;
+    line-height: 1.45;
+    min-height: 20px;
+}
+.sync-modal__note {
+    margin-top: 10px;
+    color: #64748b;
+    font-size: 12px;
+}
+.sync-progress {
+    height: 10px;
+    border-radius: 999px;
+    background: #e5eef8;
+    overflow: hidden;
+    margin-top: 14px;
+}
+.sync-progress__bar {
+    height: 100%;
+    width: 0;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #27ae60, #57d67d);
+    transition: width .18s ease;
+}
+.sync-progress__bar.is-indeterminate {
+    width: 42%;
+    animation: sync-progress-move 1.1s ease-in-out infinite;
+}
+@keyframes sync-progress-move {
+    0% { transform: translateX(-20%); }
+    50% { transform: translateX(110%); }
+    100% { transform: translateX(-20%); }
+}
+.sync-modal__actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    padding: 14px 20px 18px;
+    border-top: 1px solid #e5e7eb;
+}
+.sync-btn {
+    border: 0;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-weight: 800;
+    cursor: pointer;
+}
+.sync-btn--secondary {
+    background: #e5e7eb;
+    color: #111827;
+}
+.sync-btn--primary {
+    background: #27ae60;
+    color: #fff;
+}
+.sync-btn:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+}
+.legend-top { display: flex; gap: 22px; align-items: center; justify-content: flex-end; padding: 0 22px 14px; font-size: 13px; font-weight: 700; }
+        .legend-item { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+        .swatch { width: 34px; height: 18px; border-radius: 4px; display: inline-block; box-shadow: inset 0 0 0 1px rgba(0,0,0,.08); }
+        .gantt-scroll { overflow: auto; border-top: 1px solid #d9e2ec; }
+        .gantt { display: grid; grid-template-columns: var(--left-width) var(--timeline-width); min-width: calc(var(--left-width) + var(--timeline-width)); }
+        .left-head, .timeline-head { position: sticky; top: 0; z-index: 20; }
+        .left-head { left: 0; z-index: 30; display: grid; grid-template-columns: 1fr 88px 88px; background: var(--header); color: white; border-right: 1px solid #91a7be; }
+        .left-head > div { height: 96px; display: flex; align-items: center; justify-content: center; text-align: center; padding: 8px; font-size: 14px; font-weight: 900; border-right: 1px solid rgba(255,255,255,.35); }
+        .timeline-head { background: white; }
+        .week-row { display: flex; height: 52px; background: var(--header); color: white; }
+        .week-cell { display: flex; align-items: center; justify-content: center; text-align: center; font-size: 16px; font-weight: 900; border-right: 1px solid rgba(255,255,255,.18); line-height: 1.35; }
+        .week-cell small { display: block; color: #d8e7f7; font-size: 12px; font-weight: 800; margin-top: 2px; }
+        .day-row { display: flex; height: 44px; background: #f5f7fa; color: #162233; border-bottom: 1px solid var(--grid-strong); }
+        .day-cell { display: flex; align-items: center; justify-content: center; text-align: center; font-weight: 900; font-size: 15px; border-right: 1px solid var(--grid-strong); line-height: 1.15; }
+        .day-cell small { font-size: 12px; color: #2d3f52; }
+        .hours-row { position: relative; height: var(--hour-header-height); background: #ffdf4a; border-bottom: 2px solid #e7bd1f; }
+        .hour-label { position: absolute; top: 6px; transform: translateX(-50%); font-size: 11px; font-weight: 900; color: #253142; }
+        .left-row { position: sticky; left: 0; z-index: 10; display: grid; grid-template-columns: 1fr 88px 88px; min-height: var(--row-height); background: #fff; border-right: 1px solid #bdcad7; border-bottom: 1px solid var(--grid); }
+        .left-row .activity { padding: 16px 16px 10px 20px; border-left: 6px solid var(--prod); border-right: 1px solid var(--grid); }
+        .left-row.setup .activity { border-left-color: var(--setup); }
+        .left-row.done .activity { border-left-color: var(--ok); }
+        .op { font-size: 15px; font-weight: 900; margin-bottom: 7px; color: #162233; }
+        .desc { font-size: 13px; line-height: 1.32; color: #1e2d3d; }
+        .qty { margin-top: 7px; color: var(--muted); font-size: 12px; font-weight: 700; }
+        .time-cell { display: flex; align-items: center; justify-content: center; text-align: center; padding: 8px; font-size: 13px; line-height: 1.35; border-right: 1px solid var(--grid); }
+        .timeline-row { position: relative; min-height: var(--row-height); background: #fbfdff; border-bottom: 1px solid var(--grid); overflow: hidden; }
+        .timeline-row::before { content: ''; position: absolute; inset: 0; background-image: linear-gradient(to right, rgba(122,151,181,.20) 1px, transparent 1px); background-size: <?= max(1, (int) round(60 * $pxPerMinute)) ?>px 100%; pointer-events: none; }
+        .day-line { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--grid-strong); z-index: 1; }
+        .day-shade { position: absolute; top: 0; bottom: 0; background: rgba(47,120,196,.045); z-index: 0; }
+        .bar { position: absolute; height: 28px; border-radius: 5px; color: #fff; font-size: 12px; font-weight: 900; display: flex; align-items: center; justify-content: center; padding: 0 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-shadow: 0 2px 6px rgba(12,32,55,.18), inset 0 0 0 1px rgba(255,255,255,.20); z-index: 4; }
+        .bar.prod { top: 28px; background: linear-gradient(180deg, #3d86d5, var(--prod)); }
+        .bar.setup { top: 32px; background: linear-gradient(180deg, #ff941f, var(--setup)); }
+        .bar.setup-real { top: 62px; height: 23px; background: linear-gradient(180deg, #9f7aea, var(--setup-real)); }
+        .left-row.setup.has-setup-real .activity { border-left-color: var(--setup-real); }
+        .left-row.setup.no-setup-real .activity { border-left-color: var(--setup-missing); }
+        .setup-status { margin-top: 7px; color: var(--muted); font-size: 12px; font-weight: 700; }
+        .setup-status b.ok { color: var(--setup-real); }
+        .setup-status b.missing { color: #b45309; }
+        .bar.real { top: 62px; height: 23px; background: linear-gradient(180deg, #e9252c, var(--real)); }
+        .bar.ok { top: 36px; background: linear-gradient(180deg, #2bbd59, var(--ok)); }
+        .bottom { padding: 12px 22px 18px; display: flex; justify-content: space-between; gap: 20px; align-items: flex-end; border-top: 1px solid #e4ebf2; background: #fbfcfe; }
+        .legend-bottom { display: flex; gap: 34px; flex-wrap: wrap; }
+        .legend-card { display: grid; grid-template-columns: 62px auto; gap: 10px; align-items: center; font-size: 13px; color: #16314f; }
+        .legend-card b { display: block; margin-bottom: 2px; }
+        .note { font-size: 12px; line-height: 1.45; color: #26384b; }
+        .stamp { background: #eef2f6; padding: 12px 16px; border-radius: 8px; color: #34475b; font-size: 12px; min-width: 230px; }
+        .empty { padding: 28px; color: #526273; }
+        @media print {
+            body { background: #fff; padding: 0; }
+            .actions { display: none; }
+            .gantt-scroll { overflow: visible; }
+            .page { box-shadow: none; border: 0; }
+        }
+    
+/* ===== Cabeçalho fixo do Gantt ===== */
+.gantt-shell,
+.gantt-scroll,
+.gantt-wrapper,
+.timeline-wrapper {
+    height: calc(100vh - 118px);
+    overflow: auto;
+    background: #fff;
+}
 
-            /* Timeline (grade) - apenas aparência */
-            --pcp-timeline-bg: #fbfcfe;
-            --pcp-timeline-zebra-6h: rgba(15, 23, 42, 0.018);
-            --pcp-timeline-gridline: rgba(226, 232, 240, 0.55);
-            --pcp-timeline-rowline: rgba(226, 232, 240, 0.68);
-            --pcp-timeline-dayline: rgba(148, 163, 184, 0.95);
-            --pcp-timeline-header-zebra-6h: rgba(15, 23, 42, 0.012);
+/* Mantém o cabeçalho da tabela visível ao rolar verticalmente */
+thead th,
+.timeline-week-row,
+.timeline-day-row,
+.timeline-hour-row {
+    position: sticky;
+    z-index: 30;
+}
 
-            --setup-color: var(--pcp-color-setup);
-            --prod-color: var(--pcp-color-prod);
-        }
-        body { 
-            font-family: 'Segoe UI', sans-serif; 
-            background-color: #f4f7f6; 
-            margin: 0; 
-            padding: 15px; 
-            height: 100vh; 
-            display: flex; 
-            flex-direction: column; 
-            overflow: hidden; 
-        }
-        .header-card { 
-            background: white; 
-            padding: 15px; 
-            border-radius: 8px; 
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05); 
-            margin-bottom: 15px; 
-        }
-        .top-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-        
-        /* Container do Gantt com altura fixa para forçar scroll vertical */
-        #gantt_here { 
-            flex: 1; 
-            border-radius: 8px; 
-            border: 1px solid #ddd; 
-            background: #fff; 
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05); 
-            position: relative;
-            min-height: 500px;
-            overflow: hidden;
-        }
+/* Ajuste para cabeçalho em 3 níveis: semana / dia / hora */
+.timeline-week-row,
+tr.week-row th,
+.week-header {
+    top: 0;
+    z-index: 42;
+}
 
-        .controls { display: flex; gap: 15px; align-items: center; font-size: 14px; flex-wrap: wrap; }
-        select { padding: 8px; border-radius: 4px; border: 1px solid #ccc; min-width: 350px; }
-        .btn-home { background: var(--primary-dark); color: white; padding: 8px 16px; border-radius: 4px; text-decoration: none; font-weight: bold; }
-        .sync-modal-overlay {
-            position: fixed;
-            inset: 0;
-            background: rgba(15, 23, 42, 0.62);
-            display: none;
-            align-items: center;
-            justify-content: center;
-            z-index: 9999;
-            backdrop-filter: blur(2px);
-        }
-        .sync-modal-overlay.is-open {
-            display: flex;
-        }
-        .sync-modal {
-            width: min(560px, calc(100vw - 24px));
-            background: #fff;
-            border-radius: 14px;
-            box-shadow: 0 22px 56px rgba(15, 23, 42, 0.28);
-            overflow: hidden;
-        }
-        .sync-modal__head {
-            padding: 18px 20px 12px;
-            border-bottom: 1px solid #e5e7eb;
-        }
-        .sync-modal__title {
-            margin: 0;
-            font-size: 18px;
-            color: var(--primary-dark);
-        }
-        .sync-modal__body {
-            padding: 18px 20px 16px;
-            color: #1f2937;
-        }
-        .sync-modal__message {
-            margin: 0 0 14px;
-            line-height: 1.45;
-        }
-        .sync-modal__note {
-            margin-top: 10px;
-            font-size: 12px;
-            color: #6b7280;
-        }
-        .sync-progress {
-            height: 12px;
-            border-radius: 999px;
-            background: #e5e7eb;
-            overflow: hidden;
-            position: relative;
-        }
-        .sync-progress__bar {
-            width: 18%;
-            height: 100%;
-            background: linear-gradient(90deg, #27ae60, #57d67d);
-            border-radius: inherit;
-            transition: width 180ms ease;
-        }
-        .sync-progress__bar.is-indeterminate {
-            position: relative;
-            overflow: hidden;
-        }
-        .sync-progress__bar.is-indeterminate::after {
-            content: '';
-            position: absolute;
-            inset: 0;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
-            animation: syncShimmer 1.1s infinite;
-        }
-        @keyframes syncShimmer {
-            from { transform: translateX(-120%); }
-            to { transform: translateX(120%); }
-        }
-        .sync-modal__status {
-            margin-top: 12px;
-            font-size: 13px;
-            color: #374151;
-            min-height: 18px;
-        }
-        .sync-stage-counter {
-            margin-top: 12px;
-            font-size: 12px;
-            font-weight: 700;
-            color: #0f172a;
-        }
-        .sync-stage-list {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-            gap: 8px;
-            margin-top: 10px;
-        }
-        .sync-stage-item {
-            border: 1px solid #dbe3ea;
-            border-radius: 10px;
-            padding: 8px 10px;
-            background: #f8fafc;
-            color: #475569;
-            font-size: 12px;
-            line-height: 1.25;
-        }
-        .sync-stage-item.is-active {
-            background: #e8f6ee;
-            border-color: #27ae60;
-            color: #14532d;
-            font-weight: 700;
-        }
-        .sync-stage-item.is-done {
-            background: #eefaf1;
-            border-color: #b6e4c4;
-            color: #166534;
-        }
-        .sync-modal__actions {
-            padding: 0 20px 18px;
-            display: flex;
-            justify-content: flex-end;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
-        .sync-btn {
-            border: 0;
-            border-radius: 999px;
-            padding: 9px 16px;
-            font-weight: 700;
-            cursor: pointer;
-            transition: transform 120ms ease, opacity 120ms ease, background 120ms ease;
-        }
-        .sync-btn:hover {
-            transform: translateY(-1px);
-        }
-        .sync-btn:disabled {
-            cursor: not-allowed;
-            opacity: 0.62;
-            transform: none;
-        }
-        .sync-btn--primary {
-            background: #27ae60;
-            color: #fff;
-        }
-        .sync-btn--secondary {
-            background: #e5e7eb;
-            color: #111827;
-        }
-        .sync-btn--danger {
-            background: #f59e0b;
-            color: #111827;
-        }
-        
-        /* Estilização interna do DHTMLX Gantt */
-        .gantt_task_line { border-radius: 4px; border: none; padding: 0; }
-        /* Barra principal: altura mais fina, texto centralizado e elegante */
-        .gantt_task_bar {
-            height: 13px !important;
-            min-height: 13px !important;
-            border-radius: 7px !important;
-            padding: 0 8px !important;
-            margin: 0 !important;
-            box-shadow: none !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: flex-start !important;
-            overflow: visible !important;
-        }
-        .gantt_task_line.pcp-task-setup .gantt_task_bar {
-            border: 1px solid var(--pcp-color-setup-border) !important;
-            box-shadow: 0 0 0 1px rgba(255,255,255,0.22) inset !important;
-        }
-        .gantt_task_line.pcp-task-setup-short {
-            z-index: 9;
-            overflow: visible !important;
-        }
-        .gantt_task_line.pcp-task-setup-short:hover {
-            min-width: 18px !important;
-            z-index: 16;
-        }
-        .gantt_task_line.pcp-task-setup-short:hover .gantt_task_bar {
-            width: 100% !important;
-            min-width: 18px !important;
-            padding: 0 4px !important;
-            justify-content: center !important;
-            box-shadow: 0 0 0 1px rgba(255,255,255,0.28) inset, 0 2px 6px rgba(154, 52, 18, 0.18) !important;
-        }
-        .gantt_task_line.pcp-task-setup-short .gantt_task_content {
-            font-size: 0 !important;
-            padding: 0 !important;
-        }
-        .gantt_task_line.pcp-task-setup-short .gantt_task_content::before {
-            content: "•";
-            font-size: 9px;
-            line-height: 1;
-        }
-        .pcp-realized-subbar {
-            position: absolute;
-            left: 5px;
-            right: 5px;
-            bottom: 5px;
-            height: 5px;
-            border-radius: 999px;
-            background: rgba(255,255,255,0.92);
-            border: 1px solid rgba(15, 23, 42, 0.12);
-            box-shadow: 0 0 0 1px rgba(255,255,255,0.18) inset;
-            overflow: hidden;
-            pointer-events: none;
-            z-index: 8;
-        }
-        .pcp-realized-subbar-fill {
-            height: 100%;
-            border-radius: 999px;
-            min-width: 0;
-            transition: width 0.12s ease;
-            box-shadow: 0 0 0 1px rgba(255,255,255,0.20) inset;
-        }
-        .pcp-status-marker {
-            position: absolute;
-            top: 2px;
-            bottom: 2px;
-            left: 2px;
-            width: 3px;
-            border-radius: 2px;
-            pointer-events: none;
-            z-index: 9;
-            box-shadow: 0 0 0 1px rgba(255,255,255,0.18) inset;
-        }
-        .pcp-realized-overlay {
-            position: absolute;
-            top: 50%;
-            left: 8px;
-            transform: translateY(-50%);
-            font-size: 8px;
-            font-weight: 600;
-            color: var(--pcp-overlay-text);
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            padding: 0 4px;
-            border-radius: 2px;
-            white-space: nowrap;
-            pointer-events: none;
-            z-index: 10;
-            opacity: 0.55;
-        }
-        .gantt_task_line:hover .pcp-realized-overlay {
-            opacity: 0.82;
-        }
-        .gantt_task_content { font-size: 9px; font-weight: 600; line-height: 1; display: inline-block; vertical-align: middle; padding: 0 4px; }
-        .gantt_grid_head_cell { font-weight: bold; color: #555; }
+.timeline-day-row,
+tr.day-row th,
+.day-header {
+    top: 52px;
+    z-index: 41;
+}
 
-        /* Fundo base e linhas horizontais da timeline (não afeta escala/posicionamento) */
-        .gantt_task_bg {
-            background: var(--pcp-timeline-bg) !important;
-        }
-        .gantt_task_bg .gantt_task_row {
-            box-shadow: inset 0 -1px 0 var(--pcp-timeline-rowline);
-        }
+.timeline-hour-row,
+tr.hour-row th,
+.hour-header {
+    top: 104px;
+    z-index: 40;
+}
 
-        .gantt_scale_cell { font-weight: bold; color: #2c3e50; border-right: 1px solid var(--pcp-timeline-gridline); font-size: 11px; padding: 8px 6px; line-height: 1.05; display: flex; align-items: center; }
-        .gantt_scale_cell.pcp-scale-6h {
-            font-size: 10px;
-            color: #64748b;
-        }
-        .gantt_scale_cell.pcp-scale-6h--alt {
-            background: var(--pcp-timeline-header-zebra-6h);
-        }
-        .gantt_scale_cell.pcp-scale-6h--day-start,
-        .gantt_task_cell.pcp-timeline-6h--day-start {
-            border-right-color: var(--pcp-timeline-dayline);
-        }
-        .gantt_task_cell.pcp-timeline-6h {
-            border-right: 1px solid var(--pcp-timeline-gridline);
-            padding: 0 4px;
-        }
-        .gantt_task_cell.pcp-timeline-6h--alt {
-            background: var(--pcp-timeline-zebra-6h);
-        }
+/* Colunas fixas à esquerda */
+.left-head,
+.activity-head,
+.col-atividade,
+th:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 55;
+    background: #10294b;
+}
 
-        /* Permitir 2 linhas por raia no grid */
-        .gantt_grid_data .gantt_cell,
-        .gantt_grid_data .gantt_tree_content {
-            white-space: normal !important;
-            line-height: 1.15;
-        }
+.inicio-head,
+.col-inicio,
+th:nth-child(2) {
+    position: sticky;
+    left: 320px;
+    z-index: 54;
+    background: #10294b;
+}
 
-        .pcp-grid-op {
-            font-weight: 700;
-            color: #0f172a;
-            font-size: 10px;
-            line-height: 1.05;
-            margin-bottom: 1px;
-        }
+.termino-head,
+.col-termino,
+th:nth-child(3) {
+    position: sticky;
+    left: 415px;
+    z-index: 54;
+    background: #10294b;
+}
 
-        .pcp-grid-setup {
-            width: 100%;
-            text-align: right;
-            padding-right: 10px;
-            font-weight: 900;
-            color: #0f172a;
-            line-height: 29px; /* alinha no meio da linha ajustada */
-        }
+.left-col,
+.activity-cell,
+.cell-atividade,
+td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 25;
+    background: #fff;
+}
 
-        .pcp-grid-prod {
-            font-size: 8px;
-            font-weight: 500;
-            color: #64748b;
-            margin-top: 0;
-            line-height: 1.05;
+.inicio-col,
+.inicio-cell,
+.cell-inicio,
+td:nth-child(2) {
+    position: sticky;
+    left: 320px;
+    z-index: 24;
+    background: #fff;
+}
+
+.termino-col,
+.termino-cell,
+.cell-termino,
+td:nth-child(3) {
+    position: sticky;
+    left: 415px;
+    z-index: 24;
+    background: #fff;
+}
+
+tbody tr:nth-child(even) td:first-child,
+tbody tr:nth-child(even) td:nth-child(2),
+tbody tr:nth-child(even) td:nth-child(3) {
+    background: #fbfdff;
+}
+
+/* Evita que barras/timeline passem visualmente por cima do cabeçalho fixo */
+.timeline-cell,
+.task-cell,
+.bars-cell {
+    z-index: 1;
+}
+
+
+/* Realizado é avanço percentual sobre a barra planejada, não janela min/max de apontamento. */
+.bar.real {
+    height: 22px;
+    top: 55px;
+    min-width: 28px;
+}
+.bar {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+
+/* ===== Zoom horizontal fiel à escala de datas/horários ===== */
+.gantt-scroll {
+    --zoom-factor: 1;
+    scroll-behavior: auto;
+}
+
+.gantt-zoom-help {
+    font-size: 12px;
+    color: #506278;
+    margin-left: auto;
+    white-space: nowrap;
+}
+
+.zoom-indicator {
+    position: fixed;
+    right: 18px;
+    bottom: 18px;
+    background: rgba(8, 35, 68, .92);
+    color: #fff;
+    padding: 8px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 800;
+    z-index: 9999;
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity .14s ease, transform .14s ease;
+    pointer-events: none;
+}
+
+.zoom-indicator.is-visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+@media (max-width: 1200px) {
+    .gantt-zoom-help { display: none; }
+}
+
+
+/* ===== Zoom sincronizado: timeline, dias, horários, barras e grade ===== */
+.gantt {
+    grid-template-columns: var(--left-width) var(--timeline-width) !important;
+    min-width: calc(var(--left-width) + var(--timeline-width)) !important;
+}
+
+.timeline-head,
+.timeline-row,
+.hours-row {
+    width: var(--timeline-width) !important;
+}
+
+.timeline-row::before {
+    background-size: var(--hour-grid-width, 40px) 100% !important;
+}
+
+
+/* Botões de navegação/zoom */
+.gantt-zoom-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 8px;
+}
+
+.zoom-btn {
+    border: 1px solid #c6d2df;
+    background: #fff;
+    color: #082344;
+    border-radius: 7px;
+    min-width: 34px;
+    height: 30px;
+    padding: 0 10px;
+    font-weight: 900;
+    font-size: 15px;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(15, 35, 60, .08);
+}
+
+.zoom-btn:hover {
+    background: #eef5ff;
+    border-color: #7ea6d6;
+}
+
+.zoom-btn-reset {
+    min-width: 54px;
+    font-size: 12px;
+}
+
+
+        .bar.setup, .bar.setup-real {
+            min-width: 22px;
+            padding: 0 6px;
         }
-        .pcp-grid-real-row-title,
-        .pcp-grid-real-inline-label {
-            font-size: 10px;
-            font-weight: 800;
-            color: #334155;
-            display: inline;
-            margin-right: 4px;
-        }
-        .pcp-grid-real {
-            font-size: 9px;
-            font-weight: 700;
-            color: #475569;
-            display: inline;
-            line-height: 1.1;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        .pcp-grid-real--empty {
-            color: #94a3b8;
-        }
-        .pcp-grid-real-compare-line {
-            line-height: 1.05;
-            white-space: nowrap;
-        }
-        .pcp-realizado-row-badge {
-            display: inline-block;
-            color: #fff;
-            background: #64748b;
-            padding: 1px 5px;
-            border-radius: 3px;
-            font-size: 10px;
-            font-weight: 800;
-            min-width: 72px;
-            text-align: center;
-        }
-        .pcp-realizado-row-badge--empty {
-            background: #cbd5e1;
-            color: #334155;
-        }
-        .gantt_task_line.pcp-task-realizado {
-            /* manter apenas um wrapper leve; a apar?ncia principal vir? da .gantt_task_bar interna */
-            background: transparent !important;
-            border: none !important;
-            box-shadow: none !important;
-            padding: 0 !important;
-            margin-top: 0 !important;
-            border-radius: 4px !important;
-            display: flex !important;
-            align-items: center !important;
-            height: 29px !important;
-            min-height: 29px !important; /* respeita a altura da raia */
-        }
-        .gantt_task_line.pcp-task-realizado .gantt_task_bar {
-            /* herdar visual da barra principal, apenas trocar a cor */
-            height: 10px !important;
-            min-height: 10px !important;
-            border-radius: 4px !important;
-            padding: 0 8px !important;
-            box-shadow: none !important;
-            box-sizing: border-box !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: flex-start !important;
-            background: var(--pcp-color-realizado-neutral) !important;
-            border: 1px solid var(--pcp-color-realizado-neutral-border) !important;
-            color: inherit !important;
-            overflow: visible !important;
-            transform: translateY(-1px) !important;
-        }
-        .gantt_task_line.pcp-task-realizado .gantt_task_content {
-            display: none !important;
-        }
-        .gantt_task_line.pcp-task-realizado .gantt_task_progress {
-            background: var(--pcp-color-realizado-neutral) !important;
-            border: 1px solid var(--pcp-color-realizado-neutral-border) !important;
-            border-radius: 4px !important;
-            box-sizing: border-box !important;
-            opacity: 1 !important;
-        }
-        .gantt_task_line.pcp-task-realizado-hidden,
-        .gantt_task_line.pcp-task-realizado-hidden .gantt_task_content {
-            background: transparent !important;
-            color: transparent !important;
-            border: none !important;
-            box-shadow: none !important;
+        .bar.setup.is-short-label,
+        .bar.setup-real.is-short-label {
+            font-size: 0;
         }
 
-        /* Centralizar verticalmente os badges Previsto/Realizado dentro da linha */
-        .pcp-realizado-cell {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            height: 100%;
-            width: 100%;
-        }
 
-        /* Para SETUP: deixar o JavaScript controlar o posicionamento */
-        .pcp-realizado-cell--setup {
-            display: flex;
-            width: 100%;
-            height: 100%;
-        }
+/* ===== Arrastar timeline com mouse ===== */
+.gantt-scroll {
+    cursor: grab;
+    user-select: none;
+}
 
-        .pcp-realizado-setup {
-            color: #94a3b8;
-            font-weight: 800;
-            white-space: nowrap;
-        }
+.gantt-scroll.is-dragging {
+    cursor: grabbing;
+}
 
-        /* Garante centralizacao vertical do conteudo na coluna Previsto|Realizado */
-        .gantt_grid_data .gantt_cell[data-column-name="realizado"] {
-            display: flex;
-            align-items: center;
-        }
+.gantt-scroll.is-dragging * {
+    user-select: none !important;
+}
 
-        .pcp-realizado-sep {
-            color: #94a3b8;
-            font-weight: 700;
-        }
 
-        .pcp-realizado-badge {
-            color: #fff;
-            padding: 1px 5px;
-            border-radius: 3px;
-            font-size: 10px;
-            font-weight: 800;
-            display: inline-block;
-            text-align: center;
-            line-height: 1.25;
-            min-width: 54px;
-        }
+/* ===== Labels inteligentes das barras =====
+   Evita texto cortado em barras curtas. */
+.bar {
+    overflow: visible !important;
+}
 
-        .pcp-realizado-badge--prev {
-            background: var(--pcp-color-prod);
-        }
+.bar-label {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    pointer-events: none;
+}
 
-        .pcp-realizado-badge--real {
-            min-width: 86px;
-        }
-        
-        /* For?ar visibilidade das barras de scroll - APARECER SEMPRE QUE NECESS?RIO */
-        .gantt_hor_scroll { 
-            background-color: #f8f9fa !important;
-            display: block !important;
-            visibility: visible !important;
-            overflow-x: auto !important;
-        }
-        
-        .gantt_ver_scroll { 
-            background-color: #f8f9fa !important;
-            display: block !important;
-            visibility: visible !important;
-            overflow-y: auto !important;
-        }
-        
-        .gantt_scrollbar {
-            display: block !important;
-            visibility: visible !important;
-        }
+.bar.is-small {
+    justify-content: flex-start;
+}
 
-        .legend { 
-            display: flex; 
-            gap: 20px; 
-            padding: 10px; 
-            background: white; 
-            border-radius: 0 0 8px 8px; 
-            font-size: 12px; 
-            border-top: 1px solid #eee; 
-            margin-top: 10px;
-        }
-        .legend-item { display: flex; align-items: center; gap: 6px; }
-        .box { width: 14px; height: 14px; border-radius: 3px; }
-        .gantt_tooltip {
-            max-width: 340px;
-            white-space: normal;
-            line-height: 1.2;
-            padding: 8px 10px;
-            font-size: 12px;
-        }
-        .pcp-tooltip-title {
-            font-size: 13px;
-            font-weight: 700;
-            margin-bottom: 6px;
-        }
-        .pcp-tooltip-grid {
-            display: grid;
-            grid-template-columns: auto 1fr;
-            gap: 2px 8px;
-            align-items: start;
-        }
-        .pcp-tooltip-label {
-            font-weight: 700;
-            white-space: nowrap;
-        }
-        .pcp-tooltip-memory {
-            margin-top: 6px;
-            padding-top: 5px;
-            border-top: 1px solid rgba(255,255,255,0.16);
-        }
-        .pcp-tooltip-memory-label {
-            font-weight: 700;
-            margin-bottom: 3px;
-        }
-        .pcp-tooltip-memory-body {
-            line-height: 1.25;
-        }
-    </style>
+.bar.is-small .bar-label {
+    position: absolute;
+    left: calc(100% + 6px);
+    top: 50%;
+    transform: translateY(-50%);
+    max-width: 130px;
+    min-width: max-content;
+    height: 20px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    color: #102033;
+    background: rgba(255, 255, 255, .96);
+    border: 1px solid #d8e0ea;
+    box-shadow: 0 2px 8px rgba(15, 35, 60, .12);
+    font-size: 11px;
+    font-weight: 900;
+    z-index: 9;
+}
+
+.bar.is-tiny .bar-label {
+    display: none;
+}
+
+.bar.is-tiny::after {
+    content: attr(data-short-label);
+    position: absolute;
+    left: calc(100% + 6px);
+    top: 50%;
+    transform: translateY(-50%);
+    height: 18px;
+    min-width: max-content;
+    max-width: 110px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    color: #102033;
+    background: rgba(255, 255, 255, .96);
+    border: 1px solid #d8e0ea;
+    box-shadow: 0 2px 8px rgba(15, 35, 60, .12);
+    font-size: 10px;
+    font-weight: 900;
+    line-height: 14px;
+    z-index: 10;
+}
+
+.timeline-row {
+    overflow: visible !important;
+}
+
+
+/* ===== Setup realizado com leitura visual de desvio =====
+   Verde: realizado menor/igual ao previsto
+   Azul: praticamente igual
+   Vermelho: realizado acima do previsto */
+.bar.setup-real {
+    min-width: 4px !important;
+}
+
+.bar.setup-real-good {
+    background: linear-gradient(180deg, #22c55e, var(--setup-real-good)) !important;
+}
+
+.bar.setup-real-equal {
+    background: linear-gradient(180deg, #3b82f6, var(--setup-real-equal)) !important;
+}
+
+.bar.setup-real-bad {
+    background: linear-gradient(180deg, #ef4444, var(--setup-real-bad)) !important;
+}
+
+.setup-status b.ok {
+    color: var(--setup-real-good) !important;
+}
+
+.setup-status b.bad {
+    color: var(--setup-real-bad) !important;
+}
+
+.setup-status b.equal {
+    color: var(--setup-real-equal) !important;
+}
+
+
+/* ===== Largura real de setup realizado =====
+   A barra roxa/vermelha/verde respeita os minutos reais.
+   A etiqueta pode sair para fora, mas a cor não é esticada artificialmente. */
+.bar.setup-real {
+    min-width: 4px !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+}
+
+.bar.setup-real .bar-label {
+    pointer-events: none;
+}
+
+.bar.setup-real.is-small .bar-label,
+.bar.setup-real.is-tiny::after {
+    left: calc(100% + 8px);
+}
+
+
+/* Setup previsto/realizado: largura proporcional entre os dois tempos na mesma linha. */
+.bar.setup,
+.bar.setup-real {
+    transform-origin: left center;
+}
+
+
+/* Separação mais clara entre programado e realizado na produção. */
+.bar.prod,
+.bar.ok {
+    top: 22px !important;
+    height: 26px !important;
+}
+.bar.real {
+    top: 62px !important;
+    height: 24px !important;
+}
+
+</style>
 </head>
 <body>
-
-<div class="header-card">
-    <div class="top-row">
-        <h1 style="margin:0; font-size: 20px; color: var(--primary-dark);">Gráfico de Sequenciamento do PCP</h1>
-        <div style="display: flex; gap: 10px;">
-            <button type="button" id="syncCodiBtn" class="btn-home" style="background: #27ae60; cursor: pointer;">Sincronizar CODI</button>
-            <a href="relgantt.php" class="btn-home">Analítico</a>
-            <a href="index.php" class="btn-home">Voltar ao Sistema</a>
+<div class="page">
+    <div class="top">
+        <div class="title">
+            <h1>GRÁFICO DE GANTT - SEMANAS / DIAS / HORÁRIOS</h1>
+            <div class="sub">PROGRAMA <?= e((string) $selectedProgramId) ?> - <?= e($lineLabel) ?> · DOMINGOS REMOVIDOS</div>
         </div>
-    </div>
-    <div class="controls">
-        <form method="GET" id="filterForm" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-            <strong>Programa&ccedil;&atilde;o:</strong>
-            <select name="programacao_id" onchange="this.form.submit()">
-                <?php foreach ($programacoes as $prg): ?>
-                    <option value="<?= $prg['prg_id'] ?>" <?= $selectedProgramId === (int)$prg['prg_id'] ? 'selected' : '' ?>>
-                        <?php 
-                            $linha = htmlspecialchars($ganttNormalizeLineLabel((string) ($prg['linha_excel_dominante'] ?: $prg['lin_codigo'] ?: 'S/Linha')), ENT_QUOTES, 'UTF-8');
-                            $inicio = $prg['inicio_base_cronograma'] ? date('d/m/Y H:i', strtotime($prg['inicio_base_cronograma'])) : 'S/data';
-                            $prog = $prg['programacao_criada_em'] ? date('d/m/Y H:i', strtotime($prg['programacao_criada_em'])) : 'S/data';
-                            $eff = $prg['prg_eficiencia'] ?? 0;
-                            echo "{$linha} | In&iacute;cio: {$inicio} | Data da Programa&ccedil;&atilde;o: {$prog} | Efici&ecirc;ncia: " . $eff . '%';
-                        ?>
-                    </option>
-                <?php endforeach; ?>
-            </select>
-        </form>
-        <?php if ($programacaoInfo): ?>
-            <?php
-                $baseInicio = !empty($programacaoInfo['prg_base_inicio'])
-                    ? date('d/m/Y H:i', strtotime($programacaoInfo['prg_base_inicio']))
-                    : 'S/data';
-            ?>
-            <span style="color: #666;">Efici&ecirc;ncia: <b><?= $programacaoInfo['prg_eficiencia'] ?? 0 ?>%</b> | In&iacute;cio: <b><?= $baseInicio ?></b></span>
-        <?php endif; ?>
-    </div>
-</div>
-
-<div id="gantt_here"></div>
-
-<div class="legend">
-    <div class="legend-item"><div class="box" style="background:var(--prod-color)"></div> Produção (SKU)</div>
-    <div class="legend-item"><div class="box" style="background:var(--setup-color)"></div> Setup (Troca)</div>
-    <div style="margin-left: auto; color: #888; font-style: italic;">* Use as barras de rolagem para navegar no tempo e nos itens.</div>
-</div>
-
-<div id="codiSyncOverlay" class="sync-modal-overlay" aria-hidden="true">
-    <div class="sync-modal" role="dialog" aria-modal="true" aria-labelledby="codiSyncTitle">
-        <div class="sync-modal__head">
-            <h2 id="codiSyncTitle" class="sync-modal__title">Sincronização CODI</h2>
-        </div>
-        <div class="sync-modal__body">
-            <p id="codiSyncMessage" class="sync-modal__message">Sincronização em andamento, aguarde...</p>
-            <div class="sync-progress" aria-hidden="true">
-                <div id="codiSyncProgressBar" class="sync-progress__bar is-indeterminate"></div>
+        <form class="actions" method="get">
+            <label>Programação
+                <select name="programacao_id" onchange="this.form.submit()">
+                    <?php foreach ($programacoes as $prg): ?>
+                        <option value="<?= (int) $prg['prg_id'] ?>" <?= $selectedProgramId === (int) $prg['prg_id'] ? 'selected' : '' ?>>
+                            Programa <?= (int) $prg['prg_id'] ?> · <?= e(normalizeLineLabel((string) ($prg['linha_excel_dominante'] ?? $prg['lin_codigo'] ?? ''))) ?> · <?= e(!empty($prg['inicio_base_cronograma']) ? date('d/m/Y H:i', strtotime((string) $prg['inicio_base_cronograma'])) : 'S/data') ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </label>
+            <label>Hora início <input type="number" name="hora_inicio" min="0" max="23" value="<?= (int) $visibleStartHour ?>" style="width:70px"></label>
+            <label>Hora fim <input type="number" name="hora_fim" min="1" max="24" value="<?= (int) $visibleEndHour ?>" style="width:70px"></label>
+            <button class="btn" type="submit">Aplicar</button>
+            <a class="btn" href="gantt.php?programacao_id=<?= (int) $selectedProgramId ?>">Gantt atual</a>
+            <div class="header-nav-buttons">
+                <button type="button" class="btn btn-sync" id="syncCodiBtn">Sincronizar CODI</button>
+                <a class="btn btn-analitico" href="relgantt.php<?= $selectedProgramId > 0 ? '?programacao_id=' . (int) $selectedProgramId : '' ?>">Analítico</a>
+                <a class="btn btn-voltar" href="index.php">Voltar ao Sistema</a>
             </div>
-            <div id="codiSyncStageCounter" class="sync-stage-counter"></div>
-            <div id="codiSyncStageList" class="sync-stage-list" aria-live="polite"></div>
-            <div id="codiSyncStatus" class="sync-modal__status"></div>
-            <div class="sync-modal__note">O andamento é baseado em etapas reais do backend; não há percentual exato.</div>
-        </div>
-        <div class="sync-modal__actions">
-            <button type="button" id="codiSyncNoBtn" class="sync-btn sync-btn--secondary">Não</button>
-            <button type="button" id="codiSyncYesBtn" class="sync-btn sync-btn--primary">Sim</button>
-            <button type="button" id="codiSyncCancelBtn" class="sync-btn sync-btn--danger" style="display:none;">Cancelar</button>
-            <button type="button" id="codiSyncCloseBtn" class="sync-btn sync-btn--secondary" style="display:none;">Fechar</button>
+        </form>
+    </div>
+
+    <div class="legend-top">
+        <span class="legend-item"><i class="swatch" style="background:var(--prod)"></i>Produção</span>
+        <span class="legend-item"><i class="swatch" style="background:var(--setup)"></i>Setup Previsto</span>
+        <span class="legend-item"><i class="swatch" style="background:var(--setup-real-good)"></i>Setup Realizado ≤ Previsto</span>
+        <span class="legend-item"><i class="swatch" style="background:var(--setup-real-bad)"></i>Setup Realizado > Previsto</span>
+        <span class="legend-item"><i class="swatch" style="background:var(--real)"></i>Realizado</span>
+    </div>
+
+    <div id="codiSyncOverlay" class="sync-modal-overlay" aria-hidden="true">
+        <div class="sync-modal" role="dialog" aria-modal="true" aria-labelledby="codiSyncTitle">
+            <div class="sync-modal__head">
+                <h2 id="codiSyncTitle" class="sync-modal__title">Sincronização CODI</h2>
+            </div>
+            <div class="sync-modal__body">
+                <p id="codiSyncMessage" class="sync-modal__message">Sincronizar os dados do CODI agora?</p>
+                <div class="sync-progress" aria-hidden="true">
+                    <div id="codiSyncProgressBar" class="sync-progress__bar"></div>
+                </div>
+                <div id="codiSyncStatus" class="sync-modal__status"></div>
+                <div class="sync-modal__note">A ação usa o endpoint existente api/sync_codi.php.</div>
+            </div>
+            <div class="sync-modal__actions">
+                <button type="button" id="codiSyncNoBtn" class="sync-btn sync-btn--secondary">Não</button>
+                <button type="button" id="codiSyncYesBtn" class="sync-btn sync-btn--primary">Sim</button>
+            </div>
         </div>
     </div>
-</div>
 
-<script src="https://cdn.dhtmlx.com/gantt/9.0/dhtmlxgantt.js"></script>
-<script>
-    // Localiza??o para Portugu?s (Deve vir antes da config)
-    gantt.i18n.setLocale("pt");
-    gantt.plugins({ tooltip: true });
+    <?php if (empty($rows) || empty($days)): ?>
+        <div class="empty">Nenhum item encontrado para a programação selecionada.</div>
+    <?php else: ?>
+        <div id="ganttScroll" class="gantt-scroll" gantt-shell>
+            <div class="gantt">
+                <div class="left-head">
+                    <div>ATIVIDADE / OP</div><div>INÍCIO</div><div>TÉRMINO</div>
+                </div>
+                <div class="timeline-head">
+                    <div class="week-row">
+                        <?php foreach ($weekGroups as $week): ?>
+                            <div class="week-cell" style="width: <?= (100 * (int) $week['count'] / max(1, count($days))) ?>%">
+                                <div><?= e($week['label']) ?><small><?= e(brDate($week['start_date'])) ?> - <?= e(brDate($week['end_date'])) ?></small></div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                    <div class="day-row">
+                        <?php foreach ($days as $day): ?>
+                            <div class="day-cell" style="width: <?= (100 / max(1, count($days))) ?>%"><?= dayLabel($day) ?></div>
+                        <?php endforeach; ?>
+                    </div>
+                    <div class="hours-row">
+                        <?php foreach ($days as $idx => $day): ?>
+                            <?php for ($h = $visibleStartHour; $h <= $visibleEndHour; $h += 4): ?>
+                                <?php $left = (($idx * $minutesPerDay) + (($h - $visibleStartHour) * 60)) * $pxPerMinute; ?>
+                                <span class="hour-label" style="left: <?= (int) round($left) ?>px"><?= str_pad((string) $h, 2, '0', STR_PAD_LEFT) ?>h</span>
+                            <?php endfor; ?>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
 
-    var PCP_COLORS = <?= json_encode($pcpPalette, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
-
-    function escapeHtml(text) {
-        if (text === null || text === undefined) return "";
-        return String(text)
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/\"/g, "&quot;")
-            .replace(/'/g, "&#039;");
-    }
-
-    function formatRealDateTime(value) {
-        if (!value) return "";
-        var normalized = String(value).trim().replace(" ", "T");
-        var date = new Date(normalized);
-        if (Number.isNaN(date.getTime())) {
-            return escapeHtml(String(value).slice(0, 16));
-        }
-        var day = String(date.getDate()).padStart(2, "0");
-        var month = String(date.getMonth() + 1).padStart(2, "0");
-        var hours = String(date.getHours()).padStart(2, "0");
-        var minutes = String(date.getMinutes()).padStart(2, "0");
-        return day + "/" + month + " " + hours + ":" + minutes;
-    }
-
-    function formatGanttDateTime(value) {
-        if (!value) return "";
-        var date = value instanceof Date ? value : new Date(value);
-        if (Number.isNaN(date.getTime())) return "";
-        var day = String(date.getDate()).padStart(2, "0");
-        var month = String(date.getMonth() + 1).padStart(2, "0");
-        var hours = String(date.getHours()).padStart(2, "0");
-        var minutes = String(date.getMinutes()).padStart(2, "0");
-        return day + "/" + month + " " + hours + ":" + minutes;
-    }
-
-    // Configurações Básicas
-    gantt.config.date_format = "%d-%m-%Y %H:%i";
-    gantt.config.readonly = true;
-    gantt.config.tooltip_timeout = 80;
-
-    // FORÇAR SCROLLS PERSISTENTES
-    gantt.config.autosize = false; 
-    gantt.config.scroll_size = 24; // Barra de scroll mais larga e fácil de clicar
-    gantt.config.enable_scroll = true;
-    
-    // Configuração de Layout para garantir scrolls
-    gantt.config.layout = {
-        css: "gantt_container",
-        rows: [
-            {
-                cols: [
-                    {view: "grid", id: "grid", scrollY: "scrollVer"},
-                    {resizer: true, width: 1},
-                    {view: "timeline", id: "timeline", scrollX: "scrollHor", scrollY: "scrollVer"},
-                    {view: "scrollbar", id: "scrollVer"}
-                ]
-            },
-            {view: "scrollbar", id: "scrollHor"}
-        ]
-    };
-
-    gantt.config.columns = [
-        {
-            name: "text", 
-            label: "Produto / Recurso", 
-            width: 260, 
-            tree: true,
-            fixed: true,
-            template: function(task) {
-                // Simplesmente retornar o texto - ele já contém a quebra de linha e descrição
-                // OP na primeira linha e produto abaixo (mesma linha/raia no grid).
-                var tipoTask = String(task.tipo || "").toLowerCase();
-                var isSetup = (tipoTask === "setup")
-                    || (task.text && task.text.indexOf("SETUP") !== -1);
-                var isRealizadoRow = tipoTask === "realizado";
-
-                if (isSetup) {
-                    // Move o "SETUP" para a coluna Previsto | Realizado (no lugar do "-").
-                    return '<div class="pcp-grid-op">&nbsp;</div>';
-                }
-
-                if (isRealizadoRow) {
-                    var previstoInicioRow = "";
-                    var previstoFimRow = "";
-                    try {
-                        if (typeof task.id === "string" && task.id.indexOf("real-") === 0) {
-                            var plannedId = Number(task.id.slice(5));
-                            if (!Number.isNaN(plannedId) && gantt.isTaskExists(plannedId)) {
-                                var plannedTask = gantt.getTask(plannedId);
-                                previstoInicioRow = formatGanttDateTime(plannedTask.start_date);
-                                previstoFimRow = formatGanttDateTime(plannedTask.end_date);
+                <?php foreach ($rows as $idx => $row): ?>
+                    <?php
+                        $setupPrevMin = (float) ($row['setup_prev_min'] ?? 0);
+                        $setupRealMin = (float) ($row['setup_real_min'] ?? 0);
+                        $setupRealEvents = (int) ($row['setup_real_events'] ?? 0);
+                        $hasSetupReal = $row['is_setup'] && $setupRealEvents > 0 && $setupRealMin > 0.0001;
+                        $setupDiffMin = $setupRealMin - $setupPrevMin;
+                        $setupRealClass = 'setup-real';
+                        $setupStatusClass = 'ok';
+                        $setupStatusText = 'abaixo/ok';
+                        if ($hasSetupReal) {
+                            if (abs($setupDiffMin) <= 1.0) {
+                                $setupRealClass = 'setup-real setup-real-equal';
+                                $setupStatusClass = 'equal';
+                                $setupStatusText = 'no previsto';
+                            } elseif ($setupDiffMin > 1.0) {
+                                $setupRealClass = 'setup-real setup-real-bad';
+                                $setupStatusClass = 'bad';
+                                $setupStatusText = '+' . number_format($setupDiffMin, 0, ',', '.') . ' min';
+                            } else {
+                                $setupRealClass = 'setup-real setup-real-good';
+                                $setupStatusClass = 'ok';
+                                $setupStatusText = number_format($setupDiffMin, 0, ',', '.') . ' min';
                             }
                         }
-                    } catch (e) {}
 
-                    var periodoPrevRow = "";
-                    if (previstoInicioRow && previstoFimRow) {
-                        periodoPrevRow = previstoInicioRow + " - " + previstoFimRow;
-                    } else if (previstoInicioRow) {
-                        periodoPrevRow = previstoInicioRow;
-                    } else if (previstoFimRow) {
-                        periodoPrevRow = previstoFimRow;
-                    }
+                        // Para SETUP, não usar sch_fim_producao como fim visual quando ele vem como envelope
+                        // longo de calendário. A barra do setup deve representar a duração real prevista:
+                        // início do setup + sch_duracao_minutos.
+                        $visualStart = $row['start'];
+                        $visualEnd = $row['end'];
+                        if ($row['is_setup'] && $setupPrevMin > 0 && strtotime($row['start']) !== false) {
+                            $visualEnd = date('Y-m-d H:i:s', strtotime($row['start']) + ((int) round($setupPrevMin) * 60));
+                        }
 
-                    var inicioRealRow = task.realizado_inicio || "";
-                    var fimRealRow = task.realizado_fim || "";
-                    var periodoRealRow = "";
-                    if (inicioRealRow && fimRealRow) {
-                        periodoRealRow = formatRealDateTime(inicioRealRow) + " - " + formatRealDateTime(fimRealRow);
-                    } else if (inicioRealRow) {
-                        periodoRealRow = formatRealDateTime(inicioRealRow);
-                    } else if (fimRealRow) {
-                        periodoRealRow = formatRealDateTime(fimRealRow);
-                    }
-                          var prevRowClass = "pcp-grid-real" + (periodoPrevRow ? "" : " pcp-grid-real--empty");
-                          var realRowClass = "pcp-grid-real" + (periodoRealRow ? "" : " pcp-grid-real--empty");
-                          return '<div class="pcp-grid-real-compare">' +
-                              '<div class="pcp-grid-real-compare-line">' +
-                                  '<span class="pcp-grid-real-inline-label">Previsto</span>' +
-                                  '<span class="' + prevRowClass + '">' + (periodoPrevRow ? escapeHtml(periodoPrevRow) : 'S/período') + '</span>' +
-                              '</div>' +
-                              '<div class="pcp-grid-real-compare-line">' +
-                                  '<span class="pcp-grid-real-inline-label">Realizado</span>' +
-                                  '<span class="' + realRowClass + '">' + (periodoRealRow ? escapeHtml(periodoRealRow) : 'S/período') + '</span>' +
-                              '</div>' +
-                          '</div>';
-                }
+                        $plannedSegments = buildVisibleSegments($visualStart, $visualEnd, $dayOffsets, $visibleStartHour, $visibleEndHour);
+                        $pct = $row['qtd_prev'] > 0 ? ($row['qtd_real'] / $row['qtd_prev']) * 100 : 0;
 
-                var op = escapeHtml(task.op || "");
-                var prod = escapeHtml(task.descricao_produto || "-");
-
-                return '<div class="pcp-grid-op">OP ' + op + '</div>' +
-                       '<div class="pcp-grid-prod">' + prod + '</div>';
-            }
-        },
-        {
-            name: "realizado",
-            label: "<span style='display: inline-block; width: 60px; text-align: center;'>Previsto</span><span style='display: inline-block; margin: 0 8px;'>|</span><span style='display: inline-block; width: 80px; text-align: center;'>Realizado</span>",
-            width: 200,
-            fixed: true,
-            template: function(task) {
-                // Se for SETUP, renderizar alinhado à direita
-                if(task.text && task.text.indexOf("SETUP") !== -1) {
-                    // Renderizar um wrapper que ocupa 100% da célula e alinha o conteúdo à direita
-                    return '<div class="pcp-realizado-cell pcp-realizado-cell--setup">'
-                         + '<div style="width:100%; text-align:right; padding-right:8px;">'
-                         + '<span class="pcp-realizado-setup">SETUP</span>'
-                         + '</div>'
-                         + '</div>';
-                }
-                if (String(task.tipo || "").toLowerCase() === "realizado") {
-                    return '<div class="pcp-realizado-cell"></div>';
-                }
-                
-                var prev = task.quantidade_prevista || 0;
-                var real = task.quantidade_realizada || 0;
-                var pct = task.percentual_cumprimento || 0;
-                
-                // Cor para o REALIZADO (baseado em porcentagem)
-                var bgColorRealizado = PCP_COLORS.neutral_light; // Cinza padr?o
-                if (real > 0) {
-                    bgColorRealizado = pct >= 100 ? PCP_COLORS.status_ok : (pct >= 80 ? PCP_COLORS.status_warn : PCP_COLORS.status_bad);
-                }
-                
-                return '<div class="pcp-realizado-cell">' +
-                       '<span class="pcp-realizado-badge pcp-realizado-badge--prev">' + prev.toFixed(0) + '</span>' +
-                       '<span class="pcp-realizado-sep">|</span>' +
-                       '<span class="pcp-realizado-badge pcp-realizado-badge--real" style="background:' + bgColorRealizado + ';">' +
-                          real.toFixed(0) + ' (' + pct.toFixed(0) + '%)' +
-                       '</span>' +
-                       '</div>';
-            }
-        }
-    ];
-
-    gantt.templates.tooltip_text = function(start, end, task) {
-        var dateToStr = gantt.date.date_to_str("%d/%m/%Y %H:%i");
-        var prev = Number(task.quantidade_prevista || 0);
-        var real = Number(task.quantidade_realizada || 0);
-        var pct = Number(task.percentual_cumprimento || 0);
-        var isSetupTooltip = String(task.tipo || "").toLowerCase() === "setup";
-        var durationMinutes = Math.max(0, Math.round((end - start) / 60000));
-        var durationLabel = Math.floor(durationMinutes / 60) + "h " + String(durationMinutes % 60).padStart(2, "0") + "m";
-        var memoria = escapeHtml(task.memoria_calculo || "Mem\u00f3ria de c\u00e1lculo n\u00e3o dispon\u00edvel.")
-            .replace(/\s\|\s/g, "<br>")
-            .replace(/\n/g, "<br>");
-        var op = escapeHtml(task.op || "S/OP");
-        var produto = escapeHtml(task.descricao_produto || "-");
-        var sku = escapeHtml(task.sku || "-");
-        var tipo = String(task.tipo || "").toLowerCase() === "setup" ? "SETUP" : "Produ\u00e7\u00e3o";
-
-        return "<div class='pcp-tooltip-title'>" + tipo + "</div>" +
-            "<div class='pcp-tooltip-grid'>" +
-                "<div class='pcp-tooltip-label'>OP:</div><div>" + op + "</div>" +
-                "<div class='pcp-tooltip-label'>Produto:</div><div>" + produto + "</div>" +
-                "<div class='pcp-tooltip-label'>SKU:</div><div>" + sku + "</div>" +
-                "<div class='pcp-tooltip-label'>Previsto:</div><div>" + prev.toFixed(0) + "</div>" +
-                "<div class='pcp-tooltip-label'>Realizado:</div><div>" + real.toFixed(0) + " (" + pct.toFixed(0) + "%)</div>" +
-                "<div class='pcp-tooltip-label'>Envelope de produ\u00e7\u00e3o:</div><div>" + dateToStr(start) + " - " + dateToStr(end) + "</div>" +
-                "<div class='pcp-tooltip-label'>Nota:</div><div>Tempo produtivo abaixo considera pausas/calend\u00e1rio.</div>" +
-                (isSetupTooltip ? "<div class='pcp-tooltip-label'>Dura\u00e7\u00e3o:</div><div>" + durationLabel + "</div>" : "") +
-            "</div>" +
-            "<div class='pcp-tooltip-memory'>" +
-                "<div class='pcp-tooltip-memory-label'>Mem\u00f3ria de c\u00e1lculo</div>" +
-                "<div class='pcp-tooltip-memory-body'>" + memoria + "</div>" +
-            "</div>";
-    };
-    // ===== FOCAR SETUP PARA A DIREITA USANDO MUTATIONOBSERVER =====
-    // DESATIVADO: removido temporariamente para investigação de layout.
-    // Se precisar reativar a lógica de posicionamento automático, remova o comentário abaixo.
-    /*
-    var gridData = document.querySelector('.gantt_grid_data');
-    if (gridData) {
-        var observer = new MutationObserver(function(mutations) {
-            mutations.forEach(function(mutation) {
-                if (mutation.addedNodes.length > 0) {
-                    mutation.addedNodes.forEach(function(node) {
-                        if (node.nodeType === 1) { // Element node
-                            var setupSpan = node.querySelector ? node.querySelector('.pcp-realizado-setup') : null;
-                            if (!setupSpan && node.classList && node.classList.contains('pcp-realizado-setup')) {
-                                setupSpan = node;
-                            }
-                            
-                            if (setupSpan) {
-                                var cell = setupSpan.closest('.gantt_cell[data-column-name="realizado"]');
-                                if (cell && cell.querySelectorAll('.pcp-realizado-badge').length === 0) {
-                                    cell.style.display = 'flex';
-                                    cell.style.justifyContent = 'flex-end';
-                                    cell.style.alignItems = 'center';
-                                    cell.style.paddingRight = '8px';
-                                    setupSpan.style.color = '#94a3b8';
-                                    setupSpan.style.fontWeight = '800';
-                                    setupSpan.style.whiteSpace = 'nowrap';
+                        // IMPORTANTE:
+                        // A barra vermelha representa avanço realizado sobre o previsto.
+                        // Ela NÃO deve usar min/max de apontamento como escala de tempo,
+                        // porque isso passa a impressão errada de baixa produção quando a quantidade já chegou perto de 100%.
+                        $realSegments = [];
+                        if (!$row['is_setup'] && $row['qtd_real'] > 0 && !empty($plannedSegments)) {
+                            $realRatio = max(0, min(1, $pct / 100));
+                            foreach ($plannedSegments as $plannedSeg) {
+                                $realWidth = $plannedSeg['width'] * $realRatio;
+                                if ($realWidth > 0) {
+                                    $realSegments[] = [
+                                        'left' => $plannedSeg['left'],
+                                        'width' => $realWidth,
+                                    ];
                                 }
                             }
                         }
-                    });
-                }
-            });
-        });
-        
-        observer.observe(gridData, {
-            childList: true,
-            subtree: true,
-            attributes: false
-        });
-    }
-    */
 
-    // Marca a row inteira quando for SETUP para que possamos atuar no pai da célula
-    gantt.templates.row_class = function(start, end, task) {
-        if (String(task.tipo || "").toLowerCase() === "setup") {
-            return 'pcp-row-setup';
-        }
-        return '';
-    };
+                        $setupRealSegments = [];
+                        if ($hasSetupReal && strtotime($row['start']) !== false) {
+                            $setupRealVisualEnd = date('Y-m-d H:i:s', strtotime($row['start']) + ((int) round($setupRealMin) * 60));
+                            $setupRealSegments = buildVisibleSegments($row['start'], $setupRealVisualEnd, $dayOffsets, $visibleStartHour, $visibleEndHour);
+                        }
 
-    // CABE?ALHO HIER?RQUICO (Semanas, Dias e marca??es de 6h)
-    gantt.config.scales = [
-        {unit: "week", step: 1, format: function(date){
-            var dateToStr = gantt.date.date_to_str("Semana %W");
-            return dateToStr(date);
-        }},
-        {unit: "day", step: 1, format: "%D, %d %M"},
-        {unit: "hour", step: 6, format: function(date){
-            var hourToStr = gantt.date.date_to_str("%Hh");
-            return hourToStr(date);
-        }, css: function(date){
-            var isDayStart = date.getHours() === 0;
-            var isAlt = Math.floor(date.getHours() / 6) % 2 === 1;
-            return "pcp-scale-6h"
-                + (isAlt ? " pcp-scale-6h--alt" : "")
-                + (isDayStart ? " pcp-scale-6h--day-start" : "");
-        }}
-    ];
+                        // Barras de setup são muito curtas em escala real de dias.
+                        // Para comparação visual, quando existe setup realizado, usamos uma escala mínima
+                        // proporcional dentro da própria linha: se realizado > previsto, a barra realizada fica maior.
+                        $setupComparePxPerMinute = null;
+                        if ($row['is_setup'] && $setupPrevMin > 0.0001) {
+                            $maxSetupMinutes = max($setupPrevMin, $hasSetupReal ? $setupRealMin : 0.0);
+                            $setupComparePxPerMinute = max($pxPerMinute, 44 / max(1, $maxSetupMinutes));
+                        }
 
-    // Ajustes de Dimens?es para for?ar o scroll horizontal
-    // Visual mais compacto: cabe?alho e raia reduzidos para apar?ncia de timeline
-    // Pequeno aumento do cabeçalho para dar mais respiro vertical ao texto
-    gantt.config.scale_height = 44;
-    // raia reduzida (manter legibilidade) — ajustado para recuperar respiro
-    gantt.config.row_height = 29;
-    gantt.config.min_column_width = 50;
-    gantt.config.show_task_cells = true;
-    gantt.templates.timeline_cell_class = function(task, date){
-        var isDayStart = date.getHours() === 0;
-        var isAlt = Math.floor(date.getHours() / 6) % 2 === 1;
-        return "pcp-timeline-6h"
-            + (isAlt ? " pcp-timeline-6h--alt" : "")
-            + (isDayStart ? " pcp-timeline-6h--day-start" : "");
-    };
+                        $leftClass = $row['is_setup'] ? ('setup ' . ($hasSetupReal ? 'has-setup-real' : 'no-setup-real')) : ($pct >= 100 ? 'done' : '');
+                        // Produção sempre deve mostrar previsto x realizado.
+                        // Mesmo quando passou de 100%, a barra prevista continua azul "Programado";
+                        // o status de concluído fica implícito pelo percentual/quantidade realizado.
+                        $barClass = $row['is_setup'] ? 'setup' : 'prod';
+                        $barLabel = $row['is_setup'] ? 'Setup Previsto' : 'Programado';
+                    ?>
+                    <div class="left-row <?= e($leftClass) ?>">
+                        <div class="activity">
+                            <div class="op"><?= $row['is_setup'] ? 'SETUP' : e($row['op']) ?></div>
+                            <div class="desc"><?= e($row['is_setup'] ? 'Preparação / troca de linha' : (($row['sku'] ? $row['sku'] . ' - ' : '') . $row['descricao'])) ?></div>
+                            <?php if ($row['is_setup']): ?>
+                                <div class="setup-status">
+                                    Previsto: <?= number_format($setupPrevMin, 0, ',', '.') ?> min ·
+                                    Realizado: <?= $hasSetupReal ? number_format($setupRealMin, 0, ',', '.') . ' min' : 'S/evento' ?> ·
+                                    <b class="<?= $hasSetupReal ? e($setupStatusClass) : 'missing' ?>"><?= $hasSetupReal ? (e($setupStatusText) . ' · ' . (int) $setupRealEvents . ' evento(s)') : 'sem evento alvo' ?></b>
+                                </div>
+                                <?php if (!empty($row['setup_next_op']) && $row['setup_next_op'] !== 'S/OP'): ?>
+                                    <div class="setup-status">OP vinculada: <?= e((string) $row['setup_next_op']) ?></div>
+                                <?php endif; ?>
+                            <?php else: ?>
+                                <div class="qty">Linha: Previsto <?= number_format($row['qtd_prev'], 0, ',', '.') ?> · Realizado <?= number_format($row['qtd_real'], 0, ',', '.') ?><?= $row['qtd_real'] > 0 ? ' (' . number_format($pct, 0, ',', '.') . '%)' : '' ?></div>
+                                <?php if (!empty($row['qtd_prev_op']) && abs((float) $row['qtd_prev_op'] - (float) $row['qtd_prev']) > 0.0001): ?>
+                                    <div class="qty">OP total: Previsto <?= number_format((float) $row['qtd_prev_op'], 0, ',', '.') ?> · Realizado <?= number_format((float) $row['qtd_real_op'], 0, ',', '.') ?></div>
+                                <?php endif; ?>
+                            <?php endif; ?>
+                        </div>
+                        <div class="time-cell"><?= e(brDateTime($row['start'])) ?></div>
+                        <div class="time-cell"><?= e(brDateTime($row['is_setup'] ? $visualEnd : $row['end'])) ?></div>
+                    </div>
+                    <div class="timeline-row">
+                        <?php foreach ($days as $dIdx => $day): ?>
+                            <?php $x = $dIdx * $minutesPerDay * $pxPerMinute; ?>
+                            <?php if ($dIdx % 2 === 0): ?><span class="day-shade" style="left: <?= (int) round($x) ?>px; width: <?= (int) round($minutesPerDay * $pxPerMinute) ?>px"></span><?php endif; ?>
+                            <span class="day-line" style="left: <?= (int) round($x) ?>px"></span>
+                        <?php endforeach; ?>
+                        <span class="day-line" style="left: <?= (int) round($timelineWidth) ?>px"></span>
 
-    // Inicializa??o com os dados
-    var tasksData = {
-        data: <?= json_encode($tasks) ?>
-    };
+                        <?php foreach ($plannedSegments as $seg): ?>
+                            <div class="bar <?= e($barClass) ?>" data-short-label="<?= e($barLabel) ?>" style="left: <?= (int) round($seg['left'] * $pxPerMinute) ?>px; width: <?= $row['is_setup'] && $setupComparePxPerMinute !== null ? max(12, (int) round($setupPrevMin * $setupComparePxPerMinute)) : max(18, (int) round($seg['width'] * $pxPerMinute)) ?>px" title="<?= e($barLabel . ' · ' . brDateTime($visualStart) . ' - ' . brDateTime($visualEnd) . ($row['is_setup'] ? ' · ' . number_format($setupPrevMin, 0, ',', '.') . ' min' : (!empty($row['real_start']) ? ' · janela CODI/relgantt' : ' · janela planejada'))) ?>"><span class="bar-label"><?= e($barLabel) ?></span></div>
+                        <?php endforeach; ?>
 
-    gantt.init("gantt_here");
-    gantt.parse(tasksData);
+                        <?php foreach ($realSegments as $seg): ?>
+                            <div class="bar real" data-short-label="Realizado" style="left: <?= (int) round($seg['left'] * $pxPerMinute) ?>px; width: <?= max(18, (int) round($seg['width'] * $pxPerMinute)) ?>px" title="<?= e('Realizado · ' . number_format($row['qtd_real'], 0, ',', '.') . ' de ' . number_format($row['qtd_prev'], 0, ',', '.') . ' (' . number_format($pct, 0, ',', '.') . '%)') ?>"><span class="bar-label">Realizado</span></div>
+                        <?php endforeach; ?>
 
-    // ===== SCROLL/ZOOM VIA WHEEL (mouse/trackpad) dentro do Gantt =====
-    // Regras:
-    // - wheel normal: vertical
-    // - Shift+wheel: horizontal
-    // - Ctrl (Windows/Linux/pinch) ou Cmd (macOS) + wheel: zoom por níveis fixos
-    // - trackpad deltaX/deltaY: respeitar ambos
-    // Sem conflitar com os scrollbars nativos do DHTMLX (scrollVer/scrollHor).
-    (function bindGanttWheelScroll() {
-        var ganttRoot = document.getElementById("gantt_here");
-        if (!ganttRoot) return;
-        if (!gantt || typeof gantt.getScrollState !== "function" || typeof gantt.scrollTo !== "function") return;
+                        <?php foreach ($setupRealSegments as $seg): ?>
+                            <div class="bar <?= e($setupRealClass) ?>" data-short-label="Setup Realizado" style="left: <?= (int) round($seg['left'] * $pxPerMinute) ?>px; width: <?= $setupComparePxPerMinute !== null ? max(4, (int) round($setupRealMin * $setupComparePxPerMinute)) : max(4, (int) round($seg['width'] * $pxPerMinute)) ?>px" title="<?= e('Setup realizado · ' . number_format($setupRealMin, 0, ',', '.') . ' min · previsto ' . number_format($setupPrevMin, 0, ',', '.') . ' min · desvio ' . number_format($setupDiffMin, 0, ',', '.') . ' min · ' . (int) $setupRealEvents . ' evento(s) · OP ' . (string) ($row['setup_next_op'] ?? 'S/OP')) ?>"><span class="bar-label">Setup Realizado</span></div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+    <?php endif; ?>
 
-        var zoomLevels = [
-            { name: "12h", hourStep: 12, minColumnWidth: 42 },
-            { name: "6h", hourStep: 6, minColumnWidth: 50 },
-            { name: "3h", hourStep: 3, minColumnWidth: 62 },
-            { name: "1h", hourStep: 1, minColumnWidth: 78 }
-        ];
-        var zoomIndex = 1;
+    <div class="bottom">
+        <div>
+            <div class="legend-bottom">
+                <div class="legend-card"><span class="swatch" style="background:var(--prod); width:62px; height:34px"></span><span><b>Produção Programada</b>Período previsto da OP</span></div>
+                <div class="legend-card"><span class="swatch" style="background:var(--setup); width:62px; height:34px"></span><span><b>Setup Previsto</b>sch_linhas.sch_duracao_minutos</span></div>
+                <div class="legend-card"><span class="swatch" style="background:var(--setup-real-good); width:62px; height:34px"></span><span><b>Setup Realizado ≤ Previsto</b>verde quando menor ou dentro do previsto</span></div>
+                <div class="legend-card"><span class="swatch" style="background:var(--setup-real-bad); width:62px; height:34px"></span><span><b>Setup Realizado > Previsto</b>vermelho quando acima do previsto</span></div>
+                <div class="legend-card"><span class="swatch" style="background:var(--real); width:62px; height:34px"></span><span><b>Produção Realizada</b>Período executado</span></div>
+            </div>
+            <div class="note" style="margin-top:14px"><b>OBSERVAÇÕES:</b><br>• Timeline exibida de <?= (int) $visibleStartHour ?>h até <?= (int) $visibleEndHour ?>h.<br>• Domingos removidos automaticamente da escala.<br>• Previsto x realizado usa a mesma origem do relgantt.php; datas das OPs usam MIN(inicio_evento) e MAX(fim_evento) do CODI quando disponíveis.</div>
+        </div>
+        <div class="stamp">GERADO EM: <?= e(date('d/m/Y H:i')) ?><br>FONTE: Sistema Controle PCP</div>
+    </div>
+</div>
 
-        var pendingX = 0;
-        var pendingY = 0;
-        var rafId = null;
 
-        var pendingZoomDelta = 0;
-        var zoomRafId = null;
-        var lastZoomClientX = null;
-        var ZOOM_WHEEL_THRESHOLD = 60; // px acumulados para avançar 1 nível
-        var MAX_ZOOM_STEPS_PER_FLUSH = 3;
-
-        function normalizeWheelDelta(event) {
-            var dx = Number(event.deltaX || 0);
-            var dy = Number(event.deltaY || 0);
-            if (event.deltaMode === 1) {
-                dx *= 16;
-                dy *= 16;
-            } else if (event.deltaMode === 2) {
-                dx *= ganttRoot.clientWidth || 1;
-                dy *= ganttRoot.clientHeight || 1;
-            }
-            return { dx: dx, dy: dy };
-        }
-
-        function getHourScaleRef() {
-            var scales = gantt.config && gantt.config.scales;
-            if (!scales || !scales.length) return null;
-            for (var i = 0; i < scales.length; i++) {
-                if (scales[i] && scales[i].unit === "hour") return scales[i];
-            }
-            return null;
-        }
-
-        function syncZoomIndexFromConfig() {
-            var hourScale = getHourScaleRef();
-            if (!hourScale || !hourScale.step) return;
-            for (var i = 0; i < zoomLevels.length; i++) {
-                if (zoomLevels[i].hourStep === hourScale.step) {
-                    zoomIndex = i;
-                    return;
-                }
-            }
-        }
-
-        function getTimelineAreaElement() {
-            return gantt.$task_data || gantt.$task || ganttRoot.querySelector(".gantt_task") || ganttRoot;
-        }
-
-        function applyZoomIndex(nextIndex, anchorClientX) {
-            var clamped = Math.max(0, Math.min(zoomLevels.length - 1, nextIndex));
-            if (clamped === zoomIndex) return;
-
-            var state = gantt.getScrollState();
-            var anchorDate = null;
-            var cursorOffsetX = null;
-
-            if (typeof gantt.dateFromPos === "function" && typeof gantt.posFromDate === "function") {
-                var timelineEl = getTimelineAreaElement();
-                if (timelineEl && timelineEl.getBoundingClientRect) {
-                    var rect = timelineEl.getBoundingClientRect();
-                    cursorOffsetX = (typeof anchorClientX === "number") ? (anchorClientX - rect.left) : (rect.width / 2);
-                    cursorOffsetX = Math.max(0, Math.min(rect.width, cursorOffsetX));
-                    anchorDate = gantt.dateFromPos(state.x + cursorOffsetX);
-                }
-            }
-
-            var level = zoomLevels[clamped];
-            var hourScaleRef = getHourScaleRef();
-            if (hourScaleRef) {
-                hourScaleRef.step = level.hourStep;
-            }
-            if (gantt.config) {
-                gantt.config.min_column_width = level.minColumnWidth;
-            }
-
-            zoomIndex = clamped;
-            gantt.render();
-
-            if (anchorDate && cursorOffsetX !== null && typeof gantt.posFromDate === "function") {
-                var newPos = gantt.posFromDate(anchorDate);
-                var desiredX = Math.max(0, newPos - cursorOffsetX);
-                gantt.scrollTo(desiredX, state.y);
-            } else {
-                gantt.scrollTo(state.x, state.y);
-            }
-        }
-
-        function flushScroll() {
-            rafId = null;
-            if (!pendingX && !pendingY) return;
-            var state = gantt.getScrollState();
-            gantt.scrollTo(state.x + pendingX, state.y + pendingY);
-            pendingX = 0;
-            pendingY = 0;
-        }
-
-        function flushZoom() {
-            zoomRafId = null;
-            if (!pendingZoomDelta) return;
-
-            var delta = pendingZoomDelta;
-            var sign = delta > 0 ? 1 : -1;
-            var abs = Math.abs(delta);
-            var steps = Math.min(MAX_ZOOM_STEPS_PER_FLUSH, Math.floor(abs / ZOOM_WHEEL_THRESHOLD));
-
-            if (steps < 1) return;
-
-            pendingZoomDelta = delta - (sign * steps * ZOOM_WHEEL_THRESHOLD);
-
-            var direction = sign > 0 ? -1 : 1;
-            syncZoomIndexFromConfig();
-            for (var i = 0; i < steps; i++) {
-                applyZoomIndex(zoomIndex + direction, lastZoomClientX);
-            }
-
-            if (Math.abs(pendingZoomDelta) >= ZOOM_WHEEL_THRESHOLD) {
-                zoomRafId = requestAnimationFrame(flushZoom);
-            }
-        }
-
-        ganttRoot.addEventListener("wheel", function (event) {
-            if (!event) return;
-
-            var target = event.target;
-            if (target && typeof target.closest === "function") {
-                if (target.closest(".gantt_scrollbar, .gantt_ver_scroll, .gantt_hor_scroll")) {
-                    return;
-                }
-            }
-
-            var normalized = normalizeWheelDelta(event);
-            var dx = normalized.dx;
-            var dy = normalized.dy;
-
-            var isZoomGesture = !!(event.ctrlKey || event.metaKey);
-            if (isZoomGesture) {
-                event.preventDefault();
-                lastZoomClientX = typeof event.clientX === "number" ? event.clientX : null;
-                pendingZoomDelta += (Math.abs(dy) >= Math.abs(dx) ? dy : dx);
-                if (zoomRafId === null) {
-                    zoomRafId = requestAnimationFrame(flushZoom);
-                }
-                return;
-            }
-
-            var scrollX = dx;
-            var scrollY = dy;
-
-            if (event.shiftKey && Math.abs(scrollX) < 0.5) {
-                scrollX = dy;
-                scrollY = 0;
-            }
-
-            if (!scrollX && !scrollY) return;
-
-            event.preventDefault();
-            pendingX += scrollX;
-            pendingY += scrollY;
-            if (rafId === null) {
-                rafId = requestAnimationFrame(flushScroll);
-            }
-        }, { passive: false });
-    })();
-
-    // ===== ADICIONAR INFORMAÇÃO REALIZADO SOBRE AS BARRAS =====
-    gantt.attachEvent("onAfterTaskRender", function(id, task, div){
-        var tipoTask = String(task.tipo || "").toLowerCase();
-        var isSetup = tipoTask === "setup" || (task.text && task.text.indexOf("SETUP") !== -1);
-
-        if (isSetup) {
-            var setupBars = div.getElementsByClassName("gantt_task_bar");
-            if (setupBars.length > 0) {
-                var setupBar = setupBars[0];
-                div.classList.remove("pcp-task-setup-short");
-                div.style.width = "";
-                div.style.minWidth = "";
-                setupBar.style.width = "";
-                setupBar.style.minWidth = "";
-                if (div.offsetWidth > 0 && div.offsetWidth < 14) {
-                    div.classList.add("pcp-task-setup-short");
-                }
-            }
-            return;
-        }
-        if (tipoTask === "realizado") {
-            return;
-        }
-        
-        var prev = task.quantidade_prevista || 0;
-        var real = task.quantidade_realizada || 0;
-        var pct = task.percentual_cumprimento || 0;
-        
-        // Procurar a barra (elemento com classe gantt_task_bar)
-        var bars = div.getElementsByClassName("gantt_task_bar");
-        if(bars.length === 0) return;
-        
-        var bar = bars[0];
-        
-        // Evitar duplicar elementos extras em re-renders do Gantt
-        var existingTrack = bar.querySelector('.pcp-realized-subbar');
-        if (existingTrack) existingTrack.remove();
-        var existingOverlay = bar.querySelector('.pcp-realized-overlay');
-        if (existingOverlay) existingOverlay.remove();
-        var existingMarker = bar.querySelector('.pcp-status-marker');
-        if (existingMarker) existingMarker.remove();
-
-        // Criar barra visual secund?ria de realizado abaixo da barra planejada
-        var corRealizado = PCP_COLORS.status_none; // Cinza: sem dados
-        if (real > 0) {
-            corRealizado = pct >= 100 ? PCP_COLORS.status_ok : (pct >= 80 ? PCP_COLORS.status_warn : PCP_COLORS.status_bad);
-        }
-        var realizedTrack = document.createElement('div');
-        realizedTrack.className = 'pcp-realized-subbar';
-        var realizedFill = document.createElement('div');
-        realizedFill.className = 'pcp-realized-subbar-fill';
-        realizedFill.style.backgroundColor = corRealizado;
-        realizedFill.style.width = Math.max(0, Math.min(pct, 100)).toFixed(2) + '%';
-        realizedTrack.appendChild(realizedFill);
-
-        // Criar overlay com informa??o - REALIZADO | PREVISTO
-        var marker = document.createElement('div');
-        marker.className = 'pcp-status-marker';
-        marker.style.backgroundColor = corRealizado;
-
-        var overlay = document.createElement('div');
-        overlay.className = 'pcp-realized-overlay';
-        var overlayText = document.createElement('span');
-        overlayText.style.color = PCP_COLORS.overlay_muted || 'rgba(255,255,255,0.75)';
-        overlayText.textContent = real.toFixed(0) + '/' + prev.toFixed(0) + ' (' + pct.toFixed(0) + '%)';
-        overlay.appendChild(overlayText);
-        
-        // Adicionar ao bar
-        bar.style.position = 'relative';
-        bar.appendChild(realizedTrack);
-        bar.appendChild(marker);
-        if (bar.offsetWidth >= 56) {
-            bar.appendChild(overlay);
-        }
-    });
-
-    // ========== SINCRONIZAÇÃO CODI AUTOMÁTICA ==========
-    // Verifica se já sincronizou hoje, se não sincroniza automaticamente
-    function autoSyncCODI() {
-        const today = new Date().toISOString().split('T')[0];
-        const lastSyncKey = 'codi_last_sync_date';
-        const lastSyncDate = localStorage.getItem(lastSyncKey);
-        
-        // Se já sincronizou hoje, não faz nada
-        if (lastSyncDate === today) {
-            console.log('[CODI] Já sincronizado hoje:', today);
-            return;
-        }
-        
-        console.log('[CODI] Iniciando sincronização automática...');
-        
-        // Sincronizar silenciosamente
-        fetch('api/sync_codi.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'sync_yesterday' })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                console.log('[CODI OK] Sincronizado:', data.message);
-                localStorage.setItem(lastSyncKey, today);
-            } else {
-                console.warn('[CODI] Ja sincronizado hoje:', data.message);
-                localStorage.setItem(lastSyncKey, today);
-            }
-        })
-        .catch(error => {
-            console.error('[CODI ERRO]', error);
-        });
-    }
-    
-    // Executar auto-sync quando p?gina carrega
-    autoSyncCODI();
-
-    // ========== SINCRONIZA??O CODI (BOT?O MANUAL) ==========
-    document.getElementById('syncCodiBtn').addEventListener('click', function() {
-        return;
-        const btn = this;
-        btn.disabled = true;
-        btn.textContent = 'Sincronizando...';
-        
-        fetch('api/sync_codi.php', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                action: 'sync_today',
-                force: true
-            })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                const today = new Date().toISOString().split('T')[0];
-                localStorage.setItem('codi_last_sync_date', today);
-                alert('Sincronização concluída!\n\n' + data.message);
-                btn.textContent = 'Sincronizar CODI';
-                btn.disabled = false;
-            } else {
-                alert(data.message);
-                btn.textContent = 'Sincronizar CODI';
-                btn.disabled = false;
-            }
-        })
-        .catch(error => {
-            console.error('Erro:', error);
-            alert('Erro ao sincronizar: ' + error.message);
-            btn.textContent = 'Sincronizar CODI';
-            btn.disabled = false;
-        });
-    });
-</script>
+<div id="zoomIndicator" class="zoom-indicator">Zoom 100%</div>
 <script>
 (function() {
-    var originalButton = document.getElementById('syncCodiBtn');
-    if (!originalButton || !originalButton.parentNode) {
+    const scrollEl = document.getElementById('ganttScroll');
+    const ganttEl = scrollEl ? scrollEl.querySelector('.gantt') : null;
+    const indicator = document.getElementById('zoomIndicator');
+    if (!scrollEl || !ganttEl) return;
+
+    const root = document.documentElement;
+    const computedRoot = getComputedStyle(root);
+    const leftWidth = parseFloat(computedRoot.getPropertyValue('--left-width')) || 500;
+    const baseTimelineWidth = parseFloat(computedRoot.getPropertyValue('--timeline-width')) || 2400;
+
+    const zoomLevels = [0.55, 0.7, 0.85, 1, 1.2, 1.45, 1.75, 2.1, 2.55, 3.1, 3.75, 4.5];
+    let zoomIndex = 6;
+    let zoomTimer = null;
+
+    function clamp(value, min, max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
+    function pxNumber(value) {
+        const n = parseFloat(String(value || '').replace('px', ''));
+        return Number.isFinite(n) ? n : null;
+    }
+
+    function rememberBaseGeometry() {
+        const selectors = [
+            '.hour-label',
+            '.day-line',
+            '.day-shade',
+            '.bar'
+        ];
+
+        scrollEl.querySelectorAll(selectors.join(',')).forEach(function(el) {
+            if (!el.dataset.baseLeft) {
+                const left = pxNumber(el.style.left);
+                if (left !== null) el.dataset.baseLeft = String(left);
+            }
+            if (!el.dataset.baseWidth) {
+                const width = pxNumber(el.style.width);
+                if (width !== null) el.dataset.baseWidth = String(width);
+            }
+        });
+    }
+
+    function showZoom() {
+        if (!indicator) return;
+        indicator.textContent = 'Zoom ' + Math.round(zoomLevels[zoomIndex] * 100) + '%';
+        indicator.classList.add('is-visible');
+        clearTimeout(zoomTimer);
+        zoomTimer = setTimeout(() => indicator.classList.remove('is-visible'), 900);
+    }
+
+    function scaleGeometry(zoom) {
+        const newTimelineWidth = baseTimelineWidth * zoom;
+        root.style.setProperty('--timeline-width', newTimelineWidth + 'px');
+
+        // Mantém grade de hora, labels, divisões de dia e barras usando a mesma escala.
+        root.style.setProperty('--hour-grid-width', (60 * <?= json_encode($pxPerMinute) ?> * zoom) + 'px');
+
+        scrollEl.querySelectorAll('.hour-label, .day-line, .day-shade, .bar').forEach(function(el) {
+            if (el.dataset.baseLeft) {
+                el.style.left = (parseFloat(el.dataset.baseLeft) * zoom) + 'px';
+            }
+            if (el.dataset.baseWidth) {
+                let minWidth = 0;
+                if (el.classList.contains('bar')) {
+                    if (el.classList.contains('setup-real')) {
+                        minWidth = 4;
+                    } else if (el.classList.contains('setup')) {
+                        minWidth = 12;
+                    } else {
+                        minWidth = 18;
+                    }
+                }
+                el.style.width = Math.max(minWidth, parseFloat(el.dataset.baseWidth) * zoom) + 'px';
+            }
+        });
+    }
+
+    function getAnchorRatio(anchorClientX) {
+        const rect = scrollEl.getBoundingClientRect();
+        const anchorX = typeof anchorClientX === 'number' ? anchorClientX - rect.left : rect.width / 2;
+
+        // Desconsidera as colunas fixas; calcula a posição real dentro da timeline.
+        const visibleTimelineX = Math.max(0, anchorX - leftWidth);
+        const timelineScrollX = Math.max(0, scrollEl.scrollLeft - leftWidth);
+        const currentTimelineWidth = baseTimelineWidth * zoomLevels[zoomIndex];
+        const timelineX = timelineScrollX + visibleTimelineX;
+
+        return {
+            ratio: timelineX / Math.max(1, currentTimelineWidth),
+            visibleTimelineX: visibleTimelineX
+        };
+    }
+
+    function applyZoom(nextIndex, anchorClientX) {
+        nextIndex = clamp(nextIndex, 0, zoomLevels.length - 1);
+        if (nextIndex === zoomIndex) return;
+
+        const anchor = getAnchorRatio(anchorClientX);
+
+        zoomIndex = nextIndex;
+        const newZoom = zoomLevels[zoomIndex];
+        scaleGeometry(newZoom);
+
+        const newTimelineWidth = baseTimelineWidth * newZoom;
+        const newTimelineX = anchor.ratio * newTimelineWidth;
+        scrollEl.scrollLeft = Math.max(0, leftWidth + newTimelineX - anchor.visibleTimelineX);
+
+        showZoom();
+    }
+
+    rememberBaseGeometry();
+    scaleGeometry(zoomLevels[zoomIndex]);
+    showZoom();
+
+    const zoomOutBtn = document.getElementById('zoomOutBtn');
+    const zoomInBtn = document.getElementById('zoomInBtn');
+    const zoomResetBtn = document.getElementById('zoomResetBtn');
+
+    if (zoomOutBtn) {
+        zoomOutBtn.addEventListener('click', function() {
+            applyZoom(zoomIndex - 1, null);
+        });
+    }
+
+    if (zoomInBtn) {
+        zoomInBtn.addEventListener('click', function() {
+            applyZoom(zoomIndex + 1, null);
+        });
+    }
+
+    if (zoomResetBtn) {
+        zoomResetBtn.addEventListener('click', function() {
+            applyZoom(6, null);
+        });
+    }
+
+    scrollEl.addEventListener('wheel', function(event) {
+        if (event.ctrlKey || event.metaKey) {
+            event.preventDefault();
+            const direction = event.deltaY > 0 ? -1 : 1;
+            applyZoom(zoomIndex + direction, event.clientX);
+            return;
+        }
+
+        if (event.shiftKey && Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
+            event.preventDefault();
+            scrollEl.scrollLeft += event.deltaY;
+        }
+    }, { passive: false });
+
+    scrollEl.addEventListener('mouseenter', () => scrollEl.dataset.hover = '1');
+    scrollEl.addEventListener('mouseleave', () => scrollEl.dataset.hover = '0');
+
+    document.addEventListener('keydown', function(event) {
+        if (scrollEl.dataset.hover !== '1') return;
+        if ((event.ctrlKey || event.metaKey) && (event.key === '+' || event.key === '=')) {
+            event.preventDefault();
+            applyZoom(zoomIndex + 1, null);
+        }
+        if ((event.ctrlKey || event.metaKey) && event.key === '-') {
+            event.preventDefault();
+            applyZoom(zoomIndex - 1, null);
+        }
+        if ((event.ctrlKey || event.metaKey) && event.key === '0') {
+            event.preventDefault();
+            applyZoom(6, null);
+        }
+    });
+})();
+
+(function() {
+    const syncBtn = document.getElementById('syncCodiBtn');
+    const overlay = document.getElementById('codiSyncOverlay');
+    const modalTitle = document.getElementById('codiSyncTitle');
+    const modalMessage = document.getElementById('codiSyncMessage');
+    const modalStatus = document.getElementById('codiSyncStatus');
+    const progressBar = document.getElementById('codiSyncProgressBar');
+    const yesBtn = document.getElementById('codiSyncYesBtn');
+    const noBtn = document.getElementById('codiSyncNoBtn');
+    if (!syncBtn || !overlay || !modalTitle || !modalMessage || !modalStatus || !progressBar || !yesBtn || !noBtn) {
         return;
     }
 
-    var syncButton = originalButton.cloneNode(true);
-    originalButton.parentNode.replaceChild(syncButton, originalButton);
+    let busy = false;
+    let requestController = null;
+    const originalText = syncBtn.textContent;
 
-    var syncOverlay = document.getElementById('codiSyncOverlay');
-    var syncTitle = document.getElementById('codiSyncTitle');
-    var syncMessage = document.getElementById('codiSyncMessage');
-    var syncStatus = document.getElementById('codiSyncStatus');
-    var syncStageCounter = document.getElementById('codiSyncStageCounter');
-    var syncStageList = document.getElementById('codiSyncStageList');
-    var syncProgressBar = document.getElementById('codiSyncProgressBar');
-    var syncYesBtn = document.getElementById('codiSyncYesBtn');
-    var syncNoBtn = document.getElementById('codiSyncNoBtn');
-    var syncCancelBtn = document.getElementById('codiSyncCancelBtn');
-    var syncCloseBtn = document.getElementById('codiSyncCloseBtn');
-    var syncRequestController = null;
-    var syncProgressTimer = null;
-    var syncStatusPollTimer = null;
-    var syncProgressValue = 12;
-    var syncBusy = false;
-    var syncKnownStages = [
-        { code: 'starting', label: 'Iniciando' },
-        { code: 'consulting_codi', label: 'Consultando CODI' },
-        { code: 'processing_data', label: 'Processando dados' },
-        { code: 'saving_aggregate', label: 'Gravando agregado' },
-        { code: 'saving_events', label: 'Gravando eventos brutos' },
-        { code: 'finalizing', label: 'Finalizando' },
-        { code: 'done', label: 'Concluído' },
-        { code: 'error', label: 'Erro' }
-    ];
-
-    function formatSyncDateTime(value) {
-        if (!value) {
-            return '';
-        }
-
-        var text = String(value).trim();
-        var match = text.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}))(?:\:\d{2})?/);
-        if (match) {
-            return match[3] + '/' + match[2] + '/' + match[1] + ' ' + match[4] + ':' + match[5];
-        }
-
-        return text;
+    function openModal() {
+        overlay.classList.add('is-open');
+        overlay.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('sync-modal-open');
     }
 
-    function getStageWidthByIndex(stageIndex, stageTotal, isRunning, stageCode) {
-        var code = String(stageCode || '').toLowerCase();
-        if (code === 'done') {
-            return 100;
-        }
-        if (code === 'error') {
-            return 100;
-        }
-
-        var index = Math.max(0, parseInt(stageIndex || 0, 10));
-        var total = Math.max(1, parseInt(stageTotal || 6, 10));
-        var pct = Math.round((index / total) * 100);
-        if (isRunning && pct < 10) {
-            pct = 10;
-        }
-        if (pct > 95 && isRunning) {
-            pct = 95;
-        }
-        return pct;
+    function closeModal() {
+        overlay.classList.remove('is-open');
+        overlay.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('sync-modal-open');
     }
 
-    function renderSyncStages(status) {
-        var currentCode = String((status && status.stageCode) || '').toLowerCase();
-        var stageIndex = parseInt((status && status.stageIndex) || 0, 10);
-        var stageTotal = parseInt((status && status.stageTotal) || 6, 10);
-        var isRunning = !!(status && status.isRunning);
-        var currentLabel = (status && status.stageLabel) ? String(status.stageLabel) : '';
-        var currentDetail = (status && status.stageDetail) ? String(status.stageDetail) : '';
-
-        syncStageCounter.textContent = stageIndex > 0 && stageTotal > 0
-            ? ('Etapa ' + stageIndex + '/' + stageTotal + (currentLabel ? ' - ' + currentLabel : ''))
-            : (currentLabel || '');
-
-        syncStageList.innerHTML = syncKnownStages.map(function(stage, idx) {
-            var classes = ['sync-stage-item'];
-            if (stage.code === currentCode) {
-                classes.push('is-active');
-            } else if (idx < Math.max(0, stageIndex - 1) || (!isRunning && currentCode === 'done' && stage.code !== 'error')) {
-                classes.push('is-done');
-            }
-            return '<div class="' + classes.join(' ') + '">' + stage.label + '</div>';
-        }).join('');
-
-        syncStatus.textContent = currentDetail || (isRunning ? 'Sincronização em andamento...' : syncStatus.textContent);
-        syncProgressBar.classList.remove('is-indeterminate');
-        syncProgressBar.style.width = getStageWidthByIndex(stageIndex, stageTotal, isRunning, currentCode) + '%';
-        if (currentCode === 'done') {
-            syncProgressBar.classList.remove('is-indeterminate');
-            syncProgressBar.style.background = 'linear-gradient(90deg, #27ae60, #57d67d)';
-        } else if (currentCode === 'error') {
-            syncProgressBar.classList.remove('is-indeterminate');
-            syncProgressBar.style.background = 'linear-gradient(90deg, #ef4444, #f97316)';
-        }
+    function setConfirmState(message, status) {
+        modalTitle.textContent = 'Sincronização CODI';
+        modalMessage.textContent = message || 'Sincronizar os dados do CODI agora?';
+        modalStatus.textContent = status || '';
+        progressBar.classList.remove('is-indeterminate');
+        progressBar.style.width = '0%';
+        yesBtn.disabled = false;
+        noBtn.disabled = false;
+        yesBtn.textContent = 'Sim';
+        noBtn.textContent = 'Não';
     }
 
-    function stopSyncPolling() {
-        if (syncStatusPollTimer) {
-            clearInterval(syncStatusPollTimer);
-            syncStatusPollTimer = null;
-        }
+    function setProgressState(message) {
+        modalTitle.textContent = 'Sincronizando CODI';
+        modalMessage.textContent = message || 'Sincronizando...';
+        modalStatus.textContent = 'Aguarde a conclusão da sincronização.';
+        progressBar.classList.add('is-indeterminate');
+        progressBar.style.width = '';
+        yesBtn.disabled = true;
+        noBtn.disabled = true;
     }
 
-    function startSyncPolling() {
-        stopSyncPolling();
-        syncStatusPollTimer = setInterval(function() {
-            if (!syncBusy) {
-                stopSyncPolling();
-                return;
-            }
-            fetchSyncStatus()
-                .then(function(status) {
-                    renderSyncStages(status);
-                    if (!status.isRunning) {
-                        stopSyncPolling();
-                    }
-                })
-                .catch(function(error) {
-                    console.error('Erro ao consultar status do sync:', error);
-                });
-        }, 1000);
-    }
-
-    function setSyncButtons(mode) {
-        syncYesBtn.style.display = mode === 'confirm' ? '' : 'none';
-        syncNoBtn.style.display = mode === 'confirm' ? '' : 'none';
-        syncCancelBtn.style.display = mode === 'progress' ? '' : 'none';
-        syncCloseBtn.style.display = mode === 'result' ? '' : 'none';
-    }
-
-    function openSyncOverlay() {
-        syncOverlay.classList.add('is-open');
-        syncOverlay.setAttribute('aria-hidden', 'false');
-    }
-
-    function closeSyncOverlay() {
-        syncOverlay.classList.remove('is-open');
-        syncOverlay.setAttribute('aria-hidden', 'true');
-    }
-
-    function stopSyncProgress(finalWidth) {
-        if (syncProgressTimer) {
-            clearInterval(syncProgressTimer);
-            syncProgressTimer = null;
-        }
-        syncProgressBar.classList.remove('is-indeterminate');
-        syncProgressBar.style.width = (typeof finalWidth === 'number' ? finalWidth : 100) + '%';
-    }
-
-    function startSyncProgress() {
-        stopSyncProgress(12);
-        syncProgressBar.classList.remove('is-indeterminate');
-    }
-
-    function showSyncConfirm(lastSyncAt, recordsToday) {
-        syncTitle.textContent = 'Sincronização já realizada';
-        syncMessage.textContent = 'Sincronização já realizada, deseja fazer novamente?';
-        syncStatus.textContent = lastSyncAt
-            ? 'Última execução hoje em ' + formatSyncDateTime(lastSyncAt) + (recordsToday ? ' (' + recordsToday + ' registros)' : '')
-            : '';
-        syncStageCounter.textContent = '';
-        syncStageList.innerHTML = '';
-        stopSyncProgress(100);
-        setSyncButtons('confirm');
-        openSyncOverlay();
-    }
-
-    function showSyncProgress() {
-        syncTitle.textContent = 'Sincronização CODI';
-        syncMessage.textContent = 'Sincronização em andamento, aguarde...';
-        syncStatus.textContent = 'Etapas do backend serão atualizadas aqui em tempo real.';
-        renderSyncStages({
-            stageCode: 'starting',
-            stageLabel: 'Iniciando',
-            stageDetail: 'Preparando sincronização CODI.',
-            stageIndex: 1,
-            stageTotal: 6,
-            isRunning: true
-        });
-        setSyncButtons('progress');
-        openSyncOverlay();
-    }
-
-    function showSyncResult(title, message, statusMessage, isError) {
-        syncTitle.textContent = title;
-        syncMessage.textContent = message;
-        syncStatus.textContent = statusMessage || '';
-        syncProgressBar.style.background = isError
+    function setResultState(title, message, status, isError) {
+        modalTitle.textContent = title || 'Sincronização CODI';
+        modalMessage.textContent = message || '';
+        modalStatus.textContent = status || '';
+        progressBar.classList.remove('is-indeterminate');
+        progressBar.style.width = '100%';
+        progressBar.style.background = isError
             ? 'linear-gradient(90deg, #ef4444, #f97316)'
             : 'linear-gradient(90deg, #27ae60, #57d67d)';
-        stopSyncProgress(100);
-        setSyncButtons('result');
-        openSyncOverlay();
+        yesBtn.disabled = false;
+        noBtn.disabled = false;
+        yesBtn.textContent = isError ? 'Tentar novamente' : 'Recarregar';
+        noBtn.textContent = 'Fechar';
     }
 
-    function fetchSyncStatus() {
-        return fetch('api/sync_codi.php', {
+    async function fetchSyncStatus() {
+        const response = await fetch('api/sync_codi.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'status' })
-        }).then(function(response) {
-            return response.json().then(function(data) {
-                return { ok: response.ok, data: data };
-            });
-        }).then(function(result) {
-            if (!result.ok || !result.data || !result.data.success) {
-                throw new Error((result.data && result.data.message) ? result.data.message : 'Não foi possível verificar a sincronização do dia.');
-            }
-            return result.data;
         });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data || data.success === false) {
+            throw new Error((data && data.message) ? data.message : 'Não foi possível verificar o status do CODI.');
+        }
+        return data;
     }
 
-    function runManualSync(forceSync) {
-        if (syncBusy) {
-            return;
-        }
+    async function runSync() {
+        if (busy) return;
+        busy = true;
+        syncBtn.disabled = true;
+        syncBtn.textContent = 'Sincronizando...';
+        setProgressState('Sincronizando os dados do CODI...');
 
-        syncBusy = true;
-        syncRequestController = new AbortController();
-        showSyncProgress();
-        startSyncPolling();
+        requestController = new AbortController();
 
-        fetch('api/sync_codi.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                action: 'sync_today',
-                force: !!forceSync
-            }),
-            signal: syncRequestController.signal
-        })
-        .then(function(response) {
-            return response.json().then(function(data) {
-                return { ok: response.ok, data: data };
+        try {
+            const response = await fetch('api/sync_codi.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'sync_today',
+                    force: true
+                }),
+                signal: requestController.signal
             });
-        })
-        .then(function(result) {
-            syncBusy = false;
-            syncRequestController = null;
-            stopSyncPolling();
-            stopSyncProgress(100);
 
-            if (result.data && result.data.success) {
-                const today = new Date().toISOString().split('T')[0];
-                localStorage.setItem('codi_last_sync_date', today);
-                renderSyncStages({
-                    stageCode: 'done',
-                    stageLabel: 'Concluído',
-                    stageDetail: result.data.message || 'Sincronização finalizada com sucesso.',
-                    stageIndex: syncKnownStages.length,
-                    stageTotal: syncKnownStages.length,
-                    isRunning: false
-                });
-                showSyncResult(
-                    'Sincronização concluída',
-                    'Sincronização concluída!',
-                    result.data.message || 'Sincronização finalizada com sucesso.',
-                    false
-                );
-            } else {
-                showSyncResult(
-                    'Sincronização com erro',
-                    'Não foi possível concluir a sincronização.',
-                    (result.data && result.data.message) ? result.data.message : 'Falha sem mensagem detalhada.',
-                    true
-                );
-            }
-        })
-        .catch(function(error) {
-            syncBusy = false;
-            syncRequestController = null;
-            stopSyncPolling();
-            stopSyncProgress(100);
-
-            if (error && error.name === 'AbortError') {
-                renderSyncStages({
-                    stageCode: 'error',
-                    stageLabel: 'Cancelado',
-                    stageDetail: 'Sincronização cancelada pelo usuário.',
-                    stageIndex: 0,
-                    stageTotal: syncKnownStages.length,
-                    isRunning: false
-                });
-                showSyncResult(
-                    'Sincronização cancelada',
-                    'Sincronização cancelada.',
-                    'O navegador interrompeu a requisição. Se o backend já havia iniciado, ele pode continuar executando no servidor.',
-                    false
-                );
-                return;
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok || data.success === false) {
+                throw new Error((data && data.message) ? data.message : 'Falha ao sincronizar o CODI.');
             }
 
-            console.error('Erro:', error);
-            showSyncResult(
-                'Erro na sincronização',
-                'Erro ao sincronizar.',
-                (error && error.message) ? error.message : 'Falha inesperada.',
-                true
+            setResultState(
+                'Sincronização concluída',
+                'Sincronização concluída!',
+                data.message || 'Sincronização finalizada com sucesso.',
+                false
             );
-        });
+            setTimeout(() => window.location.reload(), 900);
+        } catch (error) {
+            if (error && error.name === 'AbortError') {
+                setResultState('Sincronização cancelada', 'Sincronização cancelada.', 'A requisição foi interrompida.', true);
+            } else {
+                setResultState('Sincronização com erro', 'Não foi possível concluir a sincronização.', error && error.message ? error.message : 'Falha sem mensagem detalhada.', true);
+            }
+            syncBtn.disabled = false;
+            syncBtn.textContent = originalText;
+            busy = false;
+        }
     }
 
-    syncNoBtn.addEventListener('click', function() {
-        closeSyncOverlay();
-        syncButton.disabled = false;
-        syncButton.textContent = 'Sincronizar CODI';
-    });
+    syncBtn.addEventListener('click', async function() {
+        if (busy) return;
+        syncBtn.disabled = true;
+        syncBtn.textContent = 'Verificando...';
+        openModal();
+        setConfirmState('Sincronizar os dados do CODI agora?', 'Carregando status...');
 
-    syncYesBtn.addEventListener('click', function() {
-        syncButton.disabled = true;
-        syncButton.textContent = 'Sincronizando...';
-        runManualSync(true);
-    });
-
-    syncCancelBtn.addEventListener('click', function() {
-        if (syncRequestController) {
-            syncRequestController.abort();
-        } else {
-            syncBusy = false;
-            stopSyncPolling();
-            closeSyncOverlay();
-            syncButton.disabled = false;
-            syncButton.textContent = 'Sincronizar CODI';
+        try {
+            const status = await fetchSyncStatus();
+            const lastSyncAt = status.lastSyncAt ? String(status.lastSyncAt) : '';
+            const recordsToday = status.recordsToday ? String(status.recordsToday) : '';
+            const statusText = status.alreadySynced
+                ? ('Já sincronizado hoje' + (lastSyncAt ? ' em ' + lastSyncAt : '') + (recordsToday ? ' (' + recordsToday + ' registros)' : '') + '. Deseja sincronizar novamente?')
+                : (status.isRunning ? 'Uma sincronização já está em andamento. Deseja iniciar outra mesmo assim?' : 'Sincronizar os dados do CODI agora?');
+            setConfirmState('Sincronização CODI', statusText);
+            syncBtn.disabled = false;
+            syncBtn.textContent = originalText;
+        } catch (error) {
+            setConfirmState('Sincronização CODI', 'Não foi possível verificar o status agora. Deseja sincronizar mesmo assim?');
+            modalStatus.textContent = (error && error.message) ? error.message : '';
+            syncBtn.disabled = false;
+            syncBtn.textContent = originalText;
         }
     });
 
-    syncCloseBtn.addEventListener('click', function() {
-        syncBusy = false;
-        stopSyncPolling();
-        closeSyncOverlay();
-        syncButton.disabled = false;
-        syncButton.textContent = 'Sincronizar CODI';
-    });
-
-    syncButton.addEventListener('click', function() {
-        if (syncBusy) {
+    yesBtn.addEventListener('click', function() {
+        if (busy) {
             return;
         }
+        runSync();
+    });
 
-        const btn = this;
-        btn.disabled = true;
-        btn.textContent = 'Verificando...';
+    noBtn.addEventListener('click', function() {
+        if (busy) {
+            if (requestController) {
+                requestController.abort();
+            }
+            return;
+        }
+        closeModal();
+        syncBtn.disabled = false;
+        syncBtn.textContent = originalText;
+    });
 
-        fetchSyncStatus()
-            .then(function(status) {
-                btn.textContent = 'Sincronizar CODI';
-                if (status.isRunning) {
-                    syncBusy = true;
-                    showSyncProgress();
-                    renderSyncStages(status);
-                    startSyncPolling();
-                    return;
-                }
-                if (status.alreadySynced) {
-                    showSyncConfirm(status.lastSyncAt, status.recordsToday || 0);
-                    return;
-                }
-
-                runManualSync(true);
-            })
-            .catch(function(error) {
-                btn.textContent = 'Sincronizar CODI';
-                btn.disabled = false;
-                showSyncResult(
-                    'Verificação indisponível',
-                    'Não foi possível verificar a sincronização do dia.',
-                    (error && error.message) ? error.message : 'Tente novamente.',
-                    true
-                );
-            });
+    overlay.addEventListener('click', function(event) {
+        if (event.target === overlay && !busy) {
+            closeModal();
+            syncBtn.disabled = false;
+            syncBtn.textContent = originalText;
+        }
     });
 })();
 </script>
+
+
+
+<script>
+(function() {
+    const scrollEl = document.getElementById('ganttScroll');
+    if (!scrollEl) return;
+
+    let isDragging = false;
+    let startX = 0;
+    let startY = 0;
+    let startScrollLeft = 0;
+    let startScrollTop = 0;
+    let moved = false;
+
+    function isInteractiveTarget(target) {
+        return !!(target && target.closest && target.closest('button, a, input, select, textarea, label, .sync-modal-overlay'));
+    }
+
+    scrollEl.addEventListener('mousedown', function(event) {
+        if (event.button !== 0 || isInteractiveTarget(event.target)) return;
+
+        isDragging = true;
+        moved = false;
+        startX = event.clientX;
+        startY = event.clientY;
+        startScrollLeft = scrollEl.scrollLeft;
+        startScrollTop = scrollEl.scrollTop;
+        scrollEl.classList.add('is-dragging');
+        event.preventDefault();
+    });
+
+    window.addEventListener('mousemove', function(event) {
+        if (!isDragging) return;
+
+        const dx = event.clientX - startX;
+        const dy = event.clientY - startY;
+
+        if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+            moved = true;
+        }
+
+        scrollEl.scrollLeft = startScrollLeft - dx;
+        scrollEl.scrollTop = startScrollTop - dy;
+        event.preventDefault();
+    }, { passive: false });
+
+    window.addEventListener('mouseup', function() {
+        if (!isDragging) return;
+
+        isDragging = false;
+        scrollEl.classList.remove('is-dragging');
+
+        // Evita abrir links/acões acidentalmente logo após arrastar.
+        if (moved) {
+            const blockClick = function(event) {
+                event.preventDefault();
+                event.stopPropagation();
+                window.removeEventListener('click', blockClick, true);
+            };
+            window.addEventListener('click', blockClick, true);
+            setTimeout(() => window.removeEventListener('click', blockClick, true), 0);
+        }
+    });
+
+    scrollEl.addEventListener('mouseleave', function() {
+        if (!isDragging) return;
+        scrollEl.classList.remove('is-dragging');
+    });
+})();
+</script>
+
+
+<script>
+(function() {
+    function updateBarLabels() {
+        document.querySelectorAll('.bar').forEach(function(bar) {
+            const width = bar.getBoundingClientRect().width;
+            bar.classList.toggle('is-small', width > 0 && width < 88);
+            bar.classList.toggle('is-tiny', width > 0 && width < 28);
+        });
+    }
+
+    window.addEventListener('load', updateBarLabels);
+    window.addEventListener('resize', updateBarLabels);
+
+    // Recalcula também depois dos botões/scroll de zoom mexerem na escala.
+    document.addEventListener('click', function(event) {
+        if (event.target && event.target.closest && event.target.closest('#zoomInBtn, #zoomOutBtn, #zoomResetBtn')) {
+            setTimeout(updateBarLabels, 60);
+            setTimeout(updateBarLabels, 180);
+        }
+    });
+
+    const ganttScroll = document.getElementById('ganttScroll');
+    if (ganttScroll) {
+        ganttScroll.addEventListener('wheel', function() {
+            setTimeout(updateBarLabels, 80);
+        }, { passive: true });
+    }
+
+    const observerTarget = document.querySelector('.gantt');
+    if (observerTarget && 'MutationObserver' in window) {
+        const observer = new MutationObserver(function() {
+            updateBarLabels();
+        });
+        observer.observe(observerTarget, { attributes: true, subtree: true, attributeFilter: ['style', 'class'] });
+    }
+})();
+</script>
+
 </body>
 </html>
-

@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gantt operacional paralelo</title>
+  <link rel="stylesheet" href="/static/gantt.css">
+</head>
+<body data-api-prefix="{{ api_prefix }}" data-default-programacao="{{ programacao_id or '' }}">
+  <div class="app-shell report-shell">
+    <div class="sr-only" aria-hidden="true">
+      <h1 id="reportTitle">Gantt operacional</h1>
+      <p id="reportSubtitle">Visual paralela do Gantt operacional.</p>
+    </div>
+
+    <main class="content-grid report-grid">
+      <aside class="drawer drawer-left report-sidebar" id="programDrawer" aria-hidden="true">
+        <div class="sidebar-head">
+          <div>
+            <p class="board-kicker">Programações</p>
+            <h2>Selecionar programação</h2>
+          </div>
+          <span id="programacaoCount">0</span>
+          <button type="button" class="drawer-close" id="programDrawerClose" aria-label="Fechar programacoes">Fechar</button>
+        </div>
+
+        <div class="sidebar-body">
+          <div class="drawer-controls">
+            <label class="search-box">
+              <span>Buscar programação ou OP</span>
+              <input id="programacaoSearch" type="search" placeholder="Digite OP, SKU, produto ou linha">
+            </label>
+
+            <label class="search-box">
+              <span>Linha</span>
+              <select id="lineSelect">
+                <option value="">Carregando...</option>
+              </select>
+            </label>
+
+            <div class="status-filters" id="statusFilters">
+              <button type="button" class="filter-pill is-active" data-filter="all">Tudo</button>
+              <button type="button" class="filter-pill" data-filter="ok">OK</button>
+              <button type="button" class="filter-pill" data-filter="atencao">Atenção</button>
+              <button type="button" class="filter-pill" data-filter="critico">Crítico</button>
+              <button type="button" class="filter-pill" data-filter="sem-realizado">Sem realizado</button>
+              <button type="button" class="filter-pill" data-filter="divergente">Divergência</button>
+              <button type="button" class="filter-pill" data-filter="setup">Setup</button>
+            </div>
+          </div>
+          <div class="sidebar-list" id="programacaoList"></div>
+        </div>
+      </aside>
+
+      <section class="board report-board">
+        <div class="board-head report-board-head">
+          <div>
+            <p class="board-kicker">Gantt operacional</p>
+            <h2 id="boardTitle">Selecione uma programação</h2>
+            <p class="board-subtitle" id="boardSubtitle">
+              O gráfico centraliza setup, produção, tempo, turnos, CODI e status por OP.
+            </p>
+          </div>
+          <div class="board-head-actions">
+            <div class="board-chips">
+              <div class="hero-chip" id="selectedLineChip">Linha -</div>
+              <div class="hero-chip hero-chip-soft" id="selectedProgramChip">Programação -</div>
+            </div>
+            <div class="board-actions">
+              <button type="button" class="drawer-toggle drawer-toggle-muted" id="summaryToggle">Resumo</button>
+              <button type="button" class="drawer-toggle" id="programDrawerToggle">Programacoes</button>
+            </div>
+            <div class="board-stats" id="boardMeta"></div>
+          </div>
+        </div>
+
+        <div class="report-note" id="opsAlertLine">
+          Aguardando seleção de programação.
+        </div>
+
+        <div class="programacao-strip">
+          <label class="programacao-select" for="programacaoSelect">
+            <span>Programação</span>
+            <select id="programacaoSelect">
+              <option value="">Carregando...</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="gantt-shell">
+          <div class="gantt-scroll" id="ganttScroll">
+            <div class="gantt-canvas" id="ganttCanvas">
+              <div class="gantt-axis" id="ganttAxis"></div>
+              <div class="gantt-empty" id="ganttEmpty">Selecione uma programação para ver o gráfico de Gantt operacional.</div>
+              <div class="gantt-list" id="ganttList"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="drawer drawer-right inspector-drawer" id="inspector" aria-hidden="true">
+        <div class="inspector-head">
+          <div>
+            <p class="board-kicker">Detalhe operacional</p>
+            <h2 id="inspectorTitle">Clique em uma OP</h2>
+          </div>
+          <button type="button" class="drawer-close" id="inspectorClose" aria-label="Fechar detalhe">Fechar</button>
+        </div>
+        <p class="inspector-subtitle" id="inspectorSubtitle">
+          O detalhe abre por OP/período e traz principal, apoio, turnos e CODI quando disponíveis.
+        </p>
+        <div class="inspector-body" id="inspectorBody">
+          <div class="detail-block">
+            <p class="muted">Selecione uma OP no gráfico para abrir o detalhe operacional.</p>
+          </div>
+        </div>
+      </aside>
+
+      <aside class="drawer drawer-right drawer-summary" id="summaryDrawer" aria-hidden="true">
+        <div class="inspector-head">
+          <div>
+            <p class="board-kicker">Resumo</p>
+            <h2>Indicadores</h2>
+          </div>
+          <button type="button" class="drawer-close" id="summaryDrawerClose" aria-label="Fechar resumo">Fechar</button>
+        </div>
+        <div class="inspector-body">
+          <section class="summary-grid report-kpis report-kpis-compact" id="summaryGrid">
+            <article class="summary-card">
+              <span class="summary-label">Cumprimento</span>
+              <strong id="kpiCompletionValue">-</strong>
+              <small id="kpiCompletionHint">Previsto x realizado</small>
+            </article>
+            <article class="summary-card">
+              <span class="summary-label">Setup</span>
+              <strong id="kpiSetupValue">-</strong>
+              <small id="kpiSetupHint">Previsto x realizado</small>
+            </article>
+            <article class="summary-card">
+              <span class="summary-label">Produção</span>
+              <strong id="kpiProductionValue">-</strong>
+              <small id="kpiProductionHint">Prevista x realizada</small>
+            </article>
+            <article class="summary-card">
+              <span class="summary-label">Tempo</span>
+              <strong id="kpiTempoValue">-</strong>
+              <small id="kpiTempoHint">Previsto x realizado</small>
+            </article>
+            <article class="summary-card">
+              <span class="summary-label">Turnos</span>
+              <strong id="kpiTurnosValue">-</strong>
+              <small id="kpiTurnosHint">ADM x noite</small>
+            </article>
+            <article class="summary-card">
+              <span class="summary-label">CODI</span>
+              <strong id="kpiCodiValue">-</strong>
+              <small id="kpiCodiHint">Eficiência média disponível</small>
+            </article>
+          </section>
+        </div>
+      </aside>
+    </main>
+
+    <div class="drawer-backdrop" id="drawerBackdrop" hidden></div>
+  </div>
+
+  <script>
+    window.__GANTT_CONFIG__ = {
+      apiPrefix: "{{ api_prefix }}",
+      defaultProgramacaoId: {{ programacao_id or "null" }},
+    };
+  </script>
+  <script src="/static/gantt.js"></script>
+</body>
+</html>

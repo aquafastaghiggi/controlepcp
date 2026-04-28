@@ -10,6 +10,13 @@ use App\Database\Connection;
 use App\Services\WorkCalendar;
 use App\Support\DateTimeHelper;
 
+if (!headers_sent()) {
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Cache-Control: post-check=0, pre-check=0', false);
+    header('Pragma: no-cache');
+    header('Expires: 0');
+}
+
 Auth::startSession();
 
 $pdo = Connection::get();
@@ -186,6 +193,15 @@ function resolveCodiNominalPerformance(array $catalog, string $resourceKey, stri
     }
 
     return null;
+}
+
+function calculateCodiEfficiencyPct(?float $rawEfficiencyPct, ?float $nominalPerformance, float $producaoEventos, float $tempoProducao): ?float
+{
+    if ($nominalPerformance !== null && $nominalPerformance > 0.0001 && $tempoProducao > 0.0001) {
+        return ($producaoEventos / $tempoProducao / $nominalPerformance) * 100;
+    }
+
+    return $rawEfficiencyPct;
 }
 
 function formatDurationClock(float $minutes): string
@@ -1449,7 +1465,10 @@ if ($selectedProgramId > 0) {
         }
     }
 
-    $selectedLinePerformanceKey = normalizePerformanceResourceKey(lineLabel((string) ($selectedLine ?? ($selectedProgram['lin_codigo'] ?? ''))));
+    // Quando o filtro `linha` vem vazio (linha=), devemos usar a linha do programa selecionado.
+    // Caso contrario, a chave vira "S/linha" e o nominal do CODI nao e encontrado, caindo no calculo bruto.
+    $lineForPerformance = $selectedLine !== '' ? $selectedLine : (string) ($selectedProgram['lin_codigo'] ?? '');
+    $selectedLinePerformanceKey = normalizePerformanceResourceKey(lineLabel($lineForPerformance));
     $codiPerformanceCatalog = loadCodiPerformanceCatalog();
 
     $codiEfficiencyByOp = [];
@@ -1667,18 +1686,14 @@ if ($selectedProgramId > 0) {
         $statusBucket = (string) ($setupStatus['status_key'] ?? 'sem_setup');
         $op = trim((string) ($row['op'] ?? ''));
         $sku = trim((string) ($row['sku'] ?? ''));
-        $eficienciaCodiPct = $op !== '' && isset($codiEfficiencyByOp[$op]) ? (float) $codiEfficiencyByOp[$op] : null;
+        $eficienciaCodiRawPct = $op !== '' && isset($codiEfficiencyByOp[$op]) ? (float) $codiEfficiencyByOp[$op] : null;
+        $eficienciaCodiPct = $eficienciaCodiRawPct;
 
         if ($op !== '' && $sku !== '') {
             $nominalPerformance = resolveCodiNominalPerformance($codiPerformanceCatalog, $selectedLinePerformanceKey, $sku);
-            if ($nominalPerformance !== null) {
-                $tempoProducao = (float) ($tempoProducaoByOp[$op]['tempo_producao_min'] ?? 0);
-                $producaoEventos = (float) ($tempoProducaoByOp[$op]['producao_eventos'] ?? ($row['producao_realizada'] ?? 0));
-
-                if ($nominalPerformance > 0.0001 && $tempoProducao > 0.0001) {
-                    $eficienciaCodiPct = ($producaoEventos / $tempoProducao / $nominalPerformance) * 100;
-                }
-            }
+            $tempoProducao = (float) ($tempoProducaoByOp[$op]['tempo_producao_min'] ?? 0);
+            $producaoEventos = (float) ($tempoProducaoByOp[$op]['producao_eventos'] ?? ($row['producao_realizada'] ?? 0));
+            $eficienciaCodiPct = calculateCodiEfficiencyPct($eficienciaCodiRawPct, $nominalPerformance, $producaoEventos, $tempoProducao);
         }
 
         if ($setupPlan > 0.01) {

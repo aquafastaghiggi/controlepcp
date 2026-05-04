@@ -1870,6 +1870,23 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
             line-height: 1.5;
         }
 
+        .app-build-badge {
+            display: inline-flex;
+            align-items: center;
+            margin-left: 10px;
+            padding: 2px 8px;
+            border-radius: 999px;
+            border: 1px solid rgba(12, 33, 58, 0.14);
+            background: rgba(12, 33, 58, 0.04);
+            color: #5a6778;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            line-height: 1;
+            white-space: nowrap;
+        }
+
         .actions {
             display: flex;
             gap: 10px;
@@ -2766,7 +2783,7 @@ $setupRuleLabel = 'TROCA DE KIT / TROCA DE LIQUIDO';
                 <h1>Previsto x realizado</h1>
                 <p class="subtitle">
                     Comparação da programação com os apontamentos de parada para
-                    <strong><?= h($setupRuleLabel) ?></strong>.
+                    <strong><?= h($setupRuleLabel) ?></strong> <?= render_app_build_badge() ?>.
                 </p>
             </div>
             <div class="actions">

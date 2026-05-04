@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<?php require __DIR__ . '/src/bootstrap.php'; ?>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
@@ -6,6 +7,23 @@
     <title>Dashboard Previsto vs Realizado - CODI</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
+        .app-build-badge {
+            display: inline-flex;
+            align-items: center;
+            margin-left: 10px;
+            padding: 2px 8px;
+            border-radius: 999px;
+            border: 1px solid rgba(255, 255, 255, 0.22);
+            background: rgba(255, 255, 255, 0.12);
+            color: rgba(255, 255, 255, 0.92);
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            line-height: 1;
+            white-space: nowrap;
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -229,7 +247,7 @@
 <body>
     <div class="container">
         <header>
-            <h1>📊 Previsto vs Realizado - CODI</h1>
+            <h1>📊 Previsto vs Realizado - CODI <?= render_app_build_badge() ?></h1>
             <div class="header-info">
                 <span>📅 Período: Março 2026 → Dezembro 2026</span>
                 <span>🏭 Banco: controlepcp_sandbox</span>

@@ -31,6 +31,26 @@ function brDateTime(?string $value): string
     return date('d/m H:i', strtotime($value));
 }
 
+function brDateTimeSmart(?string $startValue, ?string $endValue): array
+{
+    if (!$startValue || !$endValue || strtotime($startValue) === false || strtotime($endValue) === false) {
+        return [brDateTime($startValue), brDateTime($endValue)];
+    }
+
+    $startTs = strtotime($startValue);
+    $endTs = strtotime($endValue);
+    if ($startTs === false || $endTs === false) {
+        return [brDateTime($startValue), brDateTime($endValue)];
+    }
+
+    // Quando cai no mesmo minuto, exibir segundos para não parecer duração zero.
+    if (date('Y-m-d H:i', $startTs) === date('Y-m-d H:i', $endTs)) {
+        return [date('d/m H:i:s', $startTs), date('d/m H:i:s', $endTs)];
+    }
+
+    return [date('d/m H:i', $startTs), date('d/m H:i', $endTs)];
+}
+
 function brDate(?DateTimeInterface $date): string
 {
     return $date ? $date->format('d/m/Y') : '-';
@@ -50,6 +70,12 @@ function dayLabel(DateTimeInterface $date): string
 function isSunday(DateTimeInterface $date): bool
 {
     return (int) $date->format('w') === 0;
+}
+
+function isWeekend(DateTimeInterface $date): bool
+{
+    $w = (int) $date->format('w');
+    return $w === 0 || $w === 6;
 }
 
 function tableExists(PDO $pdo, string $tableName): bool
@@ -196,7 +222,7 @@ function buildVisibleSegments(string $startValue, string $endValue, array $dayOf
 
     // Um único segmento contínuo na escala comprimida.
     // Assim, quando um item atravessa dias intermediários, a barra não "some" no miolo.
-    // Domingos continuam removidos porque eles não existem em $dayOffsets.
+    // Sábados e domingos continuam removidos porque eles não existem em $dayOffsets.
     return [['left' => $left, 'width' => $right - $left]];
 }
 
@@ -441,6 +467,112 @@ if (!empty($opsToRead) && $programPeriodStart !== null && $programPeriodEnd !== 
     }
 }
 
+// Ajuste de janela por horario (CODI):
+// - Para PRODUCAO, usar apenas eventos com estado_evento='PRODUCAO' (evita que setup/paradas antecipem a barra da OP).
+// - Para SETUP principal (TROCA DE KIT / TROCA DE LIQUIDO), usar os eventos PARADA alvo.
+if (!empty($realizadoByOp) && $programPeriodStart !== null && $programPeriodEnd !== null && tableExists($pdo, 'realizado_2026_eventos')) {
+    $placeholders = implode(',', array_fill(0, count($opsToRead), '?'));
+    try {
+        $stmtEvt = $pdo->prepare(
+            "
+            SELECT
+                ordem_op,
+                MIN(
+                    CASE
+                        WHEN estado_evento = 'PRODUCAO'
+                             AND inicio_evento IS NOT NULL
+                             AND LENGTH(TRIM(inicio_evento)) > 0
+                        THEN inicio_evento
+                        ELSE NULL
+                    END
+                ) AS prod_inicio,
+                MAX(
+                    CASE
+                        WHEN estado_evento = 'PRODUCAO'
+                             AND fim_evento IS NOT NULL
+                             AND LENGTH(TRIM(fim_evento)) > 0
+                        THEN fim_evento
+                        ELSE NULL
+                    END
+                ) AS prod_fim,
+                MIN(
+                    CASE
+                        WHEN estado_evento = 'PARADA'
+                             AND parada_nomeParada IN ('TROCA DE KIT', 'TROCA DE LIQUIDO')
+                             AND inicio_evento IS NOT NULL
+                             AND LENGTH(TRIM(inicio_evento)) > 0
+                        THEN inicio_evento
+                        ELSE NULL
+                    END
+                ) AS setup_inicio,
+                MAX(
+                    CASE
+                        WHEN estado_evento = 'PARADA'
+                             AND parada_nomeParada IN ('TROCA DE KIT', 'TROCA DE LIQUIDO')
+                             AND fim_evento IS NOT NULL
+                             AND LENGTH(TRIM(fim_evento)) > 0
+                        THEN fim_evento
+                        ELSE NULL
+                    END
+                ) AS setup_fim,
+                SUM(
+                    CASE
+                        WHEN estado_evento = 'PARADA'
+                             AND parada_nomeParada IN ('TROCA DE KIT', 'TROCA DE LIQUIDO')
+                        THEN COALESCE(duracao_evento_minutos, 0)
+                        ELSE 0
+                    END
+                ) AS setup_minutes,
+                SUM(
+                    CASE
+                        WHEN estado_evento = 'PARADA'
+                             AND parada_nomeParada IN ('TROCA DE KIT', 'TROCA DE LIQUIDO')
+                        THEN 1
+                        ELSE 0
+                    END
+                ) AS setup_events
+            FROM realizado_2026_eventos
+            WHERE data_evento BETWEEN ? AND ?
+              AND ordem_op IN ($placeholders)
+            GROUP BY ordem_op
+            "
+        );
+        $stmtEvt->execute(array_merge([$programPeriodStart, $programPeriodEnd], $opsToRead));
+
+        foreach ($stmtEvt->fetchAll(PDO::FETCH_ASSOC) as $evtRow) {
+            $op = trim((string) ($evtRow['ordem_op'] ?? ''));
+            if ($op === '' || !isset($realizadoByOp[$op])) {
+                continue;
+            }
+
+            $prodInicio = $evtRow['prod_inicio'] ?? null;
+            $prodFim = $evtRow['prod_fim'] ?? null;
+            if (!empty($prodInicio) && !empty($prodFim) && strtotime((string) $prodInicio) !== false && strtotime((string) $prodFim) !== false) {
+                $realizadoByOp[$op]['inicio'] = $prodInicio;
+                $realizadoByOp[$op]['fim'] = $prodFim;
+            }
+
+            $setupInicio = $evtRow['setup_inicio'] ?? null;
+            $setupFim = $evtRow['setup_fim'] ?? null;
+            if (!empty($setupInicio) && strtotime((string) $setupInicio) !== false) {
+                $realizadoByOp[$op]['setup_inicio'] = $setupInicio;
+            }
+            if (!empty($setupFim) && strtotime((string) $setupFim) !== false) {
+                $realizadoByOp[$op]['setup_fim'] = $setupFim;
+            }
+
+            $setupMinutes = isset($evtRow['setup_minutes']) ? (float) $evtRow['setup_minutes'] : 0.0;
+            $setupEvents = isset($evtRow['setup_events']) ? (int) $evtRow['setup_events'] : 0;
+            if ($setupEvents > 0) {
+                $realizadoByOp[$op]['setup_minutes'] = $setupMinutes;
+                $realizadoByOp[$op]['setup_events'] = $setupEvents;
+            }
+        }
+    } catch (Throwable $e) {
+        // Mantem fallback no agregado do realizado_2026_excel.
+    }
+}
+
 $rows = [];
 $minTs = null;
 $maxTs = null;
@@ -474,6 +606,18 @@ foreach ($schedule as $rowIdx => $row) {
         }
         if (!empty($real['fim']) && strtotime((string) $real['fim']) !== false) {
             $visualEnd = (string) $real['fim'];
+        }
+    }
+
+    // Para SETUP, quando existir evento real no CODI, a data visual deve vir do próprio evento.
+    // A data do sch_linhas pode estar como envelope/posição planejada e ficar distante da OP.
+    if ($isSetup && !empty($setupReal['setup_inicio']) && strtotime((string) $setupReal['setup_inicio']) !== false) {
+        $visualStart = (string) $setupReal['setup_inicio'];
+        $setupDurationForVisual = (float) ($setupRowPlanMinutes[$schId] ?? (float) ($row['sch_duracao_minutos'] ?? 0));
+        if ($setupDurationForVisual > 0) {
+            $visualEnd = date('Y-m-d H:i:s', strtotime($visualStart) + ((int) round($setupDurationForVisual) * 60));
+        } elseif (!empty($setupReal['setup_fim']) && strtotime((string) $setupReal['setup_fim']) !== false) {
+            $visualEnd = (string) $setupReal['setup_fim'];
         }
     }
 
@@ -525,7 +669,7 @@ if ($minTs !== null && $maxTs !== null) {
     $startDay = (new DateTimeImmutable(date('Y-m-d 00:00:00', $minTs)))->modify('-1 day');
     $endDay = new DateTimeImmutable(date('Y-m-d 00:00:00', $maxTs));
     for ($d = $startDay; $d <= $endDay; $d = $d->modify('+1 day')) {
-        if (!isSunday($d)) {
+        if (!isWeekend($d)) {
             $days[] = $d;
         }
     }
@@ -604,6 +748,24 @@ if ($programacaoInfo) {
 .btn.btn-voltar:hover {
     background: #0b2346;
 }
+
+.app-build-badge {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 10px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.88);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    line-height: 1;
+    white-space: nowrap;
+}
+
 .header-nav-buttons {
     display: inline-flex;
     gap: 10px;
@@ -1086,6 +1248,12 @@ tbody tr:nth-child(even) td:nth-child(3) {
     min-width: 4px !important;
 }
 
+.bar.setup {
+    min-width: 4px !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+}
+
 .bar.setup-real-good {
     background: linear-gradient(180deg, #22c55e, var(--setup-real-good)) !important;
 }
@@ -1146,7 +1314,9 @@ tbody tr:nth-child(even) td:nth-child(3) {
 .bar.real {
     top: 62px !important;
     height: 24px !important;
+    background: linear-gradient(180deg, #ef2f36, var(--real)) !important;
 }
+
 
 </style>
 </head>
@@ -1155,7 +1325,7 @@ tbody tr:nth-child(even) td:nth-child(3) {
     <div class="top">
         <div class="title">
             <h1>GRÁFICO DE GANTT - SEMANAS / DIAS / HORÁRIOS</h1>
-            <div class="sub">PROGRAMA <?= e((string) $selectedProgramId) ?> - <?= e($lineLabel) ?> · DOMINGOS REMOVIDOS</div>
+            <div class="sub">PROGRAMA <?= e((string) $selectedProgramId) ?> - <?= e($lineLabel) ?> · FINS DE SEMANA REMOVIDOS <?= render_app_build_badge() ?></div>
         </div>
         <form class="actions" method="get">
             <label>Programação
@@ -1271,6 +1441,23 @@ tbody tr:nth-child(even) td:nth-child(3) {
                         $visualEnd = $row['end'];
                         if ($row['is_setup'] && $setupPrevMin > 0 && strtotime($row['start']) !== false) {
                             $visualEnd = date('Y-m-d H:i:s', strtotime($row['start']) + ((int) round($setupPrevMin) * 60));
+
+                            // Se a OP vinculada já tem início real de PRODUÇÃO, não deixar o setup previsto "passar"
+                            // do início de produção. Isso evita a inversão visual (setup terminando depois da produção iniciar).
+                            $linkedOp = trim((string) ($row['setup_next_op'] ?? ''));
+                            if ($linkedOp !== '' && $linkedOp !== 'S/OP' && isset($realizadoByOp[$linkedOp]['inicio'])) {
+                                $linkedProdStart = (string) ($realizadoByOp[$linkedOp]['inicio'] ?? '');
+                                $setupStartTs = strtotime((string) $row['start']);
+                                $prodStartTs = $linkedProdStart !== '' ? strtotime($linkedProdStart) : false;
+                                $visualEndTs = strtotime($visualEnd);
+                                if ($setupStartTs !== false && $prodStartTs !== false && $visualEndTs !== false) {
+                                    // Só "encurta" o setup quando o início de produção vem DEPOIS do início do setup.
+                                    // Se o CODI devolver timestamps iguais (ou produção antes), não zera a duração.
+                                    if ($prodStartTs > $setupStartTs && $visualEndTs > $prodStartTs) {
+                                        $visualEnd = $linkedProdStart;
+                                    }
+                                }
+                            }
                         }
 
                         $plannedSegments = buildVisibleSegments($visualStart, $visualEnd, $dayOffsets, $visibleStartHour, $visibleEndHour);
@@ -1282,32 +1469,53 @@ tbody tr:nth-child(even) td:nth-child(3) {
                         // porque isso passa a impressão errada de baixa produção quando a quantidade já chegou perto de 100%.
                         $realSegments = [];
                         if (!$row['is_setup'] && $row['qtd_real'] > 0 && !empty($plannedSegments)) {
+                            // Corrige a proporção visual do realizado considerando a largura TOTAL
+                            // da barra programada, e não cada segmento isoladamente.
+                            // Isso mantém o vermelho fiel ao percentual mesmo com fins de semana removidos
+                            // ou com timeline comprimida em vários dias.
                             $realRatio = max(0, min(1, $pct / 100));
+
+                            $totalPlannedWidth = 0.0;
                             foreach ($plannedSegments as $plannedSeg) {
-                                $realWidth = $plannedSeg['width'] * $realRatio;
+                                $totalPlannedWidth += (float) ($plannedSeg['width'] ?? 0);
+                            }
+
+                            $remainingRealWidth = $totalPlannedWidth * $realRatio;
+
+                            foreach ($plannedSegments as $plannedSeg) {
+                                if ($remainingRealWidth <= 0) {
+                                    break;
+                                }
+
+                                $plannedWidth = (float) ($plannedSeg['width'] ?? 0);
+                                if ($plannedWidth <= 0) {
+                                    continue;
+                                }
+
+                                $realWidth = min($plannedWidth, $remainingRealWidth);
                                 if ($realWidth > 0) {
                                     $realSegments[] = [
                                         'left' => $plannedSeg['left'],
                                         'width' => $realWidth,
                                     ];
                                 }
+
+                                $remainingRealWidth -= $realWidth;
                             }
                         }
 
                         $setupRealSegments = [];
-                        if ($hasSetupReal && strtotime($row['start']) !== false) {
-                            $setupRealVisualEnd = date('Y-m-d H:i:s', strtotime($row['start']) + ((int) round($setupRealMin) * 60));
-                            $setupRealSegments = buildVisibleSegments($row['start'], $setupRealVisualEnd, $dayOffsets, $visibleStartHour, $visibleEndHour);
+                        if ($hasSetupReal) {
+                            $setupRealVisualStart = (!empty($row['setup_real_start']) && strtotime((string) $row['setup_real_start']) !== false)
+                                ? (string) $row['setup_real_start']
+                                : (string) $row['start'];
+                            if (strtotime($setupRealVisualStart) !== false) {
+                                $setupRealVisualEnd = date('Y-m-d H:i:s', strtotime($setupRealVisualStart) + ((int) round($setupRealMin) * 60));
+                                $setupRealSegments = buildVisibleSegments($setupRealVisualStart, $setupRealVisualEnd, $dayOffsets, $visibleStartHour, $visibleEndHour);
+                            }
                         }
 
-                        // Barras de setup são muito curtas em escala real de dias.
-                        // Para comparação visual, quando existe setup realizado, usamos uma escala mínima
-                        // proporcional dentro da própria linha: se realizado > previsto, a barra realizada fica maior.
                         $setupComparePxPerMinute = null;
-                        if ($row['is_setup'] && $setupPrevMin > 0.0001) {
-                            $maxSetupMinutes = max($setupPrevMin, $hasSetupReal ? $setupRealMin : 0.0);
-                            $setupComparePxPerMinute = max($pxPerMinute, 44 / max(1, $maxSetupMinutes));
-                        }
 
                         $leftClass = $row['is_setup'] ? ('setup ' . ($hasSetupReal ? 'has-setup-real' : 'no-setup-real')) : ($pct >= 100 ? 'done' : '');
                         // Produção sempre deve mostrar previsto x realizado.
@@ -1336,8 +1544,9 @@ tbody tr:nth-child(even) td:nth-child(3) {
                                 <?php endif; ?>
                             <?php endif; ?>
                         </div>
-                        <div class="time-cell"><?= e(brDateTime($row['start'])) ?></div>
-                        <div class="time-cell"><?= e(brDateTime($row['is_setup'] ? $visualEnd : $row['end'])) ?></div>
+                        <?php [$startLabel, $endLabel] = brDateTimeSmart((string) $row['start'], (string) ($row['is_setup'] ? $visualEnd : $row['end'])); ?>
+                        <div class="time-cell"><?= e($startLabel) ?></div>
+                        <div class="time-cell"><?= e($endLabel) ?></div>
                     </div>
                     <div class="timeline-row">
                         <?php foreach ($days as $dIdx => $day): ?>
@@ -1347,8 +1556,8 @@ tbody tr:nth-child(even) td:nth-child(3) {
                         <?php endforeach; ?>
                         <span class="day-line" style="left: <?= (int) round($timelineWidth) ?>px"></span>
 
-                        <?php foreach ($plannedSegments as $seg): ?>
-                            <div class="bar <?= e($barClass) ?>" data-short-label="<?= e($barLabel) ?>" style="left: <?= (int) round($seg['left'] * $pxPerMinute) ?>px; width: <?= $row['is_setup'] && $setupComparePxPerMinute !== null ? max(12, (int) round($setupPrevMin * $setupComparePxPerMinute)) : max(18, (int) round($seg['width'] * $pxPerMinute)) ?>px" title="<?= e($barLabel . ' · ' . brDateTime($visualStart) . ' - ' . brDateTime($visualEnd) . ($row['is_setup'] ? ' · ' . number_format($setupPrevMin, 0, ',', '.') . ' min' : (!empty($row['real_start']) ? ' · janela CODI/relgantt' : ' · janela planejada'))) ?>"><span class="bar-label"><?= e($barLabel) ?></span></div>
+                        <?php foreach ($plannedSegments as $segIdx => $seg): ?>
+                            <div class="bar <?= e($barClass) ?>" data-short-label="<?= e($barLabel) ?>" style="left: <?= (int) round($seg['left'] * $pxPerMinute) ?>px; width: <?= $row['is_setup'] ? max(1, (int) round($seg['width'] * $pxPerMinute)) : max(18, (int) round($seg['width'] * $pxPerMinute)) ?>px" title="<?= e($barLabel . ' · ' . brDateTime($visualStart) . ' - ' . brDateTime($visualEnd) . ($row['is_setup'] ? ' · ' . number_format($setupPrevMin, 0, ',', '.') . ' min' : (!empty($row['real_start']) ? ' · janela CODI/relgantt' : ' · janela planejada'))) ?>"><span class="bar-label"><?= e($barLabel) ?></span></div>
                         <?php endforeach; ?>
 
                         <?php foreach ($realSegments as $seg): ?>
@@ -1356,7 +1565,7 @@ tbody tr:nth-child(even) td:nth-child(3) {
                         <?php endforeach; ?>
 
                         <?php foreach ($setupRealSegments as $seg): ?>
-                            <div class="bar <?= e($setupRealClass) ?>" data-short-label="Setup Realizado" style="left: <?= (int) round($seg['left'] * $pxPerMinute) ?>px; width: <?= $setupComparePxPerMinute !== null ? max(4, (int) round($setupRealMin * $setupComparePxPerMinute)) : max(4, (int) round($seg['width'] * $pxPerMinute)) ?>px" title="<?= e('Setup realizado · ' . number_format($setupRealMin, 0, ',', '.') . ' min · previsto ' . number_format($setupPrevMin, 0, ',', '.') . ' min · desvio ' . number_format($setupDiffMin, 0, ',', '.') . ' min · ' . (int) $setupRealEvents . ' evento(s) · OP ' . (string) ($row['setup_next_op'] ?? 'S/OP')) ?>"><span class="bar-label">Setup Realizado</span></div>
+                            <div class="bar <?= e($setupRealClass) ?>" data-short-label="Setup Realizado" style="left: <?= (int) round($seg['left'] * $pxPerMinute) ?>px; width: <?= max(1, (int) round($seg['width'] * $pxPerMinute)) ?>px" title="<?= e('Setup realizado CODI · ' . number_format($setupRealMin, 0, ',', '.') . ' min · previsto ' . number_format($setupPrevMin, 0, ',', '.') . ' min · desvio ' . number_format($setupDiffMin, 0, ',', '.') . ' min · ' . (int) $setupRealEvents . ' evento(s) · OP ' . (string) ($row['setup_next_op'] ?? 'S/OP')) ?>"><span class="bar-label">Setup Realizado</span></div>
                         <?php endforeach; ?>
                     </div>
                 <?php endforeach; ?>
@@ -1373,7 +1582,7 @@ tbody tr:nth-child(even) td:nth-child(3) {
                 <div class="legend-card"><span class="swatch" style="background:var(--setup-real-bad); width:62px; height:34px"></span><span><b>Setup Realizado > Previsto</b>vermelho quando acima do previsto</span></div>
                 <div class="legend-card"><span class="swatch" style="background:var(--real); width:62px; height:34px"></span><span><b>Produção Realizada</b>Período executado</span></div>
             </div>
-            <div class="note" style="margin-top:14px"><b>OBSERVAÇÕES:</b><br>• Timeline exibida de <?= (int) $visibleStartHour ?>h até <?= (int) $visibleEndHour ?>h.<br>• Domingos removidos automaticamente da escala.<br>• Previsto x realizado usa a mesma origem do relgantt.php; datas das OPs usam MIN(inicio_evento) e MAX(fim_evento) do CODI quando disponíveis.</div>
+            <div class="note" style="margin-top:14px"><b>OBSERVAÇÕES:</b><br>• Timeline exibida de <?= (int) $visibleStartHour ?>h até <?= (int) $visibleEndHour ?>h.<br>• Fins de semana removidos automaticamente da escala.<br>• Previsto x realizado usa a mesma origem do relgantt.php; datas das OPs e setups usam eventos CODI quando disponíveis.<br>• Sábados e domingos removidos automaticamente da escala.</div>
         </div>
         <div class="stamp">GERADO EM: <?= e(date('d/m/Y H:i')) ?><br>FONTE: Sistema Controle PCP</div>
     </div>

@@ -80,6 +80,22 @@ if ($rawFeatureFlags !== '') {
     <link rel="stylesheet" href="assets/css/app.css?v=<?= urlencode((string) $appCssVersion) ?>">
     <link rel="stylesheet" href="assets/css/theme.css?v=<?= urlencode((string) (@filemtime(__DIR__ . '/assets/css/theme.css') ?: 'dev')) ?>">
     <style>
+        .app-build-badge {
+            display: inline-flex;
+            align-items: center;
+            margin-left: 10px;
+            padding: 2px 8px;
+            border-radius: 999px;
+            border: 1px solid rgba(12, 33, 58, 0.14);
+            background: rgba(255, 255, 255, 0.75);
+            color: #516172;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            line-height: 1;
+            white-space: nowrap;
+        }
         .history-list { display: grid; gap: 12px; margin-top: 10px; }
         .history-card { border: 1px solid var(--line, #ddd); border-radius: 10px; padding: 12px 14px; display: flex; justify-content: space-between; align-items: center; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.05); cursor: pointer; }
         .history-card:hover { box-shadow: 0 4px 10px rgba(0,0,0,0.08); }
@@ -102,6 +118,7 @@ if ($rawFeatureFlags !== '') {
                         <a class="nav-link" href="users.php">Usuários</a>
                     <?php endif; ?>
                     <a class="nav-link" href="logout.php">Sair</a>
+                    <?= render_app_build_badge() ?>
                     <!-- <button type="button" class="nav-shortcut" id="reset-data">Resetar dados</button> -->
                 </nav>
             </div>

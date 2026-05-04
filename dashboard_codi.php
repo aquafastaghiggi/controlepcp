@@ -1,10 +1,28 @@
 <!DOCTYPE html>
+<?php require __DIR__ . '/src/bootstrap.php'; ?>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard CODI - Dados Sincronizados</title>
     <style>
+        .app-build-badge {
+            display: inline-flex;
+            align-items: center;
+            margin-left: 10px;
+            padding: 2px 8px;
+            border-radius: 999px;
+            border: 1px solid rgba(255, 255, 255, 0.22);
+            background: rgba(255, 255, 255, 0.12);
+            color: rgba(255, 255, 255, 0.92);
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            line-height: 1;
+            white-space: nowrap;
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -292,7 +310,7 @@
 <body>
     <div class="container">
         <header>
-            <h1>📊 Dashboard CODI - Dados Sincronizados</h1>
+            <h1>📊 Dashboard CODI - Dados Sincronizados <?= render_app_build_badge() ?></h1>
             <div class="status-line">
                 <span>✅ Banco: controlepcp_sandbox</span>
                 <span>🕐 Última atualização: <?php echo date('d/m/Y H:i:s'); ?></span>

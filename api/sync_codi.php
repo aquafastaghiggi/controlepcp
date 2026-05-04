@@ -153,7 +153,7 @@ try {
             );
             $checkStmt->execute([$today]);
             $countToday = (int)$checkStmt->fetchColumn();
-            
+
             // Se já tem sincronizações de hoje, avisar (exceto se force=true)
             if ($countToday > 0) {
                 echo json_encode([

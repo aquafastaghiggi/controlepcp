@@ -10,6 +10,8 @@ if (function_exists('mb_internal_encoding')) {
     mb_internal_encoding('UTF-8');
 }
 
+require_once __DIR__ . '/version.php';
+
 spl_autoload_register(static function (string $class): void {
     $prefix = 'App\\';
     $baseDir = __DIR__ . DIRECTORY_SEPARATOR;

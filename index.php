@@ -8,10 +8,18 @@ use App\Data\DatabaseData;
 Auth::startSession();
 Auth::requireLogin();
 
+// Força UTF-8 nesta página para evitar interpretação ISO-8859-1/Windows-1252 pelo servidor/navegador.
+header('Content-Type: text/html; charset=UTF-8');
+
 $databaseData = new DatabaseData();
 $datasets = $databaseData->all();
 
-$isSandbox = (getenv('APP_ENV') ?: '') === 'sandbox';
+$appEnv = (string) (getenv('APP_ENV') ?: '');
+$isSandbox = $appEnv === 'sandbox';
+// Fallback apenas para o sandbox local quando APP_ENV não está configurado (ex.: XAMPP).
+if (!$isSandbox && $appEnv === '' && stripos(__DIR__, 'controlepcp_sandbox') !== false) {
+    $isSandbox = true;
+}
 $showReleaseCenter = $isSandbox && Auth::isAdmin();
 $releaseCenterState = null;
 
@@ -39,7 +47,7 @@ if ($showReleaseCenter) {
     }
 }
 
-// Feature flags: usado para mostrar/ocultar mÃ³dulos no Painel Inicial (prod/sandbox).
+// Feature flags: usado para mostrar/ocultar módulos no Painel Inicial (prod/sandbox).
 $features = [
     'performance' => false,
 ];
@@ -72,6 +80,22 @@ if ($rawFeatureFlags !== '') {
     <link rel="stylesheet" href="assets/css/app.css?v=<?= urlencode((string) $appCssVersion) ?>">
     <link rel="stylesheet" href="assets/css/theme.css?v=<?= urlencode((string) (@filemtime(__DIR__ . '/assets/css/theme.css') ?: 'dev')) ?>">
     <style>
+        .app-build-badge {
+            display: inline-flex;
+            align-items: center;
+            margin-left: 10px;
+            padding: 2px 8px;
+            border-radius: 999px;
+            border: 1px solid rgba(12, 33, 58, 0.14);
+            background: rgba(255, 255, 255, 0.75);
+            color: #516172;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            line-height: 1;
+            white-space: nowrap;
+        }
         .history-list { display: grid; gap: 12px; margin-top: 10px; }
         .history-card { border: 1px solid var(--line, #ddd); border-radius: 10px; padding: 12px 14px; display: flex; justify-content: space-between; align-items: center; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.05); cursor: pointer; }
         .history-card:hover { box-shadow: 0 4px 10px rgba(0,0,0,0.08); }
@@ -85,7 +109,7 @@ if ($rawFeatureFlags !== '') {
         <header class="hero">
             <div class="hero-copy">
                 <img src="/controlepcp/logo.jpg" alt="Aqua Fast" class="hero-logo">
-                <nav class="top-nav" aria-label="Navegacao principal">
+                <nav class="top-nav" aria-label="Navegação principal">
                     <button type="button" class="nav-shortcut" data-target="section-home">Painel Inicial</button>
                     <?php if ($showReleaseCenter): ?>
                         <button type="button" class="nav-shortcut" data-target="section-release-center">Publicação</button>
@@ -94,6 +118,7 @@ if ($rawFeatureFlags !== '') {
                         <a class="nav-link" href="users.php">Usuários</a>
                     <?php endif; ?>
                     <a class="nav-link" href="logout.php">Sair</a>
+                    <?= render_app_build_badge() ?>
                     <!-- <button type="button" class="nav-shortcut" id="reset-data">Resetar dados</button> -->
                 </nav>
             </div>
@@ -122,10 +147,10 @@ if ($rawFeatureFlags !== '') {
                     <div class="panel-heading panel-heading-stack">
                         <div>
                             <h1>Painel inicial</h1>
-                            <p>Escolha uma acao para programar e calcular a producao.</p>
+                            <p>Escolha uma ação para programar e calcular a produção.</p>
                         </div>
                         <div class="home-actions-bar">
-                            <button type="button" class="ghost-button home-quick" data-target="section-program">Nova programacao</button>
+                            <button type="button" class="ghost-button home-quick" data-target="section-program">Nova programação</button>
                             <button type="button" class="ghost-button home-quick" data-home-action="import">Importar Excel</button>
                             <button type="button" class="ghost-button home-quick" data-target="section-programacoes">Ver historico</button>
                             <?php if ($showReleaseCenter): ?>
@@ -140,7 +165,7 @@ if ($rawFeatureFlags !== '') {
                             <div class="home-grid home-grid--operation">
                                 <button type="button" class="home-card home-card--primary" data-target="section-program">
                                     <div class="home-card-top">
-                                        <strong>Programação de PCP</strong>
+                                        <strong>Programa&ccedil;&atilde;o de PCP</strong>
                                         <span class="home-card-badge" data-home-badge="program"></span>
                                     </div>
                                     <span>Importe a planilha, ajuste dias/turnos e calcule.</span>
@@ -218,7 +243,7 @@ if ($rawFeatureFlags !== '') {
                     <div class="panel-heading">
                         <div>
                             <h2>Hor&aacute;rios de Trabalho</h2>
-                            <p>Cadastre os intervalos validos, os dias uteis e os feriados usados no calculo.</p>
+                            <p>Cadastre os intervalos válidos, os dias úteis e os feriados usados no cálculo.</p>
                         </div>
                         <button type="button" id="add-interval" class="ghost-button">Adicionar intervalo</button>
                     </div>
@@ -229,7 +254,7 @@ if ($rawFeatureFlags !== '') {
                                 <tr>
                                     <th>Ordem</th>
                                     <th>Dias</th>
-                                    <th>Inicio</th>
+                                    <th>Início</th>
                                     <th>Fim</th>
                                     <th></th>
                                 </tr>
@@ -249,7 +274,7 @@ if ($rawFeatureFlags !== '') {
                             <button type="button" id="add-holiday" class="ghost-button">Adicionar feriado / pausa</button>
                         </div>
                         <div id="holiday-preview" class="holiday-grid">
-                            <div class="holiday-empty">Nenhum feriado lancado.</div>
+                            <div class="holiday-empty">Nenhum feriado lançado.</div>
                         </div>
                     </div>
                 </section>
@@ -274,10 +299,10 @@ if ($rawFeatureFlags !== '') {
                             <thead>
                                 <tr>
                                     <th>SKU</th>
-                                    <th>Descricao</th>
+                                    <th>Descrição</th>
                                     <th>Ref. setup</th>
                                     <th>Linha</th>
-                                    <th>Producao/h</th>
+                                    <th>Produção/h</th>
                                     <th>Unidade</th>
                                     <th></th>
                                 </tr>
@@ -342,7 +367,7 @@ if ($rawFeatureFlags !== '') {
                     <div class="panel-heading">
                         <div>
                             <h2>Programação de PCP</h2>
-                            <p>Informe o inÃ­cio base, preencha os itens e deixe as prÃ³ximas datas por conta do cÃ¡lculo.</p>
+                            <p>Informe o início base, preencha os itens e deixe as próximas datas por conta do cálculo.</p>
                         </div>
                         <div class="panel-actions">
                             <button type="button" id="new-programacao-btn" class="ghost-button">+ Nova programação</button>
@@ -384,7 +409,7 @@ if ($rawFeatureFlags !== '') {
                                         <th>OP</th>
                                         <th>SKU</th>
                                         <th>Quantidade (cx)</th>
-                                        <th>Inicio informado (1&ordm; item)</th>
+                                        <th>Início informado (1&ordm; item)</th>
                                         <th></th>
                                     </tr>
                                 </thead>
@@ -404,7 +429,7 @@ if ($rawFeatureFlags !== '') {
                                 <h2>Resultado</h2>
                                 <p>A tabela abaixo mostra producao e setup na ordem real de execucao.</p>
                             </div>
-                            <span class="status-badge" id="result-status">Aguardando calculo</span>
+                            <span class="status-badge" id="result-status">Aguardando cálculo</span>
                         </div>
 
                         <div id="result-summary" class="summary-grid"></div>
@@ -416,18 +441,18 @@ if ($rawFeatureFlags !== '') {
                                         <th>Tipo</th>
                                         <th>Seq.</th>
                                         <th>Produto</th>
-                                        <th>Producao/h</th>
+                                        <th>Produção/h</th>
                                         <th>Programado</th>
                                         <th>Tempo</th>
-                                        <th>Data inicio</th>
-                                        <th>Inicio</th>
-                                        <th class="is-hidden-column">Memoria do calculo</th>
+                                        <th>Data início</th>
+                                        <th>Início</th>
+                                        <th class="is-hidden-column">Memória do cálculo</th>
                                         <th>Fim</th>
                                     </tr>
                                 </thead>
                                 <tbody id="result-body">
                                     <tr class="empty-state-row">
-                                        <td colspan="10">Nenhuma simulaÃ§Ã£o calculada ainda.</td>
+                                        <td colspan="10">Nenhuma simulação calculada ainda.</td>
                                     </tr>
                                 </tbody>
                             </table>

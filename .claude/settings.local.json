@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(php -l \"C:/xampp/htdocs/controlepcp_v2/database/migrations/2026_06_15_000001_create_ordens_producao_table.php\")",
+      "Bash(php -l \"C:/xampp/htdocs/controlepcp_v2/app/Models/OrdemProducao.php\")",
+      "Bash(php artisan *)",
+      "Bash(xargs grep -l \"resultado\\\\|grafico\\\\|chart\" -i)",
+      "Bash(composer show *)",
+      "Bash(xargs grep -l \"numero_op\\\\|OP\\\\|Parada\\\\|evento\")",
+      "Bash(xargs grep -l \"desempenho.*producao\\\\|desempenho de\")",
+      "Bash(php *)",
+      "Bash(xargs grep -l \"function on\\\\b\")"
+    ]
+  }
+}

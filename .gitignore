@@ -31,3 +31,7 @@ Thumbs.db
 
 # Artefatos de cache do bootstrap (config:cache, package discovery) — regenerados a cada deploy
 /bootstrap/cache/*.php
+
+# Marketing TV — mídia e estado de runtime, não código
+/public/marketingtv/uploads/*
+/public/marketingtv/data/*

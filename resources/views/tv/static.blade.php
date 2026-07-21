@@ -672,7 +672,9 @@
 
         // KPIs por LINHA (não por OP)
         // Card 2 "Prev./Dia" e Card 3 "Prev. x Real." só aparecem quando a linha
-        // tem programação confirmada + calendário e já produziu algo hoje.
+        // tem programação confirmada + calendário — não exige produção > 0, senão
+        // os dois cards somem justo quando a linha ainda não começou a rodar hoje
+        // (ex.: logo após as 06:00 ou linha atrasada que ainda não iniciou).
         $projecaoLinha = null;
         $prevDiaStr    = '—';
         $prevXRealStr  = '—';
@@ -701,7 +703,7 @@
             ->where('status', 'confirmada')
             ->first(['dias_selecionados']);
 
-        if ($prodLinha > 0 && $calendarioId && $progLinha) {
+        if ($calendarioId && $progLinha) {
             try {
                 // Ritmo atual = total produzido ÷ período total decorrido desde 06:00 (TODOS os
                 // eventos — PRODUCAO + PARADA/Intervalo —, não só o tempo produtivo, pra diluir

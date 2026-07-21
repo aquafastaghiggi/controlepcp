@@ -28,3 +28,6 @@ Thumbs.db
 /public/Frascos sem rótulo
 /storage/backups
 /storage/app/backups
+
+# Artefatos de cache do bootstrap (config:cache, package discovery) — regenerados a cada deploy
+/bootstrap/cache/*.php

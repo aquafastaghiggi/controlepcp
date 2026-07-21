@@ -1,0 +1,36 @@
+name: Deploy para produção
+
+on:
+  push:
+    branches: [pcpv2]
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, producao-pcp]
+    defaults:
+      run:
+        working-directory: /var/www/aquafast/controlepcp_v2
+    steps:
+      - name: Atualizar código
+        run: |
+          git fetch origin pcpv2
+          git reset --hard origin/pcpv2
+
+      - name: Instalar dependências PHP
+        run: composer install --no-interaction --optimize-autoloader
+
+      - name: Instalar dependências JS e build de assets
+        run: |
+          npm ci
+          npm run build
+
+      - name: Rodar migrations
+        run: php artisan migrate --force
+
+      - name: Limpar caches (NUNCA cache:clear — ver docs/regra-total-programado-tv.md e memória do projeto)
+        run: |
+          php artisan view:clear
+          php artisan config:cache
+
+      - name: Verificar log de erros recentes
+        run: tail -n 30 storage/logs/laravel.log || true

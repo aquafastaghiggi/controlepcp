@@ -4,16 +4,15 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
-use Carbon\Carbon;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\File;
 use Symfony\Component\Process\Process;
 
 class BackupBancoCommand extends Command
 {
-    protected $signature = 'backup:banco {--dias-retencao=14 : Quantos dias de backup manter}';
+    protected $signature = 'backup:banco {--manter=1 : Quantos backups mais recentes manter (os demais são apagados)}';
 
-    protected $description = 'Gera um dump compactado do banco de dados e remove backups mais antigos que a retenção configurada';
+    protected $description = 'Gera um dump compactado do banco de dados e mantém só os N backups mais recentes, apagando o restante';
 
     public function handle(): int
     {
@@ -56,29 +55,29 @@ class BackupBancoCommand extends Command
         $tamanhoMb = round(File::size($arquivo) / 1024 / 1024, 1);
         $this->info("Backup gerado: {$arquivo} ({$tamanhoMb} MB)");
 
-        $this->removerBackupsAntigos($destino, (int) $this->option('dias-retencao'));
+        $this->removerBackupsAntigos($destino, (int) $this->option('manter'));
 
         return self::SUCCESS;
     }
 
-    private function removerBackupsAntigos(string $destino, int $diasRetencao): void
+    private function removerBackupsAntigos(string $destino, int $manter): void
     {
-        $limite    = Carbon::now()->subDays($diasRetencao);
+        $manter = max(1, $manter);
+
+        $arquivos = collect(File::files($destino))
+            ->filter(fn ($arquivo) => str_ends_with($arquivo->getFilename(), '.sql.gz'))
+            ->sortByDesc(fn ($arquivo) => $arquivo->getMTime())
+            ->values();
+
         $removidos = 0;
 
-        foreach (File::files($destino) as $arquivo) {
-            if (! str_ends_with($arquivo->getFilename(), '.sql.gz')) {
-                continue;
-            }
-
-            if (Carbon::createFromTimestamp($arquivo->getMTime())->lt($limite)) {
-                File::delete($arquivo->getPathname());
-                $removidos++;
-            }
+        foreach ($arquivos->slice($manter) as $arquivo) {
+            File::delete($arquivo->getPathname());
+            $removidos++;
         }
 
         if ($removidos > 0) {
-            $this->info("{$removidos} backup(s) antigo(s) removido(s) (retenção: {$diasRetencao} dias).");
+            $this->info("{$removidos} backup(s) anterior(es) removido(s) — mantendo só o(s) {$manter} mais recente(s).");
         }
     }
 }

@@ -50,8 +50,8 @@ Schedule::command('pcp:gravar-previsto-hoje')
     ->withoutOverlapping()
     ->runInBackground();
 
-// Backup diário do banco de dados (retenção de 14 dias, salvo em storage/app/backups)
+// Backup diário do banco de dados — mantém só o último, apaga o anterior
 Schedule::command('backup:banco')
-    ->dailyAt('04:30')
+    ->dailyAt('04:00')
     ->withoutOverlapping()
     ->runInBackground();

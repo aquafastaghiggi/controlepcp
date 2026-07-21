@@ -34,7 +34,7 @@ Schedule::command('codi:sincronizar --tipo=eventos')
 
 // PCP — Verificar divergências entre OPs programadas e OPs rodando no CODI
 Schedule::command('pcp:verificar-divergencias')
-    ->cron('*/20 * * * *')
+    ->cron('*/40 * * * *')
     ->withoutOverlapping()
     ->runInBackground();
 
@@ -47,5 +47,11 @@ Schedule::command('sopro:verificar-excesso-producao')
 // PCP — Gravar previsto do dia (envase) — imutável após gravado
 Schedule::command('pcp:gravar-previsto-hoje')
     ->dailyAt('06:00')
+    ->withoutOverlapping()
+    ->runInBackground();
+
+// Backup diário do banco de dados (retenção de 14 dias, salvo em storage/app/backups)
+Schedule::command('backup:banco')
+    ->dailyAt('04:30')
     ->withoutOverlapping()
     ->runInBackground();

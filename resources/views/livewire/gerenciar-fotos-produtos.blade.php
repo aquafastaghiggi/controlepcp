@@ -1,4 +1,4 @@
-<div class="p-6">
+<div class="p-6" x-data="{ fotosDisponiveis: @js($arquivos) }">
 
     {{-- Cabeçalho --}}
     <div class="flex items-center justify-between mb-5">
@@ -87,20 +87,70 @@
                         </div>
                     @endif
 
-                    {{-- Select manual --}}
-                    <div x-data="{ arquivo: '' }">
-                        <select x-model="arquivo"
-                                class="w-full text-xs border border-gray-200 rounded px-1 py-1 text-gray-500 mb-1">
-                            <option value="">{{ $p->sugestao ? 'Trocar foto...' : 'Selecionar foto...' }}</option>
-                            @foreach($arquivos as $arq)
-                                <option value="{{ $arq }}">{{ $arq }}</option>
-                            @endforeach
-                        </select>
-                        <button x-show="arquivo"
-                                x-on:click="$wire.salvarFoto({{ $p->id }}, arquivo); arquivo = ''"
-                                class="w-full text-xs bg-green-600 hover:bg-green-700 text-white py-1 px-2 rounded transition-colors">
-                            ✓ Salvar
-                        </button>
+                    {{-- Busca de arquivo (autocomplete) --}}
+                    <div x-data="{
+                            busca: '',
+                            aberto: false,
+                            get resultados() {
+                                if (this.busca.length < 2) return [];
+                                const termo = this.busca.toLowerCase();
+                                return fotosDisponiveis.filter(a => a.toLowerCase().includes(termo)).slice(0, 30);
+                            },
+                            escolher(arq) {
+                                $wire.salvarFoto({{ $p->id }}, arq);
+                                this.busca = '';
+                                this.aberto = false;
+                            }
+                         }"
+                         class="relative">
+                        <input type="text"
+                               x-model="busca"
+                               @focus="aberto = true"
+                               @click.outside="aberto = false"
+                               placeholder="{{ $p->sugestao ? 'Buscar outra foto...' : 'Buscar foto...' }}"
+                               class="w-full text-xs border border-gray-200 rounded px-2 py-1.5 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-100">
+
+                        <div x-show="aberto && busca.length >= 2"
+                             x-transition
+                             class="absolute z-10 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-52 overflow-y-auto">
+                            <template x-for="arq in resultados" :key="arq">
+                                <div @click="escolher(arq)"
+                                     class="flex items-center gap-2 px-2 py-1.5 hover:bg-blue-50 cursor-pointer border-b border-gray-50 last:border-0">
+                                    <img :src="'{{ asset('fotos-produtos') }}/' + arq"
+                                         loading="lazy"
+                                         class="w-8 h-8 object-contain flex-shrink-0 bg-gray-50 rounded">
+                                    <span x-text="arq" class="text-xs text-gray-600 truncate"></span>
+                                </div>
+                            </template>
+                            <div x-show="resultados.length === 0" class="px-2 py-2 text-xs text-gray-400 text-center">
+                                Nenhum arquivo encontrado
+                            </div>
+                        </div>
+                    </div>
+
+                    {{-- Upload de uma foto nova do computador --}}
+                    <div class="mt-1.5">
+                        @if($produtoUploadAtivo === $p->id)
+                            <div wire:loading.flex wire:target="novaFoto" class="items-center gap-1.5 text-xs text-blue-600">
+                                <svg class="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>
+                                Enviando...
+                            </div>
+                            <div wire:loading.remove wire:target="novaFoto" class="flex items-center gap-2">
+                                <input type="file"
+                                       wire:model="novaFoto"
+                                       accept="image/jpeg,image/png,image/gif,image/webp"
+                                       class="w-full text-xs text-gray-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:bg-gray-100 file:text-gray-600 hover:file:bg-gray-200">
+                                <button wire:click="cancelarUpload" class="text-xs text-gray-400 hover:text-red-500 flex-shrink-0">✕</button>
+                            </div>
+                            @error('novaFoto')
+                                <div class="text-xs text-red-500 mt-1">{{ $message }}</div>
+                            @enderror
+                        @else
+                            <button wire:click="abrirUpload({{ $p->id }})"
+                                    class="w-full text-xs text-gray-400 hover:text-blue-600 underline text-center">
+                                📤 Enviar foto do computador
+                            </button>
+                        @endif
                     </div>
                 @endif
             </div>

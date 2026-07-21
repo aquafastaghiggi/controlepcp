@@ -6,9 +6,12 @@ namespace App\Livewire\Cadastros;
 
 use Illuminate\Support\Facades\DB;
 use Livewire\Component;
+use Livewire\WithFileUploads;
 
 class GerenciarFotosProdutos extends Component
 {
+    use WithFileUploads;
+
     public string $filtro     = 'pendentes'; // pendentes | com_foto | todos
     public string $busca      = '';
     public string $mensagem   = '';
@@ -16,9 +19,79 @@ class GerenciarFotosProdutos extends Component
 
     public array $arquivos = [];
 
+    /** ID do produto cujo campo de upload está aberto no momento (só um por vez). */
+    public ?int $produtoUploadAtivo = null;
+
+    /** Arquivo temporário selecionado no input de upload. */
+    public $novaFoto = null;
+
     public function mount(): void
     {
         $this->carregarArquivos();
+    }
+
+    public function abrirUpload(int $id): void
+    {
+        $this->produtoUploadAtivo = $id;
+        $this->novaFoto = null;
+    }
+
+    public function cancelarUpload(): void
+    {
+        $this->produtoUploadAtivo = null;
+        $this->novaFoto = null;
+    }
+
+    public function updatedNovaFoto(): void
+    {
+        // Confirma automaticamente assim que o arquivo termina de subir —
+        // sem precisar de um segundo clique em "confirmar".
+        if ($this->produtoUploadAtivo !== null && $this->novaFoto !== null) {
+            $this->salvarUpload($this->produtoUploadAtivo);
+        }
+    }
+
+    public function salvarUpload(int $id): void
+    {
+        $this->validate([
+            'novaFoto' => 'image|mimes:jpg,jpeg,png,gif,webp|max:10240',
+        ], [], ['novaFoto' => 'foto']);
+
+        $produto = DB::table('produtos')->where('id', $id)->first(['sku']);
+        if (!$produto) {
+            $this->mensagem = 'Produto não encontrado.';
+            $this->tipoMensagem = 'warning';
+            $this->cancelarUpload();
+            return;
+        }
+
+        $extensao = strtolower($this->novaFoto->getClientOriginalExtension());
+        $base = preg_replace('/[^A-Za-z0-9_-]+/', '_', (string) $produto->sku) ?: 'produto';
+        $nomeArquivo = $base . '.' . $extensao;
+
+        $pastaFotos = public_path('fotos-produtos');
+        if (!is_dir($pastaFotos)) {
+            mkdir($pastaFotos, 0777, true);
+        }
+
+        // Evita sobrescrever um arquivo diferente que já exista com esse nome
+        // (ex.: SKU já usado por outra foto) — anexa sufixo numérico.
+        if (file_exists($pastaFotos . DIRECTORY_SEPARATOR . $nomeArquivo)) {
+            $sufixo = 2;
+            do {
+                $candidato = $base . '_' . $sufixo . '.' . $extensao;
+                $sufixo++;
+            } while (file_exists($pastaFotos . DIRECTORY_SEPARATOR . $candidato));
+            $nomeArquivo = $candidato;
+        }
+
+        $this->novaFoto->move($pastaFotos, $nomeArquivo);
+
+        DB::table('produtos')->where('id', $id)->update(['foto' => $nomeArquivo]);
+
+        $this->mensagem     = 'Foto enviada e associada!';
+        $this->tipoMensagem = 'success';
+        $this->cancelarUpload();
     }
 
     public function carregarArquivos(): void
@@ -123,6 +196,10 @@ class GerenciarFotosProdutos extends Component
 
     public function render(): \Illuminate\View\View
     {
+        // Recarrega a lista de arquivos a cada render — evita ficar desatualizada
+        // quando fotos novas são copiadas pra pasta com a página já aberta.
+        $this->carregarArquivos();
+
         $query = DB::table('produtos')->orderBy('descricao');
 
         if ($this->busca) {
